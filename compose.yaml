@@ -1,0 +1,212 @@
+services:
+  # ═══════════════════════════════════════════════════
+  # PostgreSQL — Database per Service (3 instancias)
+  # ═══════════════════════════════════════════════════
+  postgres-orders:
+    image: postgres:16-alpine
+    container_name: arka-db-orders
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_ORDERS_DB}
+    ports:
+      - "${POSTGRES_ORDERS_PORT}:5432"
+    volumes:
+      - postgres-orders-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_orders.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arka -d db_orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  postgres-inventory:
+    image: postgres:16-alpine
+    container_name: arka-db-inventory
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_INVENTORY_DB}
+    ports:
+      - "${POSTGRES_INVENTORY_PORT}:5432"
+    volumes:
+      - postgres-inventory-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_inventory.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arka -d db_inventory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  postgres-payment:
+    image: postgres:16-alpine
+    container_name: arka-db-payment
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_PAYMENT_DB}
+    ports:
+      - "${POSTGRES_PAYMENT_PORT}:5432"
+    volumes:
+      - postgres-payment-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_payment.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arka -d db_payment"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # Kafka — Message Broker (KRaft Mode)
+  # ═══════════════════════════════════════════════════
+  kafka:
+    image: confluentinc/cp-kafka:8.0.4
+    container_name: arka-kafka
+    ports:
+      - "${KAFKA_PORT}:${KAFKA_PORT}"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:${KAFKA_PORT}
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:${KAFKA_PORT}
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: mkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "kafka-topics",
+          "--bootstrap-server",
+          "localhost:29092",
+          "--list",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # KafkaUI — Visualización de mensajes en Kafka
+  # ═══════════════════════════════════════════════════
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: arka-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: arka-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # LocalStack — AWS Simulado (Secrets Manager + API Gateway)
+  # ═══════════════════════════════════════════════════
+  localstack:
+    image: localstack/localstack:latest
+    container_name: arka-localstack
+    ports:
+      - "${LOCALSTACK_PORT}:${LOCALSTACK_PORT}"
+    environment:
+      - DEBUG=0
+      - SERVICES=secretsmanager,apigateway,cloudformation
+    env_file:
+      - .env
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./localstack/infra.yaml:/etc/localstack/init/ready.d/infra.yaml
+      - ./localstack/bootstrap.sh:/etc/localstack/init/ready.d/bootstrap.sh
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${LOCALSTACK_PORT}/_localstack/health",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # Traefik — Load Balancer Dinámico
+  # ═══════════════════════════════════════════════════
+  traefik:
+    image: traefik:v3.6.9
+    container_name: arka-traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80" # Tráfico Web
+      - "8090:8080" # Dashboard
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # MsOrders — Microservicio de Órdenes
+  # ═══════════════════════════════════════════════════
+  ms-orders:
+    build:
+      context: ./ms-orders
+      dockerfile: deployment/Dockerfile
+      args:
+        - PORT=${MS_ORDERS_PORT}
+    container_name: arka-ms-orders
+    ports:
+      - "${MS_ORDERS_PORT}:${MS_ORDERS_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_ORDERS_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+networks:
+  arka-network:
+    driver: bridge
+
+volumes:
+  postgres-orders-data:
+  postgres-inventory-data:
+  postgres-payment-data:
+  localstack-data:

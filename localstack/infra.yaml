@@ -1,0 +1,258 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Arka Lab - Infraestructura completa (Secrets + API Gateway)"
+
+Parameters:
+  pEnvironment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Entorno de despliegue
+
+  pOrdersServiceHost:
+    Type: String
+    Default: "http://ms-orders:8081"
+    Description: Host interno del Orders Service
+
+  # ── Credenciales de BD (inyectadas desde .env) ──
+  pDbUser:
+    Type: String
+    Default: arka
+    Description: Usuario de PostgreSQL
+
+  pDbPassword:
+    Type: String
+    NoEcho: true
+    Default: arkaSecret2025
+    Description: Contraseña de PostgreSQL
+
+  pDbOrdersHost:
+    Type: String
+    Default: arka-db-orders
+    Description: Hostname del contenedor PostgreSQL de orders
+
+  pDbOrdersName:
+    Type: String
+    Default: db_orders
+    Description: Nombre de la base de datos de orders
+
+  pDbOrdersPort:
+    Type: Number
+    Default: 5432
+    Description: Puerto interno de PostgreSQL de orders
+
+  pDbInventoryHost:
+    Type: String
+    Default: arka-db-inventory
+    Description: Hostname del contenedor PostgreSQL de inventory
+
+  pDbInventoryName:
+    Type: String
+    Default: db_inventory
+    Description: Nombre de la base de datos de inventory
+
+  pDbInventoryPort:
+    Type: Number
+    Default: 5432
+    Description: Puerto interno de PostgreSQL de inventory
+
+  pDbPaymentHost:
+    Type: String
+    Default: arka-db-payment
+    Description: Hostname del contenedor PostgreSQL de payment
+
+  pDbPaymentName:
+    Type: String
+    Default: db_payment
+    Description: Nombre de la base de datos de payment
+
+  pDbPaymentPort:
+    Type: Number
+    Default: 5432
+    Description: Puerto interno de PostgreSQL de payment
+
+  # ── Kafka (inyectado desde .env) ──
+  pKafkaBootstrapServers:
+    Type: String
+    Default: "kafka:29092"
+    Description: Kafka bootstrap servers internos
+
+Resources:
+  # ═══════════════════════════════════════════════════
+  # Secrets Manager — Credenciales de BD por servicio
+  # ═══════════════════════════════════════════════════
+  rOrdersDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-orders-creds"
+      Description: "Credenciales de PostgreSQL para ms-orders"
+      SecretString: !Sub |
+        {
+          "host": "${pDbOrdersHost}",
+          "port": ${pDbOrdersPort},
+          "database": "${pDbOrdersName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-orders
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  rInventoryDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-inventory-creds"
+      Description: "Credenciales de PostgreSQL para ms-inventory"
+      SecretString: !Sub |
+        {
+          "host": "${pDbInventoryHost}",
+          "port": ${pDbInventoryPort},
+          "database": "${pDbInventoryName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-inventory
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  rPaymentDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-payment-creds"
+      Description: "Credenciales de PostgreSQL para ms-payment"
+      SecretString: !Sub |
+        {
+          "host": "${pDbPaymentHost}",
+          "port": ${pDbPaymentPort},
+          "database": "${pDbPaymentName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-payment
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  # Secreto compartido: configuración de Kafka (todos los servicios)
+  rKafkaSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/kafka-config"
+      Description: "Configuración de Kafka compartida entre todos los microservicios"
+      SecretString: !Sub |
+        {
+          "bootstrapServers": "${pKafkaBootstrapServers}",
+          "groupId": "arka-saga-group",
+          "autoOffsetReset": "earliest",
+          "topics": {
+            "orderCreated": "order-created",
+            "stockReserved": "stock-reserved",
+            "stockReleased": "stock-released",
+            "paymentProcessed": "payment-processed",
+            "paymentFailed": "payment-failed",
+            "orderConfirmed": "order-confirmed",
+            "orderCancelled": "order-cancelled"
+          }
+        }
+      Tags:
+        - Key: Component
+          Value: messaging
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  # ═══════════════════════════════════════════════════
+  # API Gateway v1 (REST API) — Punto de entrada HTTP
+  # ═══════════════════════════════════════════════════
+  rArkaRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: arka-api
+      Description: "API Gateway REST para el ecosistema Arka"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Recurso /orders
+  rOrdersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !GetAtt rArkaRestApi.RootResourceId
+      PathPart: orders
+
+  # Recurso /orders/{proxy+} (catch-all)
+  rOrdersProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rOrdersResource
+      PathPart: "{proxy+}"
+
+  # Método ANY en /orders/{proxy+} con integración HTTP_PROXY
+  rOrdersProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ResourceId: !Ref rOrdersProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: ANY
+        Uri: !Sub "${pOrdersServiceHost}/{proxy}"
+        RequestParameters:
+          integration.request.path.proxy: "method.request.path.proxy"
+
+  # Deployment
+  rApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - rOrdersProxyMethod
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      StageName: v1
+
+Outputs:
+  oApiGatewayUrl:
+    Description: "URL del API Gateway para ms-orders"
+    Value: !Sub "https://${rArkaRestApi}.execute-api.localhost.localstack.cloud:4566/v1/orders/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+
+  oOrdersSecretArn:
+    Description: "ARN del secreto de db-orders"
+    Value: !Ref rOrdersDbSecret
+
+  oInventorySecretArn:
+    Description: "ARN del secreto de db-inventory"
+    Value: !Ref rInventoryDbSecret
+
+  oPaymentSecretArn:
+    Description: "ARN del secreto de db-payment"
+    Value: !Ref rPaymentDbSecret
+
+  oKafkaSecretArn:
+    Description: "ARN del secreto de configuración de Kafka"
+    Value: !Ref rKafkaSecret
+
+  oOrdersSecretName:
+    Description: "Nombre del secreto de db-orders"
+    Value: !Sub "${pEnvironment}/arka/db-orders-creds"
+
+  oInventorySecretName:
+    Description: "Nombre del secreto de db-inventory"
+    Value: !Sub "${pEnvironment}/arka/db-inventory-creds"
+
+  oPaymentSecretName:
+    Description: "Nombre del secreto de db-payment"
+    Value: !Sub "${pEnvironment}/arka/db-payment-creds"
+
+  oKafkaSecretName:
+    Description: "Nombre del secreto de Kafka (para referencia en los microservicios)"
+    Value: !Sub "${pEnvironment}/arka/kafka-config"
