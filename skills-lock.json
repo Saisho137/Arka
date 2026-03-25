@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "d31e234f0c90694a670222cdd1dafa853e051d7066beda389f1097c22dadd461"
+    },
+    "java-junit": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "fbf3cb0d47ffb44bdb6e1ebcc4d89dd7083208efdfc5b88f316c8bc2b58250b5"
+    },
+    "java-springboot": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "f1b9c6b1277178fc33e5a612761c1cd1cf6ab5f946d05d69d52026d142c0a0c1"
+    },
+    "spring-r2dbc": {
+      "source": "claude-dev-suite/claude-dev-suite",
+      "sourceType": "github",
+      "computedHash": "4bb88958ff0881865150b7e2de9667db64ed46acd9bba1f3ceabdde414b29600"
+    },
+    "spring-webflux": {
+      "source": "claude-dev-suite/claude-dev-suite",
+      "sourceType": "github",
+      "computedHash": "a08454d0742fd8aef50f58982ed7c5450ce1f13a34ecbf023c1fa7aa81257782"
+    }
+  }
+}
