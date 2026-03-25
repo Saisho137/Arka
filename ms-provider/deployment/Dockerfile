@@ -1,7 +1,7 @@
-FROM eclipse-temurin:21-jdk-alpine
+FROM amazoncorretto:21-alpine
 VOLUME /tmp
 COPY *.jar ms-provider.jar
 ENV JAVA_OPTS=" -Xshareclasses:name=cacheapp,cacheDir=/cache,nonfatal -XX:+UseContainerSupport -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/./urandom"
 # Replace with a non-root user to avoid running the container with excessive privileges
 USER appuser
-ENTRYPOINT [ "/bin/sh", "-c", "/opt/java/openjdk/bin/java $JAVA_OPTS  -jar /ms-provider.jar" ]
+ENTRYPOINT [ "/bin/sh", "-c", "java $JAVA_OPTS  -jar /ms-provider.jar" ]

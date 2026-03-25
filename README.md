@@ -131,7 +131,7 @@ ms-<name>/
 │   ├── driven-adapters/         # Repos, clientes externos (R2DBC, REST, Kafka producer)
 │   ├── entry-points/            # Controllers (WebFlux/MVC), Kafka consumers
 │   └── helpers/                 # Utilidades compartidas
-├── deployment/Dockerfile        # eclipse-temurin:21-jdk-alpine, usuario no-root
+├── deployment/Dockerfile        # amazoncorretto:21-alpine, usuario no-root
 ├── build.gradle                 # Plugins: Scaffold, Spring Boot, PiTest, JaCoCo, SonarQube
 ├── gradle.properties            # package=com.arka, reactive=true|false
 └── settings.gradle              # Módulos: :app-service, :model, :usecase + adapters/entrypoints
