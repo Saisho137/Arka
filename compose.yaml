@@ -1,9 +1,9 @@
 services:
   # ═══════════════════════════════════════════════════
-  # PostgreSQL — Database per Service (3 instancias)
+  # PostgreSQL 17 — Database per Service (3 instancias)
   # ═══════════════════════════════════════════════════
   postgres-orders:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: arka-db-orders
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,7 +23,7 @@ services:
       - arka-network
 
   postgres-inventory:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: arka-db-inventory
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -43,7 +43,7 @@ services:
       - arka-network
 
   postgres-payment:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: arka-db-payment
     environment:
       POSTGRES_USER: ${POSTGRES_USER}

@@ -19,7 +19,7 @@ Arka enfrenta desafíos críticos de operación:
 | Framework             | Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) |
 | Reactivo              | Project Reactor                                   |
 | Mensajería            | Apache Kafka 8 (KRaft, sin ZooKeeper)             |
-| BD Relacional         | PostgreSQL 16 (R2DBC / JDBC)                      |
+| BD Relacional         | PostgreSQL 17 (R2DBC / JDBC)                      |
 | BD Documental         | MongoDB (Reactive Drivers)                        |
 | Caché                 | Redis (Cache-Aside)                               |
 | Comunicación síncrona | gRPC                                              |
@@ -41,17 +41,17 @@ Arka enfrenta desafíos críticos de operación:
 
 ### Microservicios
 
-| Servicio             | Dominio                                   | BD                          | Fase |
-| -------------------- | ----------------------------------------- | --------------------------- | ---- |
-| **ms-catalog**       | Catálogo de productos, reseñas anidadas   | MongoDB + Redis             | 1    |
-| **ms-inventory**     | Stock, reservas, lock pesimista           | PostgreSQL (`db_inventory`) | 1    |
-| **ms-order**         | Gestión de pedidos, orquestador Saga      | PostgreSQL (`db_orders`)    | 1    |
-| **ms-notifications** | Notificaciones transaccionales (AWS SES)  | MongoDB                     | 1    |
-| **ms-cart**          | Carrito de compras, detección de abandono | MongoDB                     | 2    |
-| **ms-payment**       | Procesamiento de pagos (ACL pasarelas)    | PostgreSQL (`db_payment`)   | 2    |
-| **ms-reporter**      | Reportes analíticos, CQRS, Event Sourcing | PostgreSQL + AWS S3         | 3    |
-| **ms-shipping**      | Logística y envíos (Strangler Fig)        | PostgreSQL                  | 3    |
-| **ms-provider**      | Proveedores B2B (ACL externa)             | PostgreSQL                  | 4    |
+| Servicio             | Dominio                                   | BD                             | Fase |
+| -------------------- | ----------------------------------------- | ------------------------------ | ---- |
+| **ms-catalog**       | Catálogo de productos, reseñas anidadas   | MongoDB + Redis                | 1    |
+| **ms-inventory**     | Stock, reservas, lock pesimista           | PostgreSQL 17 (`db_inventory`) | 1    |
+| **ms-order**         | Gestión de pedidos, orquestador Saga      | PostgreSQL 17 (`db_orders`)    | 1    |
+| **ms-notifications** | Notificaciones transaccionales (AWS SES)  | MongoDB                        | 1    |
+| **ms-cart**          | Carrito de compras, detección de abandono | MongoDB                        | 2    |
+| **ms-payment**       | Procesamiento de pagos (ACL pasarelas)    | PostgreSQL 17 (`db_payment`)   | 2    |
+| **ms-reporter**      | Reportes analíticos, CQRS, Event Sourcing | PostgreSQL 17 + AWS S3         | 3    |
+| **ms-shipping**      | Logística y envíos (Strangler Fig)        | PostgreSQL 17                  | 3    |
+| **ms-provider**      | Proveedores B2B (ACL externa)             | PostgreSQL 17                  | 4    |
 
 ### Comunicación entre Servicios
 
@@ -102,7 +102,7 @@ Reposición automática de stock con proveedores externos cuando se detectan umb
 
 ```text
 Arka/
-├── compose.yaml                 # Stack local (PostgreSQL ×3, Kafka, Kafka UI, LocalStack, Traefik)
+├── compose.yaml                 # Stack local (PostgreSQL 17 ×3, Kafka, Kafka UI, LocalStack, Traefik)
 ├── .env                         # Variables de entorno (puertos, credenciales)
 ├── localstack/                  # CloudFormation: Secrets Manager + API Gateway
 │   ├── bootstrap.sh
@@ -147,15 +147,15 @@ docker compose up -d
 
 Esto inicia:
 
-| Servicio               | Puerto    | Descripción                             |
-| ---------------------- | --------- | --------------------------------------- |
-| PostgreSQL (orders)    | 5432      | `db_orders`                             |
-| PostgreSQL (inventory) | 5433      | `db_inventory`                          |
-| PostgreSQL (payment)   | 5434      | `db_payment`                            |
-| Kafka (KRaft)          | 9092      | Broker de mensajería                    |
-| Kafka UI               | 8080      | Dashboard de topics y mensajes          |
-| LocalStack             | 4566      | Secrets Manager + API Gateway simulados |
-| Traefik                | 80 / 8090 | Load balancer + dashboard               |
+| Servicio                  | Puerto    | Descripción                             |
+| ------------------------- | --------- | --------------------------------------- |
+| PostgreSQL 17 (orders)    | 5432      | `db_orders`                             |
+| PostgreSQL 17 (inventory) | 5433      | `db_inventory`                          |
+| PostgreSQL 17 (payment)   | 5434      | `db_payment`                            |
+| Kafka (KRaft)             | 9092      | Broker de mensajería                    |
+| Kafka UI                  | 8080      | Dashboard de topics y mensajes          |
+| LocalStack                | 4566      | Secrets Manager + API Gateway simulados |
+| Traefik                   | 80 / 8090 | Load balancer + dashboard               |
 
 ### Scaffold — Generar componentes
 

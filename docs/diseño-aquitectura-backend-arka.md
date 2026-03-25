@@ -1,7 +1,7 @@
 # Arquitectura Backend Arka - Estrategia de Entrega y Diseño del Sistema
 
 **Proyecto:** Arka - Plataforma B2B de Distribución de Accesorios para PC
-**Stack Técnico:** Java 21 (WebFlux & Virtual Threads), Apache Kafka, PostgreSQL, MongoDB, Redis, gRPC, AWS (API Gateway, S3, SES)
+**Stack Técnico:** Java 21 (WebFlux & Virtual Threads), Apache Kafka, PostgreSQL 17, MongoDB, Redis, gRPC, AWS (API Gateway, S3, SES)
 
 ---
 
@@ -32,10 +32,10 @@ Esta fase entrega el sistema core para permitir la venta segura, mitigando la ve
 
 - **Microservicios Entregados:**
   - `ms-catalog` (Reactivo): Dueño del producto y sus reseñas anidadas. Resuelve la **HU1** (Registrar productos)
-  - `ms-inventory` (Reactivo): Dueño del stock. Utiliza _Lock Pesimista_ en PostgreSQL. Resuelve la **HU2** (Actualizar stock)
+  - `ms-inventory` (Reactivo): Dueño del stock. Utiliza _Lock Pesimista_ en PostgreSQL 17. Resuelve la **HU2** (Actualizar stock)
   - `ms-order` (Reactivo): Máquina de estados. Orquestador pasivo de la Saga. Resuelve la **HU4** (Registrar orden)
   - `ms-notifications` (Reactivo): Motor pasivo de correos integrándose a AWS SES. Resuelve la **HU6** (Notificación de estados)
-- **Infraestructura Desplegada:** AWS API Gateway (Zero Trust / Entra ID), Apache Kafka, PostgreSQL, MongoDB y Redis
+- **Infraestructura Desplegada:** AWS API Gateway (Zero Trust / Entra ID), Apache Kafka, PostgreSQL 17, MongoDB y Redis
 - **Valor de Negocio:** El cliente puede visualizar el catálogo, crear una orden y el sistema **bloquea el inventario en tiempo real** usando gRPC entre `ms-order` e `ms-inventory`, previniendo la sobreventa
 
 **Qué INCLUYE esta fase:**
@@ -48,7 +48,7 @@ Esta fase entrega el sistema core para permitir la venta segura, mitigando la ve
 | **`ms-notifications`** | HU6 - Notificaciones de estado del pedido                            |
 | **Apache Kafka**       | Broker de mensajería para comunicación asíncrona entre servicios     |
 | **API Gateway**        | Punto de entrada único, Auth (JWT/Entra ID), Rate Limiting, SSL      |
-| **PostgreSQL**         | Database per Service para `ms-inventory` y `ms-order` (ACID crítico) |
+| **PostgreSQL 17**      | Database per Service para `ms-inventory` y `ms-order` (ACID crítico) |
 | **MongoDB**            | Database per Service para `ms-catalog` y `ms-notifications`          |
 | **Redis**              | Caché de catálogo para lecturas de alta frecuencia (Cache-Aside)     |
 
@@ -81,7 +81,7 @@ Con el inventario seguro, se introduce la gestión temporal de la compra y la au
 Se entrega la capacidad de análisis masivo para la directiva y se automatizan los envíos B2B "estrangulando" sistemas heredados.
 
 - **Microservicios Entregados:**
-  - `ms-reporter` (Imperativo / Virtual Threads): Data Lake de la arquitectura que consume todos los eventos de Kafka (Event Sourcing). Usa índices GIN y JSONB en PostgreSQL. Exporta PDF/CSV pesados (hasta 500MB) a **AWS S3**. Resuelve la **HU7** (Ventas semanales) y **HU3** (Reporte stock bajo)
+  - `ms-reporter` (Imperativo / Virtual Threads): Data Lake de la arquitectura que consume todos los eventos de Kafka (Event Sourcing). Usa índices GIN y JSONB en PostgreSQL 17. Exporta PDF/CSV pesados (hasta 500MB) a **AWS S3**. Resuelve la **HU7** (Ventas semanales) y **HU3** (Reporte stock bajo)
   - `ms-shipping` (Imperativo): Gestión de despachos implementando el **Patrón Strangler Fig** para migrar progresivamente desde el monolito logístico
 - **Valor de Negocio:** Operaciones puede tomar decisiones estratégicas sin tumbar la base de datos de ventas (OLTP). El área logística automatiza las guías de envío sin detener la operación de despachos.
 
@@ -200,7 +200,7 @@ El patrón BFF (Backend for Frontend) queda oficialmente **descartado** de la so
 Cada microservicio es dueño único de su almacenamiento para evitar acoplamientos y permitir el escalado independiente.
 
 - **MongoDB (Drivers Reactivos):** Usado por `ms-catalog` para lecturas de catálogos polimórficos ultrarrápidas con reseñas como subdocumentos, `ms-cart` para mutaciones atómicas en arrays y `ms-notifications` para almacenar plantillas JSON dinámicas e historial de correos.
-- **PostgreSQL (R2DBC / JDBC):** Usado por `ms-inventory`, `ms-order`, `ms-payment`, `ms-shipping`, `ms-provider` y `ms-reporter`. Garantiza integridad transaccional ACID, permite bloqueos pesimistas para proteger el stock y soporta vistas indexadas JSONB para CQRS.
+- **PostgreSQL 17 (R2DBC / JDBC):** Usado por `ms-inventory`, `ms-order`, `ms-payment`, `ms-shipping`, `ms-provider` y `ms-reporter`. Garantiza integridad transaccional ACID, permite bloqueos pesimistas para proteger el stock y soporta vistas indexadas JSONB para CQRS.
 
 ### C. Paradigma Híbrido: Reactivo vs Imperativo (Loom)
 
@@ -216,7 +216,7 @@ Basado en la naturaleza de cada Bounded Context, se divide el stack:
 
 ### E. Resiliencia: Outbox Pattern e Idempotencia
 
-1. **Transactional Outbox Pattern:** Para prevenir el _Dual-Write problem_, servicios como `ms-inventory` y `ms-order` insertan su evento de dominio dentro de la misma transacción PostgreSQL que altera el negocio. Un relay asíncrono lo empuja a Kafka, garantizando que nunca se pierdan eventos por caídas de red. En servicios con MongoDB (`ms-catalog`), se adapta el patrón usando una colección `outbox_events` con operaciones atómicas.
+1. **Transactional Outbox Pattern:** Para prevenir el _Dual-Write problem_, servicios como `ms-inventory` y `ms-order` insertan su evento de dominio dentro de la misma transacción PostgreSQL 17 que altera el negocio. Un relay asíncrono lo empuja a Kafka, garantizando que nunca se pierdan eventos por caídas de red. En servicios con MongoDB (`ms-catalog`), se adapta el patrón usando una colección `outbox_events` con operaciones atómicas.
 2. **Idempotencia en Consumidores:** Debido a que Kafka garantiza entrega _At-least-once_, cada microservicio implementa una tabla/colección escudo (`processed_events` o _Unique Constraints_ combinados) para hacer _fail-fast_ frente a eventos duplicados, evitando descontar inventario dos veces o ejecutar cobros dobles.
 
 ---
@@ -243,7 +243,7 @@ Según Eric Evans (DDD) y la arquitectura hexagonal, cada microservicio debe rep
 | **Patrón de acceso**          | 95% lecturas, 5% escrituras                                                                    | 60% escrituras, 40% lecturas                                       |
 | **Problema crítico**          | Búsqueda y filtrado eficiente                                                                  | **Sobreventa por concurrencia** (problema #1 de Arka)              |
 | **Mecanismo de consistencia** | Eventual (cambio de precio no afecta órdenes en curso)                                         | **ACID estricto** (lock pesimista para evitar race conditions)     |
-| **Estrategia de escalado**    | **Horizontal con caché agresivo** (Redis)                                                      | **Vertical con ACID riguroso** (PostgreSQL con locks)              |
+| **Estrategia de escalado**    | **Horizontal con caché agresivo** (Redis)                                                      | **Vertical con ACID riguroso** (PostgreSQL 17 con locks)           |
 | **Equipo propietario**        | Producto / Marketing                                                                           | Operaciones / Logística                                            |
 | **Ciclo de vida**             | Producto puede existir sin stock (pre-orden)                                                   | Stock puede existir sin producto visible (descontinuado)           |
 | **Eventos de dominio**        | `ProductCreated`, `ProductUpdated`, `PriceChanged`                                             | `StockReserved`, `StockReleased`, `StockUpdated`                   |
@@ -275,7 +275,7 @@ Cliente consulta catálogo:
 
 Cliente crea orden:
   └─> API GW ─> ms-order ─> gRPC: ms-inventory
-                               └─> PostgreSQL con SELECT FOR UPDATE (lock)
+                               └─> PostgreSQL 17 con SELECT FOR UPDATE (lock)
                                     └─> Reserva stock atómicamente
 ```
 
@@ -518,10 +518,10 @@ Invalidación de caché:
   - `StockDepleted` → Alerta de stock bajo al alcanzar umbrales críticos (consumido por `ms-notifications` y `ms-reporter`)
 - 🆔 **Idempotencia:** Implementa validación estricta para ignorar eventos duplicados de Kafka, evitando doble descuento.
 
-**Base de Datos:** PostgreSQL (inventory_db)
+**Base de Datos:** PostgreSQL 17 (inventory_db)
 
 ```text
-inventory_db (PostgreSQL)
+inventory_db (PostgreSQL 17)
 ├── stock
 │   ├── id (UUID, PK)
 │   ├── sku (VARCHAR, NOT NULL, UNIQUE)
@@ -660,10 +660,10 @@ Job periódico que ejecuta cada 60 segundos:
 
 > En Fase 2, el flujo incorpora `PENDIENTE_PAGO` entre la reserva de stock y la confirmación: `PENDIENTE_RESERVA` → `PENDIENTE_PAGO` → `CONFIRMADO`.
 
-**Base de Datos:** PostgreSQL (order_db)
+**Base de Datos:** PostgreSQL 17 (order_db)
 
 ```text
-order_db (PostgreSQL)
+order_db (PostgreSQL 17)
 ├── orders
 │   ├── id (UUID, PK)
 │   ├── customer_id (UUID, NOT NULL)
@@ -865,10 +865,10 @@ notifications_db (MongoDB)
 
 ### 5.7 Microservicios Imperativos (Virtual Threads — Fases 2, 3 y 4)
 
-- **`ms-payment` (Fase 2):** Imperativo (Spring MVC + Virtual Threads). Actúa como Capa Anti-Corrupción (ACL). Usa PostgreSQL con idempotencia rigurosa (_Unique Constraints_ combinados para evitar cobros dobles). El uso de SDKs bloqueantes de pasarelas (Stripe, Wompi, Mercado Pago) exige aislar las peticiones en Virtual Threads para no estrangular la red. Implementa **Circuit Breaker & Bulkhead** con _Resilience4j_.
-- **`ms-reporter` (Fase 3):** Imperativo (Spring MVC + Virtual Threads). CQRS y Event Sourcing en PostgreSQL (usando `JSONB` y GIN Index). Realiza agregaciones pesadas (CPU-bound) exportando excels/PDFs de hasta 500MB hacia **AWS S3** como objetos inmutables.
-- **`ms-shipping` (Fase 3):** Imperativo con PostgreSQL. Se integra con APIs Logísticas Legacy (FedEx, DHL) aplicando el _Strangler Fig Pattern_ para migrar progresivamente desde el monolito. Implementa **Circuit Breaker** con _Resilience4j_.
-- **`ms-provider` (Fase 4):** Imperativo con PostgreSQL. Barrera ACL para recibir webhooks de proveedores de forma segura. Gestiona órdenes de compra automáticas cuando `ms-inventory` reporta existencias críticas.
+- **`ms-payment` (Fase 2):** Imperativo (Spring MVC + Virtual Threads). Actúa como Capa Anti-Corrupción (ACL). Usa PostgreSQL 17 con idempotencia rigurosa (_Unique Constraints_ combinados para evitar cobros dobles). El uso de SDKs bloqueantes de pasarelas (Stripe, Wompi, Mercado Pago) exige aislar las peticiones en Virtual Threads para no estrangular la red. Implementa **Circuit Breaker & Bulkhead** con _Resilience4j_.
+- **`ms-reporter` (Fase 3):** Imperativo (Spring MVC + Virtual Threads). CQRS y Event Sourcing en PostgreSQL 17 (usando `JSONB` y GIN Index). Realiza agregaciones pesadas (CPU-bound) exportando excels/PDFs de hasta 500MB hacia **AWS S3** como objetos inmutables.
+- **`ms-shipping` (Fase 3):** Imperativo con PostgreSQL 17. Se integra con APIs Logísticas Legacy (FedEx, DHL) aplicando el _Strangler Fig Pattern_ para migrar progresivamente desde el monolito. Implementa **Circuit Breaker** con _Resilience4j_.
+- **`ms-provider` (Fase 4):** Imperativo con PostgreSQL 17. Barrera ACL para recibir webhooks de proveedores de forma segura. Gestiona órdenes de compra automáticas cuando `ms-inventory` reporta existencias críticas.
 
 ---
 
@@ -970,7 +970,7 @@ La arquitectura garantiza la consistencia de los datos combinando llamadas sínc
     │ 6. Guarda orden con estado CONFIRMADO
     │    (Fase 1: pago B2B offline, facturación 30-60 días)
     │    Guarda evento OrderConfirmed en outbox_events
-    │    (MISMA transacción PostgreSQL)
+    │    (MISMA transacción PostgreSQL 17)
     │
     │ 7. Responde al cliente: 202 Accepted
     │    { orderId, status: "CONFIRMADO" }
@@ -1224,7 +1224,7 @@ El flujo transaccional fluye de Catálogo → Inventario → Pago. `ms-order` es
 
 ### 8.2 Transactional Outbox Pattern
 
-Implementado en **`ms-catalog`** (MongoDB), **`ms-inventory`** y **`ms-order`** (PostgreSQL).
+Implementado en **`ms-catalog`** (MongoDB), **`ms-inventory`** y **`ms-order`** (PostgreSQL 17).
 
 Garantiza atomicidad entre la escritura en BD y la publicación de eventos a Kafka:
 
@@ -1255,7 +1255,7 @@ Garantiza atomicidad entre la escritura en BD y la publicación de eventos a Kaf
 └─────────────────────────────────────────────┘
 ```
 
-**Alternativa avanzada (diferida):** Debezium CDC (Change Data Capture) que lee el Write-Ahead Log de PostgreSQL para publicar eventos en tiempo real sin polling.
+**Alternativa avanzada (diferida):** Debezium CDC (Change Data Capture) que lee el Write-Ahead Log de PostgreSQL 17 para publicar eventos en tiempo real sin polling.
 
 ### 8.3 Idempotencia en Consumers
 
@@ -1267,7 +1267,7 @@ Cada consumer de Kafka implementa tracking de eventos procesados para prevenir p
 
 **Almacenamiento del tracking:**
 
-- **PostgreSQL services (`ms-inventory`, `ms-order`):** Tabla `processed_events` (eventId PK)
+- **PostgreSQL 17 services (`ms-inventory`, `ms-order`):** Tabla `processed_events` (eventId PK)
 - **MongoDB services (`ms-notifications`):** Colección con unique index en `eventId`
 
 ### 8.4 Database per Service
@@ -1277,14 +1277,14 @@ Cada microservicio tiene su propia base de datos **aislada**. Ningún servicio a
 | Servicio           | Base de Datos          | Motor           | Comunicación con otros servicios                       |
 | ------------------ | ---------------------- | --------------- | ------------------------------------------------------ |
 | `ms-catalog`       | `catalog_db`           | MongoDB + Redis | Kafka (eventos) + Redis (caché) + gRPC Server (Fase 2) |
-| `ms-inventory`     | `inventory_db`         | PostgreSQL      | Kafka (eventos) + gRPC Server (reserva stock)          |
-| `ms-order`         | `order_db`             | PostgreSQL      | Kafka (eventos) + gRPC Client (→ ms-inventory)         |
+| `ms-inventory`     | `inventory_db`         | PostgreSQL 17   | Kafka (eventos) + gRPC Server (reserva stock)          |
+| `ms-order`         | `order_db`             | PostgreSQL 17   | Kafka (eventos) + gRPC Client (→ ms-inventory)         |
 | `ms-notifications` | `notifications_db`     | MongoDB         | Kafka (consumer) + AWS SES (email)                     |
 | `ms-cart`          | `cart_db`              | MongoDB         | Kafka (eventos) + gRPC Client (→ ms-catalog)           |
-| `ms-payment`       | `payment_db`           | PostgreSQL      | Kafka (consumer/producer) + Pasarelas externas         |
-| `ms-reporter`      | `reporter_db` + AWS S3 | PostgreSQL      | Kafka (consumer de TODOS los eventos)                  |
-| `ms-shipping`      | `shipping_db`          | PostgreSQL      | Kafka + API Logística externa                          |
-| `ms-provider`      | `provider_db`          | PostgreSQL      | Kafka + APIs de Proveedores (Webhooks)                 |
+| `ms-payment`       | `payment_db`           | PostgreSQL 17   | Kafka (consumer/producer) + Pasarelas externas         |
+| `ms-reporter`      | `reporter_db` + AWS S3 | PostgreSQL 17   | Kafka (consumer de TODOS los eventos)                  |
+| `ms-shipping`      | `shipping_db`          | PostgreSQL 17   | Kafka + API Logística externa                          |
+| `ms-provider`      | `provider_db`          | PostgreSQL 17   | Kafka + APIs de Proveedores (Webhooks)                 |
 
 ### 8.5 Cache-Aside Pattern (Redis)
 
@@ -1324,23 +1324,23 @@ Tras la eliminación del patrón BFF, el `API Gateway` funge como muralla. Valid
 
 La arquitectura aplica el principio de _Database per Service_ eligiendo la herramienta ideal para la carga de trabajo:
 
-| Microservicio          | Motor de Persistencia   | Driver   | Justificación Arquitectónica                                                                                                 |
-| :--------------------- | :---------------------- | :------- | :--------------------------------------------------------------------------------------------------------------------------- |
-| **`ms-catalog`**       | **MongoDB + Redis**     | Reactivo | Velocidad ultrarrápida (Cache-Aside) en catálogos. Documentos polimórficos para anidar reseñas (Reviews) como subdocumentos. |
-| **`ms-inventory`**     | **PostgreSQL**          | R2DBC    | Soporte ACID absoluto. Obligatorio para candados pesimistas (`SELECT FOR UPDATE`) al proteger el inventario.                 |
-| **`ms-order`**         | **PostgreSQL**          | R2DBC    | Atomicidad requerida para gestionar estados de la Saga y la tabla Outbox.                                                    |
-| **`ms-cart`**          | **MongoDB**             | Reactivo | Permite mutaciones atómicas (`$push` / `$pull`) en los arrays de carritos sin JOINs pesados.                                 |
-| **`ms-payment`**       | **PostgreSQL**          | JDBC     | Rigurosidad financiera (PCI-DSS compliance) y _Unique Constraints_ para idempotencia anti-dobles cobros.                     |
-| **`ms-shipping`**      | **PostgreSQL**          | JDBC     | Relacional clásico para persistencia de guías y control de webhooks logísticos.                                              |
-| **`ms-provider`**      | **PostgreSQL**          | JDBC     | Relacional para registro de órdenes de compra a proveedores.                                                                 |
-| **`ms-notifications`** | **MongoDB**             | Reactivo | Esquema flexible para plantillas JSON dinámicas. TTL Index nativo para limpieza automática de historial.                     |
-| **`ms-reporter`**      | **PostgreSQL + AWS S3** | JDBC     | Tipos `JSONB` e índices `GIN` para Event Sourcing analítico (CQRS). Reportes masivos inmutables en S3.                       |
+| Microservicio          | Motor de Persistencia      | Driver   | Justificación Arquitectónica                                                                                                 |
+| ---------------------- | -------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **`ms-catalog`**       | **MongoDB + Redis**        | Reactivo | Velocidad ultrarrápida (Cache-Aside) en catálogos. Documentos polimórficos para anidar reseñas (Reviews) como subdocumentos. |
+| **`ms-inventory`**     | **PostgreSQL 17**          | R2DBC    | Soporte ACID absoluto. Obligatorio para candados pesimistas (`SELECT FOR UPDATE`) al proteger el inventario.                 |
+| **`ms-order`**         | **PostgreSQL 17**          | R2DBC    | Atomicidad requerida para gestionar estados de la Saga y la tabla Outbox.                                                    |
+| **`ms-cart`**          | **MongoDB**                | Reactivo | Permite mutaciones atómicas (`$push` / `$pull`) en los arrays de carritos sin JOINs pesados.                                 |
+| **`ms-payment`**       | **PostgreSQL 17**          | JDBC     | Rigurosidad financiera (PCI-DSS compliance) y _Unique Constraints_ para idempotencia anti-dobles cobros.                     |
+| **`ms-shipping`**      | **PostgreSQL 17**          | JDBC     | Relacional clásico para persistencia de guías y control de webhooks logísticos.                                              |
+| **`ms-provider`**      | **PostgreSQL 17**          | JDBC     | Relacional para registro de órdenes de compra a proveedores.                                                                 |
+| **`ms-notifications`** | **MongoDB**                | Reactivo | Esquema flexible para plantillas JSON dinámicas. TTL Index nativo para limpieza automática de historial.                     |
+| **`ms-reporter`**      | **PostgreSQL 17 + AWS S3** | JDBC     | Tipos `JSONB` e índices `GIN` para Event Sourcing analítico (CQRS). Reportes masivos inmutables en S3.                       |
 
 ```text
 Comunicación entre BDs: SOLO vía eventos Kafka o llamadas gRPC (nunca acceso directo cruzado)
 Redis: Caché de solo-lectura para ms-catalog, invalidado por eventos ProductCreated/Updated
 MongoDB: Documentos flexibles para catálogo, carritos y notificaciones
-PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
+PostgreSQL 17: ACID estricto para inventario, órdenes, pagos y reportes
 ```
 
 ---
@@ -1357,7 +1357,7 @@ PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
 | **Comunicación Síncrona**  | gRPC (Protocol Buffers)                    | Serialización ultrarrápida en red privada                     |
 | **Comunicación Asíncrona** | Apache Kafka (MSK o Docker en dev)         | Event streaming, retención, consumer groups                   |
 | **BD Documental**          | MongoDB                                    | Esquemas flexibles, subdocumentos, mutaciones atómicas        |
-| **BD Transaccional**       | PostgreSQL 15 (RDS)                        | ACID, relaciones, constraints, lock pesimista                 |
+| **BD Transaccional**       | PostgreSQL 17 (RDS)                        | ACID, relaciones, constraints, lock pesimista                 |
 | **Caché**                  | Redis (AWS ElastiCache)                    | Latencia <1ms para catálogo, reducción de carga en MongoDB    |
 | **Almacenamiento Objetos** | AWS S3                                     | Reportes inmutables de hasta 500MB (PDF/CSV)                  |
 | **API Gateway**            | AWS API Gateway                            | Managed service, JWT validation, rate limiting, SSL           |
@@ -1415,7 +1415,7 @@ PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
 │ │ │ └───────────────────────────────────────┘   │  │    │
 │ │ │                                             │  │    │
 │ │ │ ┌───────────────────────────────────────┐   │  │    │
-│ │ │ │ PostgreSQL (RDS Multi-AZ)             │   │  │    │
+│ │ │ │ PostgreSQL 17 (RDS Multi-AZ)          │   │  │    │
 │ │ │ │ inventory_db │ order_db               │   │  │    │
 │ │ │ └───────────────────────────────────────┘   │  │    │
 │ │ │                                             │  │    │
@@ -1446,7 +1446,7 @@ PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
 | **Autorización**          | RBAC con 2 roles: CUSTOMER (cliente B2B), ADMIN (personal interno)          |
 | **HTTPS**                 | Obligatorio vía API Gateway (SSL Termination)                               |
 | **Propagación Identidad** | Header `X-User-Email` inyectado por API Gateway hacia la VPC privada        |
-| **BD protegida**          | PostgreSQL y MongoDB en subnet privada (no accesible desde internet)        |
+| **BD protegida**          | PostgreSQL 17 y MongoDB en subnet privada (no accesible desde internet)     |
 | **Kafka protegido**       | MSK en subnet privada con SASL authentication                               |
 | **Secrets**               | AWS Secrets Manager para credenciales de BD y configuración sensible        |
 | **Rate Limiting**         | 100 req/s por IP en API Gateway                                             |
@@ -1471,20 +1471,20 @@ PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
 
 ## 13. Decisiones Arquitectónicas Consolidadas
 
-| #   | Decisión                                         | Justificación                                                                      | Trade-off                                                     |
-| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | **9 microservicios** en 4 fases                  | Entrega incremental de valor. MVP con 4 servicios, resto iterativamente            | Complejidad operacional creciente por fase                    |
-| 2   | **WebFlux vs Virtual Threads (híbrido)**         | No forzar 100% reactivo. WebFlux para I/O-bound, Loom para CPU-bound/SDKs legacy   | Dos paradigmas coexistiendo; requiere claridad por equipo     |
-| 3   | **Eliminación permanente del BFF**               | API Gateway asume seguridad y enrutamiento. Simplifica topología de red            | Respuestas no optimizadas por plataforma (Web/Mobile)         |
-| 4   | **MongoDB para `ms-catalog`**                    | Documentos polimórficos para reseñas anidadas. Cache-Aside con Redis               | Sin JOINs relacionales; consistencia eventual en catálogo     |
-| 5   | **MongoDB para `ms-notifications`**              | Esquema flexible para plantillas JSON. TTL Index nativo para limpieza automática   | No es PostgreSQL (pero no requiere ACID para notificaciones)  |
-| 6   | **gRPC para comunicación síncrona interna**      | Serialización ultrarrápida (Protobuf). Vital para reserva de stock en milisegundos | Mayor complejidad de contratos vs REST; requiere Proto files  |
-| 7   | **Separación Catálogo e Inventario**             | Bounded Contexts distintos (DDD). Catálogo = lecturas masivas. Inventario = ACID   | Dos servicios donde uno podría bastar en negocio simple       |
-| 8   | **Reseñas como subdocumentos en `ms-catalog`**   | Elimina un microservicio completo. Aprovecha modelo documental de MongoDB          | Límite de 16MB por documento MongoDB (suficiente para B2B)    |
-| 9   | **Zero Trust en API Gateway**                    | Entra ID / Cognito valida tokens. Tenant Restrictions bloquea `@gmail.com`         | Dependencia de IdP externo para autenticación                 |
-| 10  | **Outbox con polling** (no Debezium)             | Simplicidad, sin dependencias extra                                                | Latencia máxima adicional de 5s por ciclo de polling          |
-| 11  | **Kafka como único broker** (no SQS/EventBridge) | Un solo broker simplifica la operación; suficiente para todas las fases            | Sin scheduling nativo; compensado con jobs periódicos         |
-| 12  | **Saga simplificada en Fase 1** (gRPC + Kafka)   | gRPC sync para stock + Kafka async para notificaciones. Sin Payment = menos fallos | Pago B2B offline; integración con pasarelas diferida a Fase 2 |
+| #   | Decisión                                         | Justificación                                                                      | Trade-off                                                       |
+| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 1   | **9 microservicios** en 4 fases                  | Entrega incremental de valor. MVP con 4 servicios, resto iterativamente            | Complejidad operacional creciente por fase                      |
+| 2   | **WebFlux vs Virtual Threads (híbrido)**         | No forzar 100% reactivo. WebFlux para I/O-bound, Loom para CPU-bound/SDKs legacy   | Dos paradigmas coexistiendo; requiere claridad por equipo       |
+| 3   | **Eliminación permanente del BFF**               | API Gateway asume seguridad y enrutamiento. Simplifica topología de red            | Respuestas no optimizadas por plataforma (Web/Mobile)           |
+| 4   | **MongoDB para `ms-catalog`**                    | Documentos polimórficos para reseñas anidadas. Cache-Aside con Redis               | Sin JOINs relacionales; consistencia eventual en catálogo       |
+| 5   | **MongoDB para `ms-notifications`**              | Esquema flexible para plantillas JSON. TTL Index nativo para limpieza automática   | No es PostgreSQL 17 (pero no requiere ACID para notificaciones) |
+| 6   | **gRPC para comunicación síncrona interna**      | Serialización ultrarrápida (Protobuf). Vital para reserva de stock en milisegundos | Mayor complejidad de contratos vs REST; requiere Proto files    |
+| 7   | **Separación Catálogo e Inventario**             | Bounded Contexts distintos (DDD). Catálogo = lecturas masivas. Inventario = ACID   | Dos servicios donde uno podría bastar en negocio simple         |
+| 8   | **Reseñas como subdocumentos en `ms-catalog`**   | Elimina un microservicio completo. Aprovecha modelo documental de MongoDB          | Límite de 16MB por documento MongoDB (suficiente para B2B)      |
+| 9   | **Zero Trust en API Gateway**                    | Entra ID / Cognito valida tokens. Tenant Restrictions bloquea `@gmail.com`         | Dependencia de IdP externo para autenticación                   |
+| 10  | **Outbox con polling** (no Debezium)             | Simplicidad, sin dependencias extra                                                | Latencia máxima adicional de 5s por ciclo de polling            |
+| 11  | **Kafka como único broker** (no SQS/EventBridge) | Un solo broker simplifica la operación; suficiente para todas las fases            | Sin scheduling nativo; compensado con jobs periódicos           |
+| 12  | **Saga simplificada en Fase 1** (gRPC + Kafka)   | gRPC sync para stock + Kafka async para notificaciones. Sin Payment = menos fallos | Pago B2B offline; integración con pasarelas diferida a Fase 2   |
 
 ---
 
@@ -1492,7 +1492,7 @@ PostgreSQL: ACID estricto para inventario, órdenes, pagos y reportes
 
 El diseño y entrega evolutiva (4 Fases) de la arquitectura del **Backend de Arka** resuelve de raíz las problemáticas más punzantes para la expansión regional B2B de la compañía. Al segmentar la solución técnica:
 
-- Se **erradica completamente la sobreventa** (el dolor #1 de la empresa) combinando transacciones ultracortas, locks pesimistas en PostgreSQL y validaciones síncronas por gRPC.
+- Se **erradica completamente la sobreventa** (el dolor #1 de la empresa) combinando transacciones ultracortas, locks pesimistas en PostgreSQL 17 y validaciones síncronas por gRPC.
 - Se **protege el estado financiero** del ecosistema utilizando Sagas Secuenciales coordinadas por Kafka, asegurando que ningún cliente sea cobrado sin que su mercancía esté físicamente separada en la bodega.
 - Se dota a la directiva de **analítica profunda y automatizada** mediante el patrón CQRS y Event Sourcing en el servicio de reportes, aislando la carga pesada de inteligencia de negocios para que nunca ralentice el núcleo transaccional de ventas.
 

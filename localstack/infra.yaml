@@ -17,18 +17,18 @@ Parameters:
   pDbUser:
     Type: String
     Default: arka
-    Description: Usuario de PostgreSQL
+    Description: Usuario de PostgreSQL 17
 
   pDbPassword:
     Type: String
     NoEcho: true
     Default: arkaSecret2025
-    Description: Contraseña de PostgreSQL
+    Description: Contraseña de PostgreSQL 17
 
   pDbOrdersHost:
     Type: String
     Default: arka-db-orders
-    Description: Hostname del contenedor PostgreSQL de orders
+    Description: Hostname del contenedor PostgreSQL 17 de orders
 
   pDbOrdersName:
     Type: String
@@ -38,12 +38,12 @@ Parameters:
   pDbOrdersPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL de orders
+    Description: Puerto interno de PostgreSQL 17 de orders
 
   pDbInventoryHost:
     Type: String
     Default: arka-db-inventory
-    Description: Hostname del contenedor PostgreSQL de inventory
+    Description: Hostname del contenedor PostgreSQL 17 de inventory
 
   pDbInventoryName:
     Type: String
@@ -53,12 +53,12 @@ Parameters:
   pDbInventoryPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL de inventory
+    Description: Puerto interno de PostgreSQL 17 de inventory
 
   pDbPaymentHost:
     Type: String
     Default: arka-db-payment
-    Description: Hostname del contenedor PostgreSQL de payment
+    Description: Hostname del contenedor PostgreSQL 17 de payment
 
   pDbPaymentName:
     Type: String
@@ -68,7 +68,7 @@ Parameters:
   pDbPaymentPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL de payment
+    Description: Puerto interno de PostgreSQL 17 de payment
 
   # ── Kafka (inyectado desde .env) ──
   pKafkaBootstrapServers:
@@ -84,7 +84,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-orders-creds"
-      Description: "Credenciales de PostgreSQL para ms-orders"
+      Description: "Credenciales de PostgreSQL 17 para ms-orders"
       SecretString: !Sub |
         {
           "host": "${pDbOrdersHost}",
@@ -103,7 +103,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-inventory-creds"
-      Description: "Credenciales de PostgreSQL para ms-inventory"
+      Description: "Credenciales de PostgreSQL 17 para ms-inventory"
       SecretString: !Sub |
         {
           "host": "${pDbInventoryHost}",
@@ -122,7 +122,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-payment-creds"
-      Description: "Credenciales de PostgreSQL para ms-payment"
+      Description: "Credenciales de PostgreSQL 17 para ms-payment"
       SecretString: !Sub |
         {
           "host": "${pDbPaymentHost}",

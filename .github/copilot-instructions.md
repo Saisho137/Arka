@@ -6,7 +6,7 @@ Monorepo e-commerce B2B (Colombia/LATAM). 9 microservicios Java con Clean Archit
 
 ## Stack
 
-Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor · Kafka 8 (KRaft) · PostgreSQL 16 · MongoDB (Reactive Drivers) · Redis (Cache-Aside) · gRPC (comunicación síncrona interna) · LocalStack (CloudFormation) · Gradle + Bancolombia Scaffold Plugin 4.2.0 · Lombok 1.18.42
+Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor · Kafka 8 (KRaft) · PostgreSQL 17 · MongoDB (Reactive Drivers) · Redis (Cache-Aside) · gRPC (comunicación síncrona interna) · LocalStack (CloudFormation) · Gradle + Bancolombia Scaffold Plugin 4.2.0 · Lombok 1.18.42
 
 ## Paradigma Híbrido
 
@@ -15,17 +15,17 @@ Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor 
 
 ## Microservicios
 
-| Servicio         | Dominio                                     | BD                      | Paradigma  |
-| ---------------- | ------------------------------------------- | ----------------------- | ---------- |
-| ms-order         | Gestión de pedidos, Saga orchestrator       | PostgreSQL db_orders    | Reactivo   |
-| ms-catalog       | Catálogo de productos y reseñas anidadas    | MongoDB + Redis         | Reactivo   |
-| ms-inventory     | Stock, reservas y lock pesimista            | PostgreSQL db_inventory | Reactivo   |
-| ms-payment       | Procesamiento de pagos (ACL pasarelas)      | PostgreSQL db_payment   | Reactivo\* |
-| ms-shipping      | Logística y envíos (Strangler Fig)          | PostgreSQL              | Reactivo\* |
-| ms-provider      | Proveedores B2B (ACL externa)               | PostgreSQL              | Reactivo\* |
-| ms-notifications | Alertas y notificaciones (AWS SES)          | MongoDB                 | Reactivo   |
-| ms-reporter      | Reportes y analítica (CQRS, Event Sourcing) | PostgreSQL + S3         | Imperativo |
-| ms-cart          | Carrito de compras y abandono               | MongoDB                 | Reactivo   |
+| Servicio         | Dominio                                     | BD                         | Paradigma  |
+| ---------------- | ------------------------------------------- | -------------------------- | ---------- |
+| ms-order         | Gestión de pedidos, Saga orchestrator       | PostgreSQL 17 db_orders    | Reactivo   |
+| ms-catalog       | Catálogo de productos y reseñas anidadas    | MongoDB + Redis            | Reactivo   |
+| ms-inventory     | Stock, reservas y lock pesimista            | PostgreSQL 17 db_inventory | Reactivo   |
+| ms-payment       | Procesamiento de pagos (ACL pasarelas)      | PostgreSQL 17 db_payment   | Reactivo\* |
+| ms-shipping      | Logística y envíos (Strangler Fig)          | PostgreSQL 17              | Reactivo\* |
+| ms-provider      | Proveedores B2B (ACL externa)               | PostgreSQL 17              | Reactivo\* |
+| ms-notifications | Alertas y notificaciones (AWS SES)          | MongoDB                    | Reactivo   |
+| ms-reporter      | Reportes y analítica (CQRS, Event Sourcing) | PostgreSQL 17 + S3         | Imperativo |
+| ms-cart          | Carrito de compras y abandono               | MongoDB                    | Reactivo   |
 
 > \* Diseñados para migrar a Spring MVC + Virtual Threads (ver diseño arquitectónico)
 
@@ -76,7 +76,7 @@ Ejecutar desde la raíz del microservicio (`cd ms-<name>`):
 - Lombok: `@Builder`, `@Value` para modelos; `@RequiredArgsConstructor` para inyección
 - Tests: JUnit 5 + `reactor-test` (StepVerifier) + mocks con Mockito
 - Dockerfile: corretto 21 Alpine, usuario no-root `appuser`
-- Infraestructura local: `docker compose up` ( PostgreSQL + LocalStack)
+- Infraestructura local: `docker compose up` ( PostgreSQL 17 + LocalStack)
 
 ## NO Incluido Aquí
 

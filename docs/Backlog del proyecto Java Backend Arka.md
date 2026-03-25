@@ -136,7 +136,7 @@ que podemos tomar:
 
 - **Opción 1: Archivo SQL predefinido**
   - Crear un script SQL con las estructuras de tablas, relaciones y datos de prueba.
-  - Asegurar que sea compatible con PostgreSQL o MySQL, que son comunes en AWS RDS.
+  - Asegurar que sea compatible con PostgreSQL 17 o MySQL, que son comunes en AWS RDS.
 
 - **Opción 2: Base de Datos en AWS RDS**
   - Configurar una instancia de Amazon RDS con la estructura de datos ya creada.

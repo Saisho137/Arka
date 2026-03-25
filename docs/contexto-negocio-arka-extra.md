@@ -68,28 +68,28 @@ System_Boundary(arka, "Plataforma E-commerce Arka (VPC Privada - Zero Trust)") {
     ContainerDb(db_catalog, "Catalog DB & Cache", "MongoDB + Redis", "Reads masivos en submilisegundos (Cache-aside) y esquemas polimórficos.")
 
     Container(ms_inventory, "ms-inventory", "Java 21, WebFlux", "Maneja existencias físicas. Bloquea concurrencia mediante transacciones SQL ultra-cortas.")
-    ContainerDb(db_inventory, "Inventory DB", "PostgreSQL", "Pessimistic Locking (SELECT FOR UPDATE) y Outbox Pattern.")
+    ContainerDb(db_inventory, "Inventory DB", "PostgreSQL 17", "Pessimistic Locking (SELECT FOR UPDATE) y Outbox Pattern.")
 
     Container(ms_cart, "ms-cart", "Java 21, WebFlux", "Sesiones temporales y motor de detección de abandono mediante CronJobs.")
     ContainerDb(db_cart, "Cart DB", "MongoDB", "Mutaciones atómicas en arrays de items ($push/$pull).")
 
     Container(ms_order, "ms-order", "Java 21, WebFlux", "Máquina de estados de pedidos. Orquestador central del Patrón Saga.")
-    ContainerDb(db_order, "Order DB", "PostgreSQL", "Transaccional ACID. Outbox Pattern.")
+    ContainerDb(db_order, "Order DB", "PostgreSQL 17", "Transaccional ACID. Outbox Pattern.")
 
     Container(ms_payment, "ms-payment", "Java 21, Spring MVC (Virtual Threads)", "Capa Anti-Corrupción (ACL) financiera. Evita caídas por bloqueos en SDKs bancarios.")
-    ContainerDb(db_payment, "Payment DB", "PostgreSQL", "Idempotencia rigurosa con Unique Constraints para evitar cobros dobles.")
+    ContainerDb(db_payment, "Payment DB", "PostgreSQL 17", "Idempotencia rigurosa con Unique Constraints para evitar cobros dobles.")
 
     Container(ms_shipping, "ms-shipping", "Java 21, Spring MVC", "Manejo de despachos. Aplica Strangler Fig Pattern sobre monolito legacy.")
-    ContainerDb(db_shipping, "Shipping DB", "PostgreSQL", "Historial de guías y estados logísticos.")
+    ContainerDb(db_shipping, "Shipping DB", "PostgreSQL 17", "Historial de guías y estados logísticos.")
 
     Container(ms_provider, "ms-provider", "Java 21, Spring MVC", "Barrera ACL. Recibe webhooks de proveedores de forma segura.")
-    ContainerDb(db_provider, "Provider DB", "PostgreSQL", "Registro de órdenes de compra a proveedores.")
+    ContainerDb(db_provider, "Provider DB", "PostgreSQL 17", "Registro de órdenes de compra a proveedores.")
 
     Container(ms_notifications, "ms-notifications", "Java 21, WebFlux", "Motor pasivo de notificaciones. Mapea eventos a plantillas.")
     ContainerDb(db_notifications, "Notification DB", "MongoDB", "Almacena plantillas JSON e historial de correos enviados.")
 
     Container(ms_reporter, "ms-reporter", "Java 21, Spring MVC (Virtual Threads)", "Generación CPU-bound de analítica pesada. Patrón CQRS.")
-    ContainerDb(db_reporter, "Reporter DB", "PostgreSQL", "Almacena payloads crudos (Event Sourcing) en formato JSONB e índices GIN.")
+    ContainerDb(db_reporter, "Reporter DB", "PostgreSQL 17", "Almacena payloads crudos (Event Sourcing) en formato JSONB e índices GIN.")
     ContainerDb(s3_reports, "Report Storage", "AWS S3", "Almacena de forma inmutable reportes exportados de hasta 500MB (PDF/CSV).")
 }
 
