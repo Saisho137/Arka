@@ -58,13 +58,19 @@ Arka enfrenta desafíos críticos de operación:
 - **gRPC (síncrono):** `ms-order → ms-inventory` (reserva de stock inmediata), `ms-cart → ms-catalog` (precio actualizado en checkout)
 - **Kafka (asíncrono):** Sagas Secuenciales, eventos de dominio, Event Sourcing para ms-reporter
 
-### Kafka Topics
+### Kafka Topics (1 tópico por servicio)
 
-```text
-product-created · product-updated · order-created · order-confirmed · order-cancelled
-stock-reserved · stock-released · stock-depleted · payment-processed · payment-failed
-cart-abandoned · shipping-dispatched · stock-received
-```
+| Tópico             | Productor    | Eventos (`eventType`)                                                             |
+| ------------------ | ------------ | --------------------------------------------------------------------------------- |
+| `product-events`   | ms-catalog   | ProductCreated · ProductUpdated · PriceChanged                                    |
+| `inventory-events` | ms-inventory | StockReserved · StockReserveFailed · StockReleased · StockDepleted · StockUpdated |
+| `order-events`     | ms-order     | OrderCreated · OrderConfirmed · OrderStatusChanged · OrderCancelled               |
+| `cart-events`      | ms-cart      | CartAbandoned                                                                     |
+| `payment-events`   | ms-payment   | PaymentProcessed · PaymentFailed                                                  |
+| `shipping-events`  | ms-shipping  | ShippingDispatched                                                                |
+| `provider-events`  | ms-provider  | StockReceived                                                                     |
+
+Partition key = aggregate ID. Consumidores discriminan por campo `eventType` del envelope estándar.
 
 ### Patrones Arquitectónicos
 

@@ -47,7 +47,7 @@ infrastructure/
 
 ## Patrones Clave
 
-- **Saga Secuencial** (ms-order orquestador): order-created → stock-reserved → payment-processed → order-confirmed
+- **Saga Secuencial** (ms-order orquestador): OrderCreated → StockReserved → PaymentProcessed → OrderConfirmed
 - **CQRS / Event Sourcing** para analítica (ms-reporter consume todos los eventos)
 - **Outbox Pattern** en ms-order y ms-inventory (transacción BD + evento atómico)
 - **Cache-Aside** para lecturas de catálogo (Redis)
@@ -55,9 +55,19 @@ infrastructure/
 - **Anti-Corruption Layer (ACL)** en ms-payment y ms-provider
 - **gRPC** síncrono: ms-order → ms-inventory (reserva stock), ms-cart → ms-catalog (precio actual)
 
-## Kafka Topics
+## Kafka Topics (1 tópico por servicio, discriminado por `eventType`)
 
-`product-created`, `product-updated`, `order-created`, `order-confirmed`, `order-cancelled`, `stock-reserved`, `stock-released`, `stock-depleted`, `payment-processed`, `payment-failed`, `cart-abandoned`, `shipping-dispatched`, `stock-received`
+| Tópico             | Productor    | Eventos (`eventType`)                                                             |
+| ------------------ | ------------ | --------------------------------------------------------------------------------- |
+| `product-events`   | ms-catalog   | ProductCreated · ProductUpdated · PriceChanged                                    |
+| `inventory-events` | ms-inventory | StockReserved · StockReserveFailed · StockReleased · StockDepleted · StockUpdated |
+| `order-events`     | ms-order     | OrderCreated · OrderConfirmed · OrderStatusChanged · OrderCancelled               |
+| `cart-events`      | ms-cart      | CartAbandoned                                                                     |
+| `payment-events`   | ms-payment   | PaymentProcessed · PaymentFailed                                                  |
+| `shipping-events`  | ms-shipping  | ShippingDispatched                                                                |
+| `provider-events`  | ms-provider  | StockReceived                                                                     |
+
+Partition key = aggregate ID (`productId`, `sku`, `orderId`, etc.). Consumidores filtran por `eventType` e ignoran eventos desconocidos.
 
 ## Scaffold — Tareas Gradle Principales
 

@@ -219,6 +219,58 @@ Basado en la naturaleza de cada Bounded Context, se divide el stack:
 1. **Transactional Outbox Pattern:** Para prevenir el _Dual-Write problem_, servicios como `ms-inventory` y `ms-order` insertan su evento de dominio dentro de la misma transacción PostgreSQL 17 que altera el negocio. Un relay asíncrono lo empuja a Kafka, garantizando que nunca se pierdan eventos por caídas de red. En servicios con MongoDB (`ms-catalog`), se adapta el patrón usando una colección `outbox_events` con operaciones atómicas.
 2. **Idempotencia en Consumidores:** Debido a que Kafka garantiza entrega _At-least-once_, cada microservicio implementa una tabla/colección escudo (`processed_events` o _Unique Constraints_ combinados) para hacer _fail-fast_ frente a eventos duplicados, evitando descontar inventario dos veces o ejecutar cobros dobles.
 
+### F. Estrategia de Tópicos Kafka: Un Tópico por Bounded Context (Servicio)
+
+El ecosistema adopta la convención de **un único tópico de Kafka por microservicio productor** (alineado a su _Bounded Context_), en lugar de crear un tópico por cada tipo de evento individual. Dentro de cada tópico, los distintos tipos de evento se discriminan mediante el campo `eventType` del sobre (_envelope_) estándar y opcionalmente por el header de Kafka `ce_type` (CloudEvents-compatible).
+
+#### Justificación
+
+| Criterio                                    | Tópico por Evento (❌ descartado)                      | Tópico por Servicio (✅ adoptado)                                                  |
+| ------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| **Cantidad de tópicos**                     | 13+ tópicos (crece con cada nuevo evento)              | **7 tópicos fijos** (crece solo si se agrega un nuevo microservicio)               |
+| **Complejidad operacional**                 | Alta: más ACLs, más particiones, más monitoreo         | **Baja:** un tópico por equipo/servicio owner                                      |
+| **Ordenamiento de eventos**                 | Sin garantía de orden entre tópicos del mismo dominio  | **Garantizado por partición** usando `aggregateId` como key (ej: `orderId`, `sku`) |
+| **Consumer management**                     | Un consumer por tópico o wildcard frágil               | **Un consumer group por servicio** suscrito a los tópicos que le interesan         |
+| **Evolución del esquema**                   | Nuevo evento = nuevo tópico + configuración + permisos | **Nuevo evento = nuevo `eventType`** dentro del tópico existente, sin cambio infra |
+| **Filtrado en consumidores**                | Implícito (cada tópico = 1 evento)                     | Explícito: consumer filtra por `eventType` e ignora eventos irrelevantes           |
+| **Consistencia causal por bounded context** | Fragmentada entre múltiples tópicos                    | **Natural:** todos los eventos de un dominio fluyen por un solo canal ordenado     |
+
+#### Convención de Nombrado
+
+```text
+<dominio>-events
+```
+
+Donde `<dominio>` corresponde al nombre del _Bounded Context_ propietario del tópico: `product`, `inventory`, `order`, `cart`, `payment`, `shipping`, `provider`.
+
+#### Tópicos Resultantes (7 total)
+
+`product-events` · `inventory-events` · `order-events` · `cart-events` · `payment-events` · `shipping-events` · `provider-events`
+
+#### Discriminación de Eventos dentro del Tópico
+
+Cada mensaje publicado en un tópico usa el **sobre estándar** (ver sección 5.8) donde el campo `eventType` identifica el tipo de evento concreto. Los consumidores deben:
+
+1. **Deserializar el sobre** para leer `eventType`
+2. **Filtrar** los eventos que les corresponden (ej: `ms-inventory` solo procesa `ProductCreated` del tópico `product-events`, ignora `ProductUpdated` si no le compete)
+3. **Ignorar eventos desconocidos** con log de warning (tolerancia a evolución)
+
+#### Particionamiento
+
+Cada productor usa el **ID del agregado raíz** como partition key de Kafka:
+
+| Tópico             | Partition Key     | Garantía                                                          |
+| ------------------ | ----------------- | ----------------------------------------------------------------- |
+| `product-events`   | `productId`       | Todos los eventos de un producto van a la misma partición (orden) |
+| `inventory-events` | `sku`             | Movimientos del mismo SKU ordenados causalmente                   |
+| `order-events`     | `orderId`         | Ciclo de vida completo de una orden en orden estricto             |
+| `cart-events`      | `cartId`          | Eventos del mismo carrito ordenados                               |
+| `payment-events`   | `orderId`         | Eventos de pago correlacionados con la orden                      |
+| `shipping-events`  | `orderId`         | Eventos de envío correlacionados con la orden                     |
+| `provider-events`  | `purchaseOrderId` | Eventos de abastecimiento por orden de compra                     |
+
+> **Nota sobre `ms-reporter`:** Este servicio consume TODOS los tópicos para construir su Read Model analítico (CQRS / Event Sourcing). Al suscribirse a los 7 tópicos, recibe el flujo completo de eventos del ecosistema sin requerir tópicos adicionales.
+
 ---
 
 ## 5. Responsabilidades de cada Contenedor
@@ -877,16 +929,19 @@ notifications_db (MongoDB)
 **Tipo:** Plataforma de Event Streaming
 **Justificación:** Kafka es el **nervio central** que habilita la comunicación asíncrona entre microservicios, la Saga Pattern y el desacoplamiento temporal. Sin Kafka, cada servicio tendría que llamar síncronamente a los otros, generando acoplamiento fuerte y fallos en cascada.
 
-**Tópicos del ecosistema:**
+**Estrategia de tópicos:** Un tópico por _Bounded Context_ (microservicio productor). El tipo de evento se discrimina por el campo `eventType` del sobre estándar (ver sección 4.F para justificación completa y estrategia de particionamiento).
 
-| Tópico             | Productor(es)  | Consumidor(es)                                                  | Eventos Principales                                                      |
-| ------------------ | -------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `product-events`   | `ms-catalog`   | `ms-inventory`                                                  | `ProductCreated`, `ProductUpdated`                                       |
-| `order-events`     | `ms-order`     | `ms-inventory`, `ms-notifications`, `ms-payment`, `ms-reporter` | `OrderCreated`, `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled` |
-| `inventory-events` | `ms-inventory` | `ms-order`, `ms-notifications`, `ms-reporter`                   | `StockReserved`, `StockReleased`, `StockDepleted`, `StockUpdated`        |
-| `cart-events`      | `ms-cart`      | `ms-notifications`, `ms-reporter`                               | `CartAbandoned` (Fase 2)                                                 |
-| `payment-events`   | `ms-payment`   | `ms-order`, `ms-notifications`, `ms-reporter`                   | `PaymentProcessed`, `PaymentFailed` (Fase 2)                             |
-| `shipping-events`  | `ms-shipping`  | `ms-order`, `ms-notifications`, `ms-reporter`                   | `ShippingDispatched` (Fase 3)                                            |
+**Tópicos del ecosistema (7 total):**
+
+| Tópico             | Productor(es)  | Consumidor(es)                                                  | Eventos (discriminados por `eventType`)                                                 |
+| ------------------ | -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `product-events`   | `ms-catalog`   | `ms-inventory`, `ms-reporter`                                   | `ProductCreated`, `ProductUpdated`, `PriceChanged`                                      |
+| `order-events`     | `ms-order`     | `ms-inventory`, `ms-notifications`, `ms-payment`, `ms-reporter` | `OrderCreated`, `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`                |
+| `inventory-events` | `ms-inventory` | `ms-order`, `ms-notifications`, `ms-reporter`                   | `StockReserved`, `StockReserveFailed`, `StockReleased`, `StockDepleted`, `StockUpdated` |
+| `cart-events`      | `ms-cart`      | `ms-notifications`, `ms-reporter`                               | `CartAbandoned` (Fase 2)                                                                |
+| `payment-events`   | `ms-payment`   | `ms-order`, `ms-notifications`, `ms-reporter`                   | `PaymentProcessed`, `PaymentFailed` (Fase 2)                                            |
+| `shipping-events`  | `ms-shipping`  | `ms-order`, `ms-notifications`, `ms-reporter`                   | `ShippingDispatched` (Fase 3)                                                           |
+| `provider-events`  | `ms-provider`  | `ms-inventory`, `ms-notifications`, `ms-reporter`               | `StockReceived` (Fase 4)                                                                |
 
 **Tópicos activos en Fase 1 (MVP):** `product-events`, `order-events`, `inventory-events`
 
@@ -896,16 +951,29 @@ notifications_db (MongoDB)
 - **Replicación:** Factor 1 en desarrollo, factor 3 en producción
 - **Retención:** 7 días (168 horas)
 - **Creación de tópicos:** Explícita (no auto-create)
+- **Partition Key:** ID del agregado raíz (`productId`, `sku`, `orderId`, etc.) para garantizar orden causal
 
 **Consumer Groups (MVP):**
 
-| Consumer Group               | Servicio           | Tópicos suscritos                  |
-| ---------------------------- | ------------------ | ---------------------------------- |
-| `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`   |
-| `order-service-group`        | `ms-order`         | `inventory-events`                 |
-| `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events` |
+| Consumer Group               | Servicio           | Tópicos suscritos                  | Filtro por `eventType`                                                       |
+| ---------------------------- | ------------------ | ---------------------------------- | ---------------------------------------------------------------------------- |
+| `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`   | `ProductCreated` · `OrderCancelled`                                          |
+| `order-service-group`        | `ms-order`         | `inventory-events`                 | `StockReserved` · `StockReserveFailed`                                       |
+| `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events` | `OrderConfirmed` · `OrderStatusChanged` · `OrderCancelled` · `StockDepleted` |
 
-**Formato estándar de eventos (todos los servicios):**
+**Consumer Groups (Ecosistema completo):**
+
+| Consumer Group               | Servicio           | Tópicos suscritos                                                                                                           |
+| ---------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`, `provider-events`                                                                         |
+| `order-service-group`        | `ms-order`         | `inventory-events`, `payment-events`, `shipping-events`                                                                     |
+| `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events`, `cart-events`, `shipping-events`                                                        |
+| `payment-service-group`      | `ms-payment`       | `order-events`                                                                                                              |
+| `reporter-service-group`     | `ms-reporter`      | `product-events`, `order-events`, `inventory-events`, `cart-events`, `payment-events`, `shipping-events`, `provider-events` |
+
+**Sobre estándar de eventos (_Event Envelope_):**
+
+Todos los eventos publicados en cualquier tópico siguen un formato unificado. El campo `eventType` permite a los consumidores discriminar qué eventos procesar y cuáles ignorar:
 
 ```json
 {
@@ -918,7 +986,14 @@ notifications_db (MongoDB)
 }
 ```
 
-> **Extensibilidad:** Cuando se agreguen `ms-cart`, `ms-payment`, `ms-shipping`, etc. en fases posteriores, solo se necesita crear nuevos tópicos y consumer groups. Los servicios existentes no se modifican.
+**Reglas de consumo:**
+
+1. El consumidor deserializa el sobre y lee `eventType`
+2. Si el `eventType` es relevante → procesa el `payload`
+3. Si el `eventType` es desconocido → **ignora con log warning** (tolerancia a evolución del esquema)
+4. Nunca fallar por un `eventType` no reconocido — esto permite agregar nuevos eventos sin romper consumidores existentes
+
+> **Extensibilidad:** Agregar un nuevo tipo de evento a un servicio existente solo requiere publicar un nuevo `eventType` al tópico del servicio. Los consumidores existentes que no les compete lo ignoran automáticamente. Solo al agregar un microservicio completamente nuevo se crea un tópico nuevo.
 
 ---
 
@@ -1471,20 +1546,21 @@ PostgreSQL 17: ACID estricto para inventario, órdenes, pagos y reportes
 
 ## 13. Decisiones Arquitectónicas Consolidadas
 
-| #   | Decisión                                         | Justificación                                                                      | Trade-off                                                       |
-| --- | ------------------------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 1   | **9 microservicios** en 4 fases                  | Entrega incremental de valor. MVP con 4 servicios, resto iterativamente            | Complejidad operacional creciente por fase                      |
-| 2   | **WebFlux vs Virtual Threads (híbrido)**         | No forzar 100% reactivo. WebFlux para I/O-bound, Loom para CPU-bound/SDKs legacy   | Dos paradigmas coexistiendo; requiere claridad por equipo       |
-| 3   | **Eliminación permanente del BFF**               | API Gateway asume seguridad y enrutamiento. Simplifica topología de red            | Respuestas no optimizadas por plataforma (Web/Mobile)           |
-| 4   | **MongoDB para `ms-catalog`**                    | Documentos polimórficos para reseñas anidadas. Cache-Aside con Redis               | Sin JOINs relacionales; consistencia eventual en catálogo       |
-| 5   | **MongoDB para `ms-notifications`**              | Esquema flexible para plantillas JSON. TTL Index nativo para limpieza automática   | No es PostgreSQL 17 (pero no requiere ACID para notificaciones) |
-| 6   | **gRPC para comunicación síncrona interna**      | Serialización ultrarrápida (Protobuf). Vital para reserva de stock en milisegundos | Mayor complejidad de contratos vs REST; requiere Proto files    |
-| 7   | **Separación Catálogo e Inventario**             | Bounded Contexts distintos (DDD). Catálogo = lecturas masivas. Inventario = ACID   | Dos servicios donde uno podría bastar en negocio simple         |
-| 8   | **Reseñas como subdocumentos en `ms-catalog`**   | Elimina un microservicio completo. Aprovecha modelo documental de MongoDB          | Límite de 16MB por documento MongoDB (suficiente para B2B)      |
-| 9   | **Zero Trust en API Gateway**                    | Entra ID / Cognito valida tokens. Tenant Restrictions bloquea `@gmail.com`         | Dependencia de IdP externo para autenticación                   |
-| 10  | **Outbox con polling** (no Debezium)             | Simplicidad, sin dependencias extra                                                | Latencia máxima adicional de 5s por ciclo de polling            |
-| 11  | **Kafka como único broker** (no SQS/EventBridge) | Un solo broker simplifica la operación; suficiente para todas las fases            | Sin scheduling nativo; compensado con jobs periódicos           |
-| 12  | **Saga simplificada en Fase 1** (gRPC + Kafka)   | gRPC sync para stock + Kafka async para notificaciones. Sin Payment = menos fallos | Pago B2B offline; integración con pasarelas diferida a Fase 2   |
+| #   | Decisión                                         | Justificación                                                                                                                                                                 | Trade-off                                                          |
+| --- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 1   | **9 microservicios** en 4 fases                  | Entrega incremental de valor. MVP con 4 servicios, resto iterativamente                                                                                                       | Complejidad operacional creciente por fase                         |
+| 2   | **WebFlux vs Virtual Threads (híbrido)**         | No forzar 100% reactivo. WebFlux para I/O-bound, Loom para CPU-bound/SDKs legacy                                                                                              | Dos paradigmas coexistiendo; requiere claridad por equipo          |
+| 3   | **Eliminación permanente del BFF**               | API Gateway asume seguridad y enrutamiento. Simplifica topología de red                                                                                                       | Respuestas no optimizadas por plataforma (Web/Mobile)              |
+| 4   | **MongoDB para `ms-catalog`**                    | Documentos polimórficos para reseñas anidadas. Cache-Aside con Redis                                                                                                          | Sin JOINs relacionales; consistencia eventual en catálogo          |
+| 5   | **MongoDB para `ms-notifications`**              | Esquema flexible para plantillas JSON. TTL Index nativo para limpieza automática                                                                                              | No es PostgreSQL 17 (pero no requiere ACID para notificaciones)    |
+| 6   | **gRPC para comunicación síncrona interna**      | Serialización ultrarrápida (Protobuf). Vital para reserva de stock en milisegundos                                                                                            | Mayor complejidad de contratos vs REST; requiere Proto files       |
+| 7   | **Separación Catálogo e Inventario**             | Bounded Contexts distintos (DDD). Catálogo = lecturas masivas. Inventario = ACID                                                                                              | Dos servicios donde uno podría bastar en negocio simple            |
+| 8   | **Reseñas como subdocumentos en `ms-catalog`**   | Elimina un microservicio completo. Aprovecha modelo documental de MongoDB                                                                                                     | Límite de 16MB por documento MongoDB (suficiente para B2B)         |
+| 9   | **Zero Trust en API Gateway**                    | Entra ID / Cognito valida tokens. Tenant Restrictions bloquea `@gmail.com`                                                                                                    | Dependencia de IdP externo para autenticación                      |
+| 10  | **Outbox con polling** (no Debezium)             | Simplicidad, sin dependencias extra                                                                                                                                           | Latencia máxima adicional de 5s por ciclo de polling               |
+| 11  | **Kafka como único broker** (no SQS/EventBridge) | Un solo broker simplifica la operación; suficiente para todas las fases                                                                                                       | Sin scheduling nativo; compensado con jobs periódicos              |
+| 12  | **Saga simplificada en Fase 1** (gRPC + Kafka)   | gRPC sync para stock + Kafka async para notificaciones. Sin Payment = menos fallos                                                                                            | Pago B2B offline; integración con pasarelas diferida a Fase 2      |
+| 13  | **Un tópico Kafka por servicio** (no por evento) | 7 tópicos vs 13+. Menos ACLs, particiones y monitoreo. Orden causal garantizado por partición dentro del bounded context. Nuevos eventos = nuevo `eventType`, sin crear infra | Consumidores deben filtrar por `eventType`; tópicos más "ruidosos" |
 
 ---
 
