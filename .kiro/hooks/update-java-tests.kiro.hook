@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Update Unit Tests on Java Change",
+  "description": "When a .java source file is modified, the agent reviews the changes and updates the corresponding unit tests to stay in sync with the implementation.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.java"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A .java file was just modified. Identify the corresponding unit test file for the changed class. If a test file exists, review the changes and update the unit tests to reflect the new implementation — add tests for new methods, update tests for changed signatures or logic, and remove tests for deleted functionality. Follow JUnit 5 + Mockito conventions, use StepVerifier for reactive publishers, and keep tests focused on behavior. If no test file exists yet, create one following the project's testing conventions."
+  }
+}

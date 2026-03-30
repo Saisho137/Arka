@@ -1,0 +1,27 @@
+{
+  "enabled": true,
+  "name": "Sync Docs on Source Change",
+  "description": "When Java source files, Gradle build files, Dockerfiles, or config files change, asks the agent to review the change and update relevant documentation in the README.md or docs/ folder to keep them in sync.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.java",
+      "**/build.gradle",
+      "**/settings.gradle",
+      "**/main.gradle",
+      "**/gradle.properties",
+      "**/application*.yaml",
+      "**/application*.yml",
+      "**/application*.properties",
+      "**/Dockerfile",
+      "compose.yaml",
+      "**/bootstrap.sh",
+      "**/infra.yaml"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source file was just edited. Review the change and determine if any documentation needs updating. Check the root README.md and the docs/ folder (which contains architecture docs, backlog, and coding standards in markdown). If the change affects APIs, domain models, build configuration, architecture, service structure, Kafka topics, or any documented behavior, update the relevant markdown files in docs/ or README.md to reflect the change. Only update docs if the change is meaningful — ignore trivial edits like formatting or comments. Write documentation updates in Spanish to match the existing docs language."
+  }
+}
