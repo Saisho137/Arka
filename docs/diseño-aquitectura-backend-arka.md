@@ -72,9 +72,9 @@ Con el inventario seguro, se introduce la gestión temporal de la compra y la au
 
 - **Microservicios Entregados:**
   - `ms-cart` (Reactivo): Sesiones y persistencia temporal en MongoDB usando mutaciones atómicas (`$push`/`$pull`). Resuelve la **HU8** (Carritos abandonados)
-  - `ms-payment` (Imperativo / Virtual Threads): Capa Anti-Corrupción (ACL) para interactuar con pasarelas (Stripe, Wompi, Mercado Pago). Resuelve la **HU5** (Modificar orden)
+  - `ms-payment` (Reactivo / WebFlux): Capa Anti-Corrupción (ACL) para interactuar con pasarelas (Stripe, Wompi, Mercado Pago). Las llamadas bloqueantes a SDKs se envuelven en `Schedulers.boundedElastic()`. Resuelve la **HU5** (Modificar orden)
 - **Evolución Arquitectónica:** La Saga Secuencial se completa: **Catálogo → Inventario → Pago**. Si `ms-payment` falla al cobrar, emite un evento de compensación por Kafka y `ms-inventory` libera el stock. Las órdenes ahora pasan por el estado `PENDIENTE_PAGO` antes de confirmarse.
-- **Valor de Negocio:** Se reducen las pérdidas por abandono y se automatiza la conciliación de pagos aislando las caídas bancarias gracias al aislamiento del hilo (_Virtual Threads_) en integraciones síncronas bloqueantes
+- **Valor de Negocio:** Se reducen las pérdidas por abandono y se automatiza la conciliación de pagos. Las integraciones bloqueantes con pasarelas se aíslan en un scheduler dedicado sin abandonar el modelo reactivo del ecosistema
 
 ### 📈 Fase 3: Analítica Avanzada y Logística (CQRS & ACL Logística)
 
@@ -82,7 +82,7 @@ Se entrega la capacidad de análisis masivo para la directiva y se integra la lo
 
 - **Microservicios Entregados:**
   - `ms-reporter` (Imperativo / Virtual Threads): Data Lake de la arquitectura que consume todos los eventos de Kafka (Event Sourcing). Usa índices GIN y JSONB en PostgreSQL 17. Exporta PDF/CSV pesados (hasta 500MB) a **AWS S3**. Resuelve la **HU7** (Ventas semanales) y **HU3** (Reporte stock bajo)
-  - `ms-shipping` (Imperativo): Capa Anti-Corrupción (ACL) para integrarse con operadores logísticos externos (DHL, FedEx) y el monolito legacy de cotización de envíos. Consume eventos de `order-events` y coordina con las APIs externas para gestionar despachos
+  - `ms-shipping` (Reactivo / WebFlux): Capa Anti-Corrupción (ACL) para integrarse con operadores logísticos externos (DHL, FedEx) y el monolito legacy de cotización de envíos. Las llamadas bloqueantes a APIs externas se envuelven en `Schedulers.boundedElastic()`. Consume eventos de `order-events` y coordina con las APIs externas para gestionar despachos
 - **Valor de Negocio:** Operaciones puede tomar decisiones estratégicas sin tumbar la base de datos de ventas (OLTP). El área logística gestiona despachos a través de una capa ACL que aísla al ecosistema de las particularidades de cada operador logístico.
 
 ### 🔄 Fase 4: Abastecimiento y Ecosistema Completo
@@ -90,7 +90,7 @@ Se entrega la capacidad de análisis masivo para la directiva y se integra la lo
 Automatización de órdenes de compra a proveedores basada en umbrales de stock crítico, con notificación por correo electrónico y actualización manual de stock al recibir mercancía.
 
 - **Microservicios Entregados:**
-  - `ms-provider` (Imperativo): Barrera de seguridad (ACL) que consume automáticamente el evento `StockDepleted` de `ms-inventory` y genera una orden de compra dirigida al proveedor correspondiente. Publica `PurchaseOrderCreated` con todos los datos necesarios para que `ms-notifications` envíe un correo personalizado al proveedor
+  - `ms-provider` (Reactivo / WebFlux): Barrera de seguridad (ACL) que consume automáticamente el evento `StockDepleted` de `ms-inventory` y genera una orden de compra dirigida al proveedor correspondiente. Publica `PurchaseOrderCreated` con todos los datos necesarios para que `ms-notifications` envíe un correo personalizado al proveedor
 - **Valor de Negocio:** Cuando `ms-inventory` detecta existencias críticas (evento `StockDepleted`), `ms-provider` crea automáticamente una orden de compra y `ms-notifications` envía el correo al proveedor. Al recibir la mercancía en bodega, el administrador actualiza el stock manualmente mediante el endpoint `PUT /inventory/{sku}/stock` de `ms-inventory`. El pago de la orden de compra al proveedor se gestiona fuera del sistema (efectivo contra entrega en bodega).
 
 ---
@@ -202,14 +202,14 @@ El patrón BFF (Backend for Frontend) queda oficialmente **descartado** de la so
 Cada microservicio es dueño único de su almacenamiento para evitar acoplamientos y permitir el escalado independiente.
 
 - **MongoDB (Drivers Reactivos):** Usado por `ms-catalog` para lecturas de catálogos polimórficos ultrarrápidas con reseñas como subdocumentos, `ms-cart` para mutaciones atómicas en arrays y `ms-notifications` para almacenar plantillas JSON dinámicas e historial de correos.
-- **PostgreSQL 17 (R2DBC / JDBC):** Usado por `ms-inventory`, `ms-order`, `ms-payment`, `ms-shipping`, `ms-provider` y `ms-reporter`. Garantiza integridad transaccional ACID, permite bloqueos pesimistas para proteger el stock y soporta vistas indexadas JSONB para CQRS.
+- **PostgreSQL 17 (R2DBC):** Usado por `ms-inventory`, `ms-order`, `ms-payment`, `ms-shipping` y `ms-provider` con el driver no bloqueante R2DBC. `ms-reporter` usa JDBC bloqueante (paradigma imperativo con Virtual Threads). Garantiza integridad transaccional ACID, permite bloqueos pesimistas para proteger el stock y soporta vistas indexadas JSONB para CQRS.
 
-### C. Paradigma Híbrido: Reactivo vs Imperativo (Loom)
+### C. Paradigma Híbrido: Reactivo por Defecto, Imperativo solo en ms-reporter
 
 Basado en la naturaleza de cada Bounded Context, se divide el stack:
 
-1. **I/O-Bound (Spring WebFlux):** Alta concurrencia y baja latencia. Implementado en `ms-catalog`, `ms-inventory`, `ms-order`, `ms-cart` y `ms-notifications`. Todo acceso a base de datos usa drivers no bloqueantes (R2DBC o Reactive Mongo).
-2. **CPU-Bound / External SDKs (Spring MVC + Virtual Threads):** Implementado en `ms-reporter` (para evitar colapsar el _Event Loop_ generando archivos pesados en AWS S3), `ms-payment` (por el uso de SDKs de pasarelas síncronas), `ms-shipping` (por integración con APIs de operadores logísticos bloqueantes — ACL) y `ms-provider` (por gestión de órdenes de compra a proveedores externos).
+1. **I/O-Bound (Spring WebFlux):** Alta concurrencia y baja latencia. Implementado en **todos los microservicios excepto ms-reporter**: `ms-catalog`, `ms-inventory`, `ms-order`, `ms-cart`, `ms-notifications`, `ms-payment`, `ms-shipping` y `ms-provider`. Todo acceso a base de datos usa drivers no bloqueantes (R2DBC o Reactive Mongo). Para integraciones con SDKs de terceros bloqueantes (pasarelas de pago, APIs logísticas, sistemas de proveedores), se usa `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` — esto descarga la llamada bloqueante a un thread pool dedicado sin abandonar el modelo reactivo ni colapsar el Event Loop.
+2. **CPU-Bound (Spring MVC + Virtual Threads):** Implementado **únicamente en `ms-reporter`**, justificado porque genera archivos PDF/CSV de hasta 500MB en AWS S3 — una operación de computación intensiva y continua donde el modelo reactivo no aporta ventajas y sí añade complejidad de backpressure. `reactive=false` en `gradle.properties`.
 
 ### D. Comunicación Síncrona (gRPC) vs Asíncrona (Kafka)
 
@@ -920,12 +920,15 @@ notifications_db (MongoDB)
 
 ---
 
-### 5.7 Microservicios Imperativos (Virtual Threads — Fases 2, 3 y 4)
+### 5.7 ms-reporter — Único Servicio Imperativo (Virtual Threads — Fase 3)
 
-- **`ms-payment` (Fase 2):** Imperativo (Spring MVC + Virtual Threads). Actúa como Capa Anti-Corrupción (ACL). Usa PostgreSQL 17 con idempotencia rigurosa (_Unique Constraints_ combinados para evitar cobros dobles). El uso de SDKs bloqueantes de pasarelas (Stripe, Wompi, Mercado Pago) exige aislar las peticiones en Virtual Threads para no estrangular la red. Implementa **Circuit Breaker & Bulkhead** con _Resilience4j_.
 - **`ms-reporter` (Fase 3):** Imperativo (Spring MVC + Virtual Threads). CQRS y Event Sourcing en PostgreSQL 17 (usando `JSONB` y GIN Index). Realiza agregaciones pesadas (CPU-bound) exportando excels/PDFs de hasta 500MB hacia **AWS S3** como objetos inmutables.
-- **`ms-shipping` (Fase 3):** Imperativo con PostgreSQL 17. Capa Anti-Corrupción (ACL) que se integra con APIs de operadores logísticos (FedEx, DHL) y el monolito legacy de envíos, similar a como `ms-payment` aísla las pasarelas bancarias. Consume `OrderStatusChanged` (EN*DESPACHO) desde `order-events` para coordinar el despacho con el operador logístico correspondiente y publica `ShippingDispatched` con datos de tracking. Implementa **Circuit Breaker** con \_Resilience4j*.
-- **`ms-provider` (Fase 4):** Imperativo con PostgreSQL 17. Barrera ACL que consume automáticamente el evento `StockDepleted` de `inventory-events` y genera una orden de compra al proveedor correspondiente. Publica `PurchaseOrderCreated` a Kafka con todos los detalles necesarios para que `ms-notifications` envíe un correo personalizado al proveedor. El proceso de recepción de mercancía **no está automatizado**: cuando los productos llegan a bodega, el administrador actualiza el stock manualmente vía `PUT /inventory/{sku}/stock`. El pago al proveedor se gestiona fuera del sistema.
+
+### 5.7.1 ms-payment, ms-shipping y ms-provider — Reactivos con ACL (Fases 2, 3 y 4)
+
+- **`ms-payment` (Fase 2):** Reactivo (WebFlux). Actúa como Capa Anti-Corrupción (ACL). Usa PostgreSQL 17 con R2DBC e idempotencia rigurosa (_Unique Constraints_ combinados para evitar cobros dobles). Las llamadas bloqueantes a SDKs de pasarelas (Stripe, Wompi, Mercado Pago) se aíslan con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`, sin abandonar el modelo reactivo del ecosistema. Implementa **Circuit Breaker & Bulkhead** con _Resilience4j_.
+- **`ms-shipping` (Fase 3):** Reactivo (WebFlux) con PostgreSQL 17 (R2DBC). Capa Anti-Corrupción (ACL) que se integra con APIs de operadores logísticos (FedEx, DHL) y el monolito legacy de envíos. Las llamadas bloqueantes a APIs externas se aíslan con `Schedulers.boundedElastic()`. Consume `OrderStatusChanged` (EN*DESPACHO) desde `order-events` para coordinar el despacho con el operador logístico correspondiente y publica `ShippingDispatched` con datos de tracking. Implementa **Circuit Breaker** con \_Resilience4j*.
+- **`ms-provider` (Fase 4):** Reactivo (WebFlux) con PostgreSQL 17 (R2DBC). Barrera ACL que consume automáticamente el evento `StockDepleted` de `inventory-events` y genera una orden de compra al proveedor correspondiente. Publica `PurchaseOrderCreated` a Kafka con todos los detalles necesarios para que `ms-notifications` envíe un correo personalizado al proveedor. El proceso de recepción de mercancía **no está automatizado**: cuando los productos llegan a bodega, el administrador actualiza el stock manualmente vía `PUT /inventory/{sku}/stock`. El pago al proveedor se gestiona fuera del sistema.
 
 ---
 

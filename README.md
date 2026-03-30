@@ -34,10 +34,8 @@ Arka enfrenta desafíos críticos de operación:
 
 ### Paradigma Híbrido
 
-- **Reactivo (WebFlux):** Servicios I/O-Bound con drivers no bloqueantes — ms-catalog, ms-inventory, ms-order, ms-cart, ms-notifications
-- **Imperativo (MVC + Virtual Threads):** Servicios CPU-Bound o con SDKs bloqueantes — ms-reporter, ms-payment\*, ms-shipping\*, ms-provider\*
-
-> \* Actualmente scaffolded como reactivos; diseñados para migrar a MVC + Virtual Threads cuando integren dependencias bloqueantes.
+- **Reactivo (WebFlux):** Todos los microservicios excepto ms-reporter — ms-catalog, ms-inventory, ms-order, ms-cart, ms-notifications, ms-payment, ms-shipping, ms-provider. SDKs bloqueantes de terceros se envuelven con `Schedulers.boundedElastic()`
+- **Imperativo (MVC + Virtual Threads):** **ms-reporter** (única excepción) — CPU-Bound real: generación de archivos PDF/CSV hasta 500MB exportados a AWS S3. `reactive=false` en gradle.properties
 
 ### Microservicios
 
@@ -118,10 +116,10 @@ Arka/
 ├── ms-order/                    # Microservicio de Pedidos (WebFlux)
 ├── ms-notifications/            # Microservicio de Notificaciones (WebFlux)
 ├── ms-cart/                     # Microservicio de Carrito (WebFlux)
-├── ms-payment/                  # Microservicio de Pagos (WebFlux → MVC futuro)
-├── ms-reporter/                 # Microservicio de Reportes (MVC + Virtual Threads)
-├── ms-shipping/                 # Microservicio de Envíos (WebFlux → MVC futuro)
-└── ms-provider/                 # Microservicio de Proveedores (WebFlux → MVC futuro)
+├── ms-payment/                  # Microservicio de Pagos (WebFlux — ACL pasarelas)
+├── ms-reporter/                 # Microservicio de Reportes (MVC + Virtual Threads — único imperativo)
+├── ms-shipping/                 # Microservicio de Envíos (WebFlux — ACL logística)
+└── ms-provider/                 # Microservicio de Proveedores (WebFlux — ACL proveedores)
 ```
 
 ### Estructura interna de cada microservicio (Clean Architecture)
@@ -134,7 +132,7 @@ ms-<name>/
 │   └── usecase/                 # Lógica de negocio, orquestación
 ├── infrastructure/
 │   ├── driven-adapters/         # Repos, clientes externos (R2DBC, REST, Kafka producer)
-│   ├── entry-points/            # Controllers (WebFlux/MVC), Kafka consumers
+│   ├── entry-points/            # Controllers (WebFlux), Kafka consumers (MVC solo en ms-reporter)
 │   └── helpers/                 # Utilidades compartidas
 ├── deployment/Dockerfile        # amazoncorretto:21-alpine, usuario no-root
 ├── build.gradle                 # Plugins: Scaffold, Spring Boot, PiTest, JaCoCo, SonarQube

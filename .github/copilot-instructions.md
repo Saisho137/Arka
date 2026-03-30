@@ -10,8 +10,8 @@ Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor 
 
 ## Paradigma Híbrido
 
-- **Reactivo (WebFlux):** ms-catalog, ms-inventory, ms-order, ms-cart, ms-notifications — I/O-Bound, drivers no bloqueantes (R2DBC, Reactive Mongo)
-- **Imperativo (MVC + Virtual Threads):** ms-reporter — CPU-Bound, `reactive=false` en gradle.properties
+- **Reactivo (WebFlux):** ms-catalog, ms-inventory, ms-order, ms-cart, ms-notifications, ms-payment, ms-shipping, ms-provider — I/O-Bound, drivers no bloqueantes (R2DBC, Reactive Mongo, WebClient). SDKs bloqueantes con `Schedulers.boundedElastic()`
+- **Imperativo (MVC + Virtual Threads):** ms-reporter — única excepción. CPU-Bound real: generación de archivos 500MB+ en S3. `reactive=false` en gradle.properties
 
 ## Microservicios
 
@@ -20,14 +20,12 @@ Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor 
 | ms-order         | Gestión de pedidos, Saga orchestrator       | PostgreSQL 17 db_orders    | Reactivo   |
 | ms-catalog       | Catálogo de productos y reseñas anidadas    | MongoDB + Redis            | Reactivo   |
 | ms-inventory     | Stock, reservas y lock pesimista            | PostgreSQL 17 db_inventory | Reactivo   |
-| ms-payment       | Procesamiento de pagos (ACL pasarelas)      | PostgreSQL 17 db_payment   | Reactivo\* |
-| ms-shipping      | Logística y envíos (ACL logística)          | PostgreSQL 17              | Reactivo\* |
-| ms-provider      | Proveedores B2B (ACL externa)               | PostgreSQL 17              | Reactivo\* |
+| ms-payment       | Procesamiento de pagos (ACL pasarelas)      | PostgreSQL 17 db_payment   | Reactivo   |
+| ms-shipping      | Logística y envíos (ACL logística)          | PostgreSQL 17              | Reactivo   |
+| ms-provider      | Proveedores B2B (ACL externa)               | PostgreSQL 17              | Reactivo   |
 | ms-notifications | Alertas y notificaciones (AWS SES)          | MongoDB                    | Reactivo   |
 | ms-reporter      | Reportes y analítica (CQRS, Event Sourcing) | PostgreSQL 17 + S3         | Imperativo |
 | ms-cart          | Carrito de compras y abandono               | MongoDB                    | Reactivo   |
-
-> \* Diseñados para migrar a Spring MVC + Virtual Threads (ver diseño arquitectónico)
 
 ## Clean Architecture — Capas y Módulos Gradle
 

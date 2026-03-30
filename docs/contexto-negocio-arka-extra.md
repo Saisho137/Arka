@@ -76,13 +76,13 @@ System_Boundary(arka, "Plataforma E-commerce Arka (VPC Privada - Zero Trust)") {
     Container(ms_order, "ms-order", "Java 21, WebFlux", "Máquina de estados de pedidos. Orquestador central del Patrón Saga.")
     ContainerDb(db_order, "Order DB", "PostgreSQL 17", "Transaccional ACID. Outbox Pattern.")
 
-    Container(ms_payment, "ms-payment", "Java 21, Spring MVC (Virtual Threads)", "Capa Anti-Corrupción (ACL) financiera. Evita caídas por bloqueos en SDKs bancarios.")
+    Container(ms_payment, "ms-payment", "Java 21, WebFlux", "Capa Anti-Corrupción (ACL) financiera. Llamadas bloqueantes a SDKs bancarios se aíslan con Schedulers.boundedElastic().")
     ContainerDb(db_payment, "Payment DB", "PostgreSQL 17", "Idempotencia rigurosa con Unique Constraints para evitar cobros dobles.")
 
-    Container(ms_shipping, "ms-shipping", "Java 21, Spring MVC", "ACL logística. Se integra con operadores de envío (DHL, FedEx) y monolito legacy.")
+    Container(ms_shipping, "ms-shipping", "Java 21, WebFlux", "ACL logística. Se integra con operadores de envío (DHL, FedEx) y monolito legacy. Llamadas bloqueantes con Schedulers.boundedElastic().")
     ContainerDb(db_shipping, "Shipping DB", "PostgreSQL 17", "Historial de guías y estados logísticos.")
 
-    Container(ms_provider, "ms-provider", "Java 21, Spring MVC", "Barrera ACL. Consume StockDepleted y genera automáticamente órdenes de compra a proveedores.")
+    Container(ms_provider, "ms-provider", "Java 21, WebFlux", "Barrera ACL. Consume StockDepleted y genera automáticamente órdenes de compra a proveedores.")
     ContainerDb(db_provider, "Provider DB", "PostgreSQL 17", "Registro de órdenes de compra a proveedores.")
 
     Container(ms_notifications, "ms-notifications", "Java 21, WebFlux", "Motor pasivo de notificaciones. Mapea eventos a plantillas.")

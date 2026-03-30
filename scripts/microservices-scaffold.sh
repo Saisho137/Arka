@@ -48,7 +48,7 @@ gradle wrapper
 ./gradlew ca --package=com.arka --type=reactive --name=ms-notifications --java-version=21
 cd ..
 
-# 6. Pagos (Imperativo)
+# 6. Pagos (Reactivo)
 mkdir ms-payment
 cd ms-payment
 echo "plugins {
@@ -58,7 +58,7 @@ gradle wrapper
 ./gradlew ca --package=com.arka --type=reactive --name=ms-payment --java-version=21
 cd ..
 
-# 7. Envíos (Imperativo)
+# 7. Envíos (Reactivo)
 mkdir ms-shipping
 cd ms-shipping
 echo "plugins {
@@ -68,7 +68,7 @@ gradle wrapper
 ./gradlew ca --package=com.arka --type=reactive --name=ms-shipping --java-version=21
 cd ..
 
-# 8. Proveedores (Imperativo)
+# 8. Proveedores (Reactivo)
 mkdir ms-provider
 cd ms-provider
 echo "plugins {
