@@ -6,7 +6,7 @@ Con el fin de establecer la fuente de verdad definitiva para el diseño, desarro
 
 1. **Sistema de Pagos y Capa Anticorrupción (ACL):** Se integran pasarelas de pago como **Stripe, Wompi y Mercado Pago**. El microservicio `ms-payment` actuará estrictamente como una **Capa Anti-Corrupción (ACL)** para aislar el núcleo del sistema de la latencia y posibles caídas de las pasarelas bancarias externas.
 2. **Integración de Abastecimiento:** Se consumirá una **API de terceros** mediante el microservicio `ms-provider`, el cual funcionará como una barrera de seguridad (ACL) comunicándose con los supuestos proveedores externos para el reabastecimiento, mediante notificaciones (correo electrónico).
-3. **Logística y Envíos (Shipping):** Se consumirá una **API de terceros** para el cálculo de envíos y despacho. A nivel arquitectónico, el `ms-shipping` será el encargado de comunicarse con un supuesto monolito heredado (legacy).
+3. **Logística y Envíos (Shipping):** Se consumirá una **API de terceros** para el cálculo de envíos y despacho. A nivel arquitectónico, el `ms-shipping` actuará como **Capa Anti-Corrupción (ACL)** que se integra con operadores logísticos externos (DHL, FedEx) y con el monolito legacy de envíos, de forma análoga a como `ms-payment` aísla las pasarelas de pago.
 4. **Gestión de Identidad, Autenticación y "Zero Trust":** La autenticación se delega de forma absoluta a proveedores de identidad administrados como **Microsoft Entra ID (Federated Identities)** o **AWS Cognito**. El **API Gateway** será el único componente expuesto a internet encargado de validar los tokens JWT y propagar la identidad (inyectando el header `X-User-Email`) hacia la red privada. Los microservicios internos serán 100% _stateless_. Adicionalmente, se aplicarán **Tenant Restrictions** en el IdP para bloquear correos de dominios públicos (ej. `@gmail.com`), garantizando que la plataforma mantenga su enfoque B2B.
 5. **Interfaz de Usuario y Eliminación del Patrón BFF:** El patrón **Backend for Frontend (BFF)** queda oficialmente **descartado** de la arquitectura para este alcance. Las interfaces cliente (Aplicación Web y Móvil) consumirán los servicios interactuando directamente de forma unificada con el **API Gateway** mediante HTTPS/REST, simplificando la topología de red y reduciendo la duplicación de lógica.
 6. **Reglas de Comunicación Interna (Síncrona vs Asíncrona):** El sistema híbrido se rige por reglas estrictas. Toda **comunicación síncrona** interna obligatoria en la red privada (ej. el carrito consultando el precio actual en el catálogo) utilizará **gRPC** para garantizar alto rendimiento. Por otro lado, el flujo core del negocio funcionará mediante comunicación asíncrona usando **Sagas Secuenciales** sobre **Apache Kafka** para evitar bloqueos y prevenir la sobreventa.
@@ -79,10 +79,10 @@ System_Boundary(arka, "Plataforma E-commerce Arka (VPC Privada - Zero Trust)") {
     Container(ms_payment, "ms-payment", "Java 21, Spring MVC (Virtual Threads)", "Capa Anti-Corrupción (ACL) financiera. Evita caídas por bloqueos en SDKs bancarios.")
     ContainerDb(db_payment, "Payment DB", "PostgreSQL 17", "Idempotencia rigurosa con Unique Constraints para evitar cobros dobles.")
 
-    Container(ms_shipping, "ms-shipping", "Java 21, Spring MVC", "Manejo de despachos. Aplica Strangler Fig Pattern sobre monolito legacy.")
+    Container(ms_shipping, "ms-shipping", "Java 21, Spring MVC", "ACL logística. Se integra con operadores de envío (DHL, FedEx) y monolito legacy.")
     ContainerDb(db_shipping, "Shipping DB", "PostgreSQL 17", "Historial de guías y estados logísticos.")
 
-    Container(ms_provider, "ms-provider", "Java 21, Spring MVC", "Barrera ACL. Recibe webhooks de proveedores de forma segura.")
+    Container(ms_provider, "ms-provider", "Java 21, Spring MVC", "Barrera ACL. Consume StockDepleted y genera automáticamente órdenes de compra a proveedores.")
     ContainerDb(db_provider, "Provider DB", "PostgreSQL 17", "Registro de órdenes de compra a proveedores.")
 
     Container(ms_notifications, "ms-notifications", "Java 21, WebFlux", "Motor pasivo de notificaciones. Mapea eventos a plantillas.")
@@ -115,8 +115,8 @@ Rel(ms_inventory, kafka, "Publica (StockReserved, StockReleased, StockDepleted)"
 Rel(ms_order, kafka, "Publica comandos/eventos (OrderCreated, OrderConfirmed)", "TCP")
 Rel(ms_cart, kafka, "Publica (CartAbandoned)", "TCP")
 Rel(ms_payment, kafka, "Consume Saga y Publica (PaymentProcessed, PaymentFailed)", "TCP")
-Rel(ms_shipping, kafka, "Consume confirmación y Publica (ShippingDispatched)", "TCP")
-Rel(ms_provider, kafka, "Publica reposición (StockReceived)", "TCP")
+Rel(ms_shipping, kafka, "Consume OrderStatusChanged y Publica (ShippingDispatched)", "TCP")
+Rel(ms_provider, kafka, "Consume StockDepleted y Publica (PurchaseOrderCreated)", "TCP")
 Rel(ms_notifications, kafka, "Consume eventos para notificar (Catch-All)", "TCP")
 Rel(ms_reporter, kafka, "Consume TODOS los eventos (Sincroniza Read Model)", "TCP")
 
@@ -134,8 +134,8 @@ Rel(ms_reporter, s3_reports, "Sube documentos pesados", "AWS SDK")
 
 %% --- Integraciones Externas ---
 Rel(ms_payment, pasarelas, "Procesa transacción bancaria", "HTTPS")
-Rel(ms_shipping, shippingAPI, "Cotiza envíos / Estrangula Monolito", "HTTPS")
-Rel(ms_provider, proveedores, "Recibe y transfiere abastecimiento", "HTTPS (Webhooks)")
+Rel(ms_shipping, shippingAPI, "Cotiza envíos / ACL logística", "HTTPS")
+Rel(ms_provider, proveedores, "Notifica órdenes de compra (vía email por ms-notifications)", "Email")
 Rel(ms_notifications, ses, "Dispara email al cliente B2B", "HTTPS/API")
 
 UpdateLayoutConfig($c4ShapeInRow="4", $c4BoundaryInRow="1")

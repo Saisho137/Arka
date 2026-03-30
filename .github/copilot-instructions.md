@@ -21,7 +21,7 @@ Java 21 · Spring Boot 4.0.3 (WebFlux + MVC/Virtual Threads) · Project Reactor 
 | ms-catalog       | Catálogo de productos y reseñas anidadas    | MongoDB + Redis            | Reactivo   |
 | ms-inventory     | Stock, reservas y lock pesimista            | PostgreSQL 17 db_inventory | Reactivo   |
 | ms-payment       | Procesamiento de pagos (ACL pasarelas)      | PostgreSQL 17 db_payment   | Reactivo\* |
-| ms-shipping      | Logística y envíos (Strangler Fig)          | PostgreSQL 17              | Reactivo\* |
+| ms-shipping      | Logística y envíos (ACL logística)          | PostgreSQL 17              | Reactivo\* |
 | ms-provider      | Proveedores B2B (ACL externa)               | PostgreSQL 17              | Reactivo\* |
 | ms-notifications | Alertas y notificaciones (AWS SES)          | MongoDB                    | Reactivo   |
 | ms-reporter      | Reportes y analítica (CQRS, Event Sourcing) | PostgreSQL 17 + S3         | Imperativo |
@@ -52,7 +52,7 @@ infrastructure/
 - **Outbox Pattern** en ms-order y ms-inventory (transacción BD + evento atómico)
 - **Cache-Aside** para lecturas de catálogo (Redis)
 - **Circuit Breaker** para llamadas a servicios externos
-- **Anti-Corruption Layer (ACL)** en ms-payment y ms-provider
+- **Anti-Corruption Layer (ACL)** en ms-payment, ms-shipping y ms-provider
 - **gRPC** síncrono: ms-order → ms-inventory (reserva stock), ms-cart → ms-catalog (precio actual)
 
 ## Kafka Topics (1 tópico por servicio, discriminado por `eventType`)
@@ -65,7 +65,7 @@ infrastructure/
 | `cart-events`      | ms-cart      | CartAbandoned                                                                     |
 | `payment-events`   | ms-payment   | PaymentProcessed · PaymentFailed                                                  |
 | `shipping-events`  | ms-shipping  | ShippingDispatched                                                                |
-| `provider-events`  | ms-provider  | StockReceived                                                                     |
+| `provider-events`  | ms-provider  | PurchaseOrderCreated                                                              |
 
 Partition key = aggregate ID (`productId`, `sku`, `orderId`, etc.). Consumidores filtran por `eventType` e ignoran eventos desconocidos.
 

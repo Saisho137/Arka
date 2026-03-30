@@ -41,17 +41,17 @@ Arka enfrenta desafíos críticos de operación:
 
 ### Microservicios
 
-| Servicio             | Dominio                                   | BD                             | Fase |
-| -------------------- | ----------------------------------------- | ------------------------------ | ---- |
-| **ms-catalog**       | Catálogo de productos, reseñas anidadas   | MongoDB + Redis                | 1    |
-| **ms-inventory**     | Stock, reservas, lock pesimista           | PostgreSQL 17 (`db_inventory`) | 1    |
-| **ms-order**         | Gestión de pedidos, orquestador Saga      | PostgreSQL 17 (`db_orders`)    | 1    |
-| **ms-notifications** | Notificaciones transaccionales (AWS SES)  | MongoDB                        | 1    |
-| **ms-cart**          | Carrito de compras, detección de abandono | MongoDB                        | 2    |
-| **ms-payment**       | Procesamiento de pagos (ACL pasarelas)    | PostgreSQL 17 (`db_payment`)   | 2    |
-| **ms-reporter**      | Reportes analíticos, CQRS, Event Sourcing | PostgreSQL 17 + AWS S3         | 3    |
-| **ms-shipping**      | Logística y envíos (Strangler Fig)        | PostgreSQL 17                  | 3    |
-| **ms-provider**      | Proveedores B2B (ACL externa)             | PostgreSQL 17                  | 4    |
+| Servicio             | Dominio                                         | BD                             | Fase |
+| -------------------- | ----------------------------------------------- | ------------------------------ | ---- |
+| **ms-catalog**       | Catálogo de productos, reseñas anidadas         | MongoDB + Redis                | 1    |
+| **ms-inventory**     | Stock, reservas, lock pesimista                 | PostgreSQL 17 (`db_inventory`) | 1    |
+| **ms-order**         | Gestión de pedidos, orquestador Saga            | PostgreSQL 17 (`db_orders`)    | 1    |
+| **ms-notifications** | Notificaciones transaccionales (AWS SES)        | MongoDB                        | 1    |
+| **ms-cart**          | Carrito de compras, detección de abandono       | MongoDB                        | 2    |
+| **ms-payment**       | Procesamiento de pagos (ACL pasarelas)          | PostgreSQL 17 (`db_payment`)   | 2    |
+| **ms-reporter**      | Reportes analíticos, CQRS, Event Sourcing       | PostgreSQL 17 + AWS S3         | 3    |
+| **ms-shipping**      | Logística y envíos (ACL logística)              | PostgreSQL 17                  | 3    |
+| **ms-provider**      | Proveedores B2B (órdenes de compra automáticas) | PostgreSQL 17                  | 4    |
 
 ### Comunicación entre Servicios
 
@@ -68,23 +68,22 @@ Arka enfrenta desafíos críticos de operación:
 | `cart-events`      | ms-cart      | CartAbandoned                                                                     |
 | `payment-events`   | ms-payment   | PaymentProcessed · PaymentFailed                                                  |
 | `shipping-events`  | ms-shipping  | ShippingDispatched                                                                |
-| `provider-events`  | ms-provider  | StockReceived                                                                     |
+| `provider-events`  | ms-provider  | PurchaseOrderCreated                                                              |
 
 Partition key = aggregate ID. Consumidores discriminan por campo `eventType` del envelope estándar.
 
 ### Patrones Arquitectónicos
 
-| Patrón                    | Dónde se aplica                                                |
-| ------------------------- | -------------------------------------------------------------- |
-| **Saga Secuencial**       | ms-order (orquestador) → ms-inventory → ms-payment             |
-| **CQRS / Event Sourcing** | ms-reporter consume todos los eventos de Kafka                 |
-| **Outbox Pattern**        | ms-order, ms-inventory (transacción BD + evento atómico)       |
-| **Cache-Aside**           | ms-catalog con Redis para lecturas de alta frecuencia          |
-| **Anti-Corruption Layer** | ms-payment (pasarelas de pago), ms-provider (APIs proveedores) |
-| **Strangler Fig**         | ms-shipping (migración de monolito logístico legacy)           |
-| **Circuit Breaker**       | Llamadas a servicios externos                                  |
-| **Database per Service**  | Cada microservicio es dueño exclusivo de su almacenamiento     |
-| **Zero Trust**            | API Gateway valida JWT, inyecta identidad (`X-User-Email`)     |
+| Patrón                    | Dónde se aplica                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| **Saga Secuencial**       | ms-order (orquestador) → ms-inventory → ms-payment                                 |
+| **CQRS / Event Sourcing** | ms-reporter consume todos los eventos de Kafka                                     |
+| **Outbox Pattern**        | ms-order, ms-inventory (transacción BD + evento atómico)                           |
+| **Cache-Aside**           | ms-catalog con Redis para lecturas de alta frecuencia                              |
+| **Anti-Corruption Layer** | ms-payment (pasarelas de pago), ms-shipping (logística), ms-provider (proveedores) |
+| **Circuit Breaker**       | Llamadas a servicios externos (ms-payment, ms-shipping)                            |
+| **Database per Service**  | Cada microservicio es dueño exclusivo de su almacenamiento                         |
+| **Zero Trust**            | API Gateway valida JWT, inyecta identidad (`X-User-Email`)                         |
 
 ## Fases de Entrega de Valor
 
@@ -98,11 +97,11 @@ Carrito con detección de abandono, integración de pasarelas de pago vía ACL. 
 
 ### Fase 3 — Analítica y Logística (HU3, HU7)
 
-Reportes masivos CSV/PDF (hasta 500MB) exportados a S3. Automatización de envíos con Strangler Fig.
+Reportes masivos CSV/PDF (hasta 500MB) exportados a S3. Gestión de despachos con ACL logística (DHL, FedEx, Legacy).
 
-### Fase 4 — Abastecimiento Automático
+### Fase 4 — Abastecimiento (Orden de compra automatizada)
 
-Reposición automática de stock con proveedores externos cuando se detectan umbrales críticos.
+ms-provider consume `StockDepleted` y genera automáticamente órdenes de compra. ms-notifications envía email al proveedor. Actualización de stock manual por admin al recibir mercancía.
 
 ## Estructura del Monorepo
 
@@ -201,13 +200,13 @@ cd ms-<name>
 
 ## Integraciones Externas
 
-| Sistema                            | Microservicio    | Protocolo             |
-| ---------------------------------- | ---------------- | --------------------- |
-| Stripe, Wompi, Mercado Pago        | ms-payment       | HTTPS (ACL)           |
-| Operadores logísticos (FedEx, DHL) | ms-shipping      | HTTPS (Strangler Fig) |
-| Proveedores de mercancía           | ms-provider      | HTTPS/Webhooks (ACL)  |
-| AWS SES (correos transaccionales)  | ms-notifications | HTTPS                 |
-| AWS S3 (reportes pesados)          | ms-reporter      | AWS SDK               |
+| Sistema                            | Microservicio    | Protocolo   |
+| ---------------------------------- | ---------------- | ----------- |
+| Stripe, Wompi, Mercado Pago        | ms-payment       | HTTPS (ACL) |
+| Operadores logísticos (FedEx, DHL) | ms-shipping      | HTTPS (ACL) |
+| Proveedores de mercancía           | ms-provider      | HTTPS (ACL) |
+| AWS SES (correos transaccionales)  | ms-notifications | HTTPS       |
+| AWS S3 (reportes pesados)          | ms-reporter      | AWS SDK     |
 
 ## Documentación
 

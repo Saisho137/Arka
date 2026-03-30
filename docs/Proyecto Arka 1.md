@@ -21,11 +21,11 @@ Desarrollar una arquitectura de microservicios para una plataforma e-commerce, q
 
 ### Shipping
 
-- **Migración del servicio de envíos desde una arquitectura monolítica hacia microservicios** utilizando el patrón Strangler Fig.
+- **Integración del servicio de envíos con operadores logísticos externos** (DHL, FedEx) y monolito legacy mediante una Capa Anti-Corrupción (ACL).
 
 ### Proveedores
 
-- **Administración de proveedores, almacenes e inventario.** Generación automática de órdenes de compra y actualización del stock.
+- **Administración de proveedores, almacenes e inventario.** Generación automatizada de órdenes de compra a proveedores cuando el stock alcanza umbrales críticos y actualización manual del stock por el administrador al recibir mercancía.
 
 ---
 
@@ -33,7 +33,7 @@ Desarrollar una arquitectura de microservicios para una plataforma e-commerce, q
 
 ### Patrón API Gateway
 
-```
+```text
 GATEWAY
   ↓
   ├─ SERVICIO A
@@ -49,9 +49,9 @@ Sistema de descubrimiento automático de servicios.
 
 Almacenamiento de todos los eventos que cambian el estado del sistema.
 
-### Patrón Strangler Fig
+### Patrón Anti-Corruption Layer (ACL)
 
-Migración gradual de monolitos a microservicios sin detener el sistema.
+Capa intermedia que aísla al ecosistema de las particularidades de servicios externos (pasarelas de pago, operadores logísticos, monolitos legacy).
 
 ### Patrón Circuit Breaker
 
@@ -190,11 +190,11 @@ Composición de respuestas desde múltiples servicios.
 
 **Objetivo principal:**
 
-- Aplicar el patrón Strangler Fig para separar la calculadora de shipping en varios microservicios
+- Aplicar el patrón Anti-Corruption Layer (ACL) para integrar el servicio de shipping con operadores logísticos externos
 
 **Estructuras:**
 
-- Patrón Strangler Fig
+- Patrón ACL (Anti-Corruption Layer)
 
 ---
 

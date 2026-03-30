@@ -54,15 +54,15 @@ Esta fase entrega el sistema core para permitir la venta segura, mitigando la ve
 
 **Qué NO INCLUYE esta fase (diferido a fases posteriores):**
 
-| Componente Diferido | HU / Razón                                           | Fase |
-| ------------------- | ---------------------------------------------------- | ---- |
-| `ms-cart`           | HU8 - Carritos abandonados                           | 2    |
-| `ms-payment`        | Cierre financiero con pasarelas externas             | 2    |
-| `ms-reporter`       | HU7 - Reportes semanales / HU3 - Reportes stock bajo | 3    |
-| `ms-shipping`       | Despachos y Strangler Fig Pattern                    | 3    |
-| `ms-provider`       | Abastecimiento automático con proveedores            | 4    |
-| Frontend            | Excluido explícitamente del alcance backend          | -    |
-| Patrón BFF          | Descartado permanentemente de la arquitectura        | -    |
+| Componente Diferido | HU / Razón                                              | Fase |
+| ------------------- | ------------------------------------------------------- | ---- |
+| `ms-cart`           | HU8 - Carritos abandonados                              | 2    |
+| `ms-payment`        | Cierre financiero con pasarelas externas                | 2    |
+| `ms-reporter`       | HU7 - Reportes semanales / HU3 - Reportes stock bajo    | 3    |
+| `ms-shipping`       | Despachos y ACL logística (DHL, FedEx, Legacy)          | 3    |
+| `ms-provider`       | Gestión automatizada de órdenes de compra a proveedores | 4    |
+| Frontend            | Excluido explícitamente del alcance backend             | -    |
+| Patrón BFF          | Descartado permanentemente de la arquitectura           | -    |
 
 > **Nota sobre el pago en Fase 1:** Los clientes de Arka son almacenes (modelo B2B), por lo que se utiliza facturación diferida con términos a 30-60 días. En la Fase 1, el pago se gestiona como proceso externo (transferencia bancaria o facturación B2B). Las órdenes confirmadas por `ms-inventory` (stock reservado) transicionan automáticamente a `CONFIRMADO`. La validación automática de pago con pasarelas se incorpora en la Fase 2 con `ms-payment`.
 
@@ -76,22 +76,22 @@ Con el inventario seguro, se introduce la gestión temporal de la compra y la au
 - **Evolución Arquitectónica:** La Saga Secuencial se completa: **Catálogo → Inventario → Pago**. Si `ms-payment` falla al cobrar, emite un evento de compensación por Kafka y `ms-inventory` libera el stock. Las órdenes ahora pasan por el estado `PENDIENTE_PAGO` antes de confirmarse.
 - **Valor de Negocio:** Se reducen las pérdidas por abandono y se automatiza la conciliación de pagos aislando las caídas bancarias gracias al aislamiento del hilo (_Virtual Threads_) en integraciones síncronas bloqueantes
 
-### 📈 Fase 3: Analítica Avanzada y Logística (CQRS & Strangler Fig)
+### 📈 Fase 3: Analítica Avanzada y Logística (CQRS & ACL Logística)
 
-Se entrega la capacidad de análisis masivo para la directiva y se automatizan los envíos B2B "estrangulando" sistemas heredados.
+Se entrega la capacidad de análisis masivo para la directiva y se integra la logística de envíos con operadores externos.
 
 - **Microservicios Entregados:**
   - `ms-reporter` (Imperativo / Virtual Threads): Data Lake de la arquitectura que consume todos los eventos de Kafka (Event Sourcing). Usa índices GIN y JSONB en PostgreSQL 17. Exporta PDF/CSV pesados (hasta 500MB) a **AWS S3**. Resuelve la **HU7** (Ventas semanales) y **HU3** (Reporte stock bajo)
-  - `ms-shipping` (Imperativo): Gestión de despachos implementando el **Patrón Strangler Fig** para migrar progresivamente desde el monolito logístico
-- **Valor de Negocio:** Operaciones puede tomar decisiones estratégicas sin tumbar la base de datos de ventas (OLTP). El área logística automatiza las guías de envío sin detener la operación de despachos.
+  - `ms-shipping` (Imperativo): Capa Anti-Corrupción (ACL) para integrarse con operadores logísticos externos (DHL, FedEx) y el monolito legacy de cotización de envíos. Consume eventos de `order-events` y coordina con las APIs externas para gestionar despachos
+- **Valor de Negocio:** Operaciones puede tomar decisiones estratégicas sin tumbar la base de datos de ventas (OLTP). El área logística gestiona despachos a través de una capa ACL que aísla al ecosistema de las particularidades de cada operador logístico.
 
 ### 🔄 Fase 4: Abastecimiento y Ecosistema Completo
 
-Automatización B2B integral con los proveedores de Arka para garantizar el flujo continuo de stock.
+Automatización de órdenes de compra a proveedores basada en umbrales de stock crítico, con notificación por correo electrónico y actualización manual de stock al recibir mercancía.
 
 - **Microservicios Entregados:**
-  - `ms-provider` (Imperativo): Barrera de seguridad (ACL) y gestión de órdenes de compra automáticas con proveedores externos
-- **Valor de Negocio:** Cuando `ms-inventory` reporta existencias críticas, el sistema negocia automáticamente presupuestos con los proveedores, cerrando el ciclo logístico y de ventas completo.
+  - `ms-provider` (Imperativo): Barrera de seguridad (ACL) que consume automáticamente el evento `StockDepleted` de `ms-inventory` y genera una orden de compra dirigida al proveedor correspondiente. Publica `PurchaseOrderCreated` con todos los datos necesarios para que `ms-notifications` envíe un correo personalizado al proveedor
+- **Valor de Negocio:** Cuando `ms-inventory` detecta existencias críticas (evento `StockDepleted`), `ms-provider` crea automáticamente una orden de compra y `ms-notifications` envía el correo al proveedor. Al recibir la mercancía en bodega, el administrador actualiza el stock manualmente mediante el endpoint `PUT /inventory/{sku}/stock` de `ms-inventory`. El pago de la orden de compra al proveedor se gestiona fuera del sistema (efectivo contra entrega en bodega).
 
 ---
 
@@ -181,9 +181,11 @@ Las Historias de Usuario se han priorizado y mapeado a las fases de entrega y a 
 
 **Criterios de aceptación:**
 
-- Alertas automáticas cuando el stock alcanza umbrales críticos
-- Integración con `ms-provider` para órdenes de compra automáticas (Fase 4)
-- Notificación por correo electrónico al administrador vía `ms-notifications`
+- Alertas automáticas cuando el stock alcanza umbrales críticos (evento `StockDepleted` → `ms-notifications` envía email al administrador)
+- `ms-provider` consume `StockDepleted` y genera automáticamente una orden de compra → publica `PurchaseOrderCreated` → `ms-notifications` envía email al proveedor correspondiente (Fase 4)
+- Cuando el proveedor entrega la mercancía, el administrador actualiza el stock manualmente mediante `PUT /inventory/{sku}/stock`
+- El pago de la orden de compra al proveedor se gestiona fuera del sistema
+- Notificación por correo electrónico al administrador (alerta) y al proveedor (orden de compra) vía `ms-notifications`
 
 ---
 
@@ -207,7 +209,7 @@ Cada microservicio es dueño único de su almacenamiento para evitar acoplamient
 Basado en la naturaleza de cada Bounded Context, se divide el stack:
 
 1. **I/O-Bound (Spring WebFlux):** Alta concurrencia y baja latencia. Implementado en `ms-catalog`, `ms-inventory`, `ms-order`, `ms-cart` y `ms-notifications`. Todo acceso a base de datos usa drivers no bloqueantes (R2DBC o Reactive Mongo).
-2. **CPU-Bound / External SDKs (Spring MVC + Virtual Threads):** Implementado en `ms-reporter` (para evitar colapsar el _Event Loop_ generando archivos pesados en AWS S3), `ms-payment` (por el uso de SDKs de pasarelas síncronas), `ms-shipping` y `ms-provider` (por conexiones legacy bloqueantes).
+2. **CPU-Bound / External SDKs (Spring MVC + Virtual Threads):** Implementado en `ms-reporter` (para evitar colapsar el _Event Loop_ generando archivos pesados en AWS S3), `ms-payment` (por el uso de SDKs de pasarelas síncronas), `ms-shipping` (por integración con APIs de operadores logísticos bloqueantes — ACL) y `ms-provider` (por gestión de órdenes de compra a proveedores externos).
 
 ### D. Comunicación Síncrona (gRPC) vs Asíncrona (Kafka)
 
@@ -567,7 +569,7 @@ Invalidación de caché:
   - `StockReserveFailed` → `ms-order` transiciona orden a `CANCELADO`
   - `StockReleased` → Cuando se libera reserva por timeout o cancelación
   - `StockUpdated` → Cuando admin actualiza stock manualmente
-  - `StockDepleted` → Alerta de stock bajo al alcanzar umbrales críticos (consumido por `ms-notifications` y `ms-reporter`)
+  - `StockDepleted` → Alerta de stock bajo al alcanzar umbrales críticos (consumido por `ms-provider` para generar orden de compra automática, `ms-notifications` para alertar al admin, y `ms-reporter`)
 - 🆔 **Idempotencia:** Implementa validación estricta para ignorar eventos duplicados de Kafka, evitando doble descuento.
 
 **Base de Datos:** PostgreSQL 17 (inventory_db)
@@ -758,10 +760,11 @@ order_db (PostgreSQL 17)
 
 **Consumer de Eventos Kafka:**
 
-| Evento consumido   | Tópico           | Acción                                                     |
-| ------------------ | ---------------- | ---------------------------------------------------------- |
-| `PaymentProcessed` | `payment-events` | Transiciona orden a `CONFIRMADO` (Fase 2)                  |
-| `PaymentFailed`    | `payment-events` | Transiciona a `CANCELADO`, publica `ReleaseStock` (Fase 2) |
+| Evento consumido     | Tópico            | Acción                                                                |
+| -------------------- | ----------------- | --------------------------------------------------------------------- |
+| `PaymentProcessed`   | `payment-events`  | Transiciona orden a `CONFIRMADO` (Fase 2)                             |
+| `PaymentFailed`      | `payment-events`  | Transiciona a `CANCELADO`, publica `ReleaseStock` (Fase 2)            |
+| `ShippingDispatched` | `shipping-events` | Actualiza orden con datos de tracking del operador logístico (Fase 3) |
 
 **Endpoints:**
 
@@ -830,13 +833,15 @@ order_db (PostgreSQL 17)
 
 **Eventos cubiertos:**
 
-| Evento consumido     | Tópico            | Acción                                    |
-| -------------------- | ----------------- | ----------------------------------------- |
-| `OrderConfirmed`     | `order-events`    | Email de confirmación al cliente          |
-| `OrderStatusChanged` | `order-events`    | Email con nuevo estado (dispatch/deliver) |
-| `OrderCancelled`     | `order-events`    | Email de cancelación con motivo           |
-| `ShippingDispatched` | `shipping-events` | Email de despacho (Fase 3)                |
-| `CartAbandoned`      | `cart-events`     | Email recordatorio de carrito (Fase 2)    |
+| Evento consumido       | Tópico             | Acción                                          |
+| ---------------------- | ------------------ | ----------------------------------------------- |
+| `OrderConfirmed`       | `order-events`     | Email de confirmación al cliente                |
+| `OrderStatusChanged`   | `order-events`     | Email con nuevo estado (dispatch/deliver)       |
+| `OrderCancelled`       | `order-events`     | Email de cancelación con motivo                 |
+| `StockDepleted`        | `inventory-events` | Email de alerta de stock bajo al admin          |
+| `ShippingDispatched`   | `shipping-events`  | Email de despacho con tracking (Fase 3)         |
+| `PurchaseOrderCreated` | `provider-events`  | Email al proveedor con orden de compra (Fase 4) |
+| `CartAbandoned`        | `cart-events`      | Email recordatorio de carrito (Fase 2)          |
 
 **Base de Datos:** MongoDB (notifications_db)
 
@@ -919,8 +924,8 @@ notifications_db (MongoDB)
 
 - **`ms-payment` (Fase 2):** Imperativo (Spring MVC + Virtual Threads). Actúa como Capa Anti-Corrupción (ACL). Usa PostgreSQL 17 con idempotencia rigurosa (_Unique Constraints_ combinados para evitar cobros dobles). El uso de SDKs bloqueantes de pasarelas (Stripe, Wompi, Mercado Pago) exige aislar las peticiones en Virtual Threads para no estrangular la red. Implementa **Circuit Breaker & Bulkhead** con _Resilience4j_.
 - **`ms-reporter` (Fase 3):** Imperativo (Spring MVC + Virtual Threads). CQRS y Event Sourcing en PostgreSQL 17 (usando `JSONB` y GIN Index). Realiza agregaciones pesadas (CPU-bound) exportando excels/PDFs de hasta 500MB hacia **AWS S3** como objetos inmutables.
-- **`ms-shipping` (Fase 3):** Imperativo con PostgreSQL 17. Se integra con APIs Logísticas Legacy (FedEx, DHL) aplicando el _Strangler Fig Pattern_ para migrar progresivamente desde el monolito. Implementa **Circuit Breaker** con _Resilience4j_.
-- **`ms-provider` (Fase 4):** Imperativo con PostgreSQL 17. Barrera ACL para recibir webhooks de proveedores de forma segura. Gestiona órdenes de compra automáticas cuando `ms-inventory` reporta existencias críticas.
+- **`ms-shipping` (Fase 3):** Imperativo con PostgreSQL 17. Capa Anti-Corrupción (ACL) que se integra con APIs de operadores logísticos (FedEx, DHL) y el monolito legacy de envíos, similar a como `ms-payment` aísla las pasarelas bancarias. Consume `OrderStatusChanged` (EN*DESPACHO) desde `order-events` para coordinar el despacho con el operador logístico correspondiente y publica `ShippingDispatched` con datos de tracking. Implementa **Circuit Breaker** con \_Resilience4j*.
+- **`ms-provider` (Fase 4):** Imperativo con PostgreSQL 17. Barrera ACL que consume automáticamente el evento `StockDepleted` de `inventory-events` y genera una orden de compra al proveedor correspondiente. Publica `PurchaseOrderCreated` a Kafka con todos los detalles necesarios para que `ms-notifications` envíe un correo personalizado al proveedor. El proceso de recepción de mercancía **no está automatizado**: cuando los productos llegan a bodega, el administrador actualiza el stock manualmente vía `PUT /inventory/{sku}/stock`. El pago al proveedor se gestiona fuera del sistema.
 
 ---
 
@@ -933,15 +938,15 @@ notifications_db (MongoDB)
 
 **Tópicos del ecosistema (7 total):**
 
-| Tópico             | Productor(es)  | Consumidor(es)                                                  | Eventos (discriminados por `eventType`)                                                 |
-| ------------------ | -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `product-events`   | `ms-catalog`   | `ms-inventory`, `ms-reporter`                                   | `ProductCreated`, `ProductUpdated`, `PriceChanged`                                      |
-| `order-events`     | `ms-order`     | `ms-inventory`, `ms-notifications`, `ms-payment`, `ms-reporter` | `OrderCreated`, `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`                |
-| `inventory-events` | `ms-inventory` | `ms-order`, `ms-notifications`, `ms-reporter`                   | `StockReserved`, `StockReserveFailed`, `StockReleased`, `StockDepleted`, `StockUpdated` |
-| `cart-events`      | `ms-cart`      | `ms-notifications`, `ms-reporter`                               | `CartAbandoned` (Fase 2)                                                                |
-| `payment-events`   | `ms-payment`   | `ms-order`, `ms-notifications`, `ms-reporter`                   | `PaymentProcessed`, `PaymentFailed` (Fase 2)                                            |
-| `shipping-events`  | `ms-shipping`  | `ms-order`, `ms-notifications`, `ms-reporter`                   | `ShippingDispatched` (Fase 3)                                                           |
-| `provider-events`  | `ms-provider`  | `ms-inventory`, `ms-notifications`, `ms-reporter`               | `StockReceived` (Fase 4)                                                                |
+| Tópico             | Productor(es)  | Consumidor(es)                                                                 | Eventos (discriminados por `eventType`)                                                 |
+| ------------------ | -------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `product-events`   | `ms-catalog`   | `ms-inventory`, `ms-reporter`                                                  | `ProductCreated`, `ProductUpdated`, `PriceChanged`                                      |
+| `order-events`     | `ms-order`     | `ms-inventory`, `ms-notifications`, `ms-payment`, `ms-shipping`, `ms-reporter` | `OrderCreated`, `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`                |
+| `inventory-events` | `ms-inventory` | `ms-notifications`, `ms-provider`, `ms-reporter`                               | `StockReserved`, `StockReserveFailed`, `StockReleased`, `StockDepleted`, `StockUpdated` |
+| `cart-events`      | `ms-cart`      | `ms-notifications`, `ms-reporter`                                              | `CartAbandoned` (Fase 2)                                                                |
+| `payment-events`   | `ms-payment`   | `ms-order`, `ms-notifications`, `ms-reporter`                                  | `PaymentProcessed`, `PaymentFailed` (Fase 2)                                            |
+| `shipping-events`  | `ms-shipping`  | `ms-order`, `ms-notifications`, `ms-reporter`                                  | `ShippingDispatched` (Fase 3)                                                           |
+| `provider-events`  | `ms-provider`  | `ms-notifications`, `ms-reporter`                                              | `PurchaseOrderCreated` (Fase 4)                                                         |
 
 **Tópicos activos en Fase 1 (MVP):** `product-events`, `order-events`, `inventory-events`
 
@@ -958,17 +963,18 @@ notifications_db (MongoDB)
 | Consumer Group               | Servicio           | Tópicos suscritos                  | Filtro por `eventType`                                                       |
 | ---------------------------- | ------------------ | ---------------------------------- | ---------------------------------------------------------------------------- |
 | `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`   | `ProductCreated` · `OrderCancelled`                                          |
-| `order-service-group`        | `ms-order`         | `inventory-events`                 | `StockReserved` · `StockReserveFailed`                                       |
 | `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events` | `OrderConfirmed` · `OrderStatusChanged` · `OrderCancelled` · `StockDepleted` |
 
 **Consumer Groups (Ecosistema completo):**
 
 | Consumer Group               | Servicio           | Tópicos suscritos                                                                                                           |
 | ---------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`, `provider-events`                                                                         |
-| `order-service-group`        | `ms-order`         | `inventory-events`, `payment-events`, `shipping-events`                                                                     |
-| `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events`, `cart-events`, `shipping-events`                                                        |
+| `inventory-service-group`    | `ms-inventory`     | `product-events`, `order-events`                                                                                            |
+| `order-service-group`        | `ms-order`         | `payment-events`, `shipping-events`                                                                                         |
+| `notification-service-group` | `ms-notifications` | `order-events`, `inventory-events`, `cart-events`, `shipping-events`, `provider-events`                                     |
 | `payment-service-group`      | `ms-payment`       | `order-events`                                                                                                              |
+| `shipping-service-group`     | `ms-shipping`      | `order-events`                                                                                                              |
+| `provider-service-group`     | `ms-provider`      | `inventory-events`                                                                                                          |
 | `reporter-service-group`     | `ms-reporter`      | `product-events`, `order-events`, `inventory-events`, `cart-events`, `payment-events`, `shipping-events`, `provider-events` |
 
 **Sobre estándar de eventos (_Event Envelope_):**
@@ -1349,17 +1355,17 @@ Cada consumer de Kafka implementa tracking de eventos procesados para prevenir p
 
 Cada microservicio tiene su propia base de datos **aislada**. Ningún servicio accede directamente a la BD de otro:
 
-| Servicio           | Base de Datos          | Motor           | Comunicación con otros servicios                       |
-| ------------------ | ---------------------- | --------------- | ------------------------------------------------------ |
-| `ms-catalog`       | `catalog_db`           | MongoDB + Redis | Kafka (eventos) + Redis (caché) + gRPC Server (Fase 2) |
-| `ms-inventory`     | `inventory_db`         | PostgreSQL 17   | Kafka (eventos) + gRPC Server (reserva stock)          |
-| `ms-order`         | `order_db`             | PostgreSQL 17   | Kafka (eventos) + gRPC Client (→ ms-inventory)         |
-| `ms-notifications` | `notifications_db`     | MongoDB         | Kafka (consumer) + AWS SES (email)                     |
-| `ms-cart`          | `cart_db`              | MongoDB         | Kafka (eventos) + gRPC Client (→ ms-catalog)           |
-| `ms-payment`       | `payment_db`           | PostgreSQL 17   | Kafka (consumer/producer) + Pasarelas externas         |
-| `ms-reporter`      | `reporter_db` + AWS S3 | PostgreSQL 17   | Kafka (consumer de TODOS los eventos)                  |
-| `ms-shipping`      | `shipping_db`          | PostgreSQL 17   | Kafka + API Logística externa                          |
-| `ms-provider`      | `provider_db`          | PostgreSQL 17   | Kafka + APIs de Proveedores (Webhooks)                 |
+| Servicio           | Base de Datos          | Motor           | Comunicación con otros servicios                                       |
+| ------------------ | ---------------------- | --------------- | ---------------------------------------------------------------------- |
+| `ms-catalog`       | `catalog_db`           | MongoDB + Redis | Kafka (eventos) + Redis (caché) + gRPC Server (Fase 2)                 |
+| `ms-inventory`     | `inventory_db`         | PostgreSQL 17   | Kafka (eventos) + gRPC Server (reserva stock)                          |
+| `ms-order`         | `order_db`             | PostgreSQL 17   | Kafka (eventos) + gRPC Client (→ ms-inventory)                         |
+| `ms-notifications` | `notifications_db`     | MongoDB         | Kafka (consumer) + AWS SES (email)                                     |
+| `ms-cart`          | `cart_db`              | MongoDB         | Kafka (eventos) + gRPC Client (→ ms-catalog)                           |
+| `ms-payment`       | `payment_db`           | PostgreSQL 17   | Kafka (consumer/producer) + Pasarelas externas                         |
+| `ms-reporter`      | `reporter_db` + AWS S3 | PostgreSQL 17   | Kafka (consumer de TODOS los eventos)                                  |
+| `ms-shipping`      | `shipping_db`          | PostgreSQL 17   | Kafka (consumer de `order-events`) + API Logística externa (ACL)       |
+| `ms-provider`      | `provider_db`          | PostgreSQL 17   | Kafka (consumer de `inventory-events` + producer de `provider-events`) |
 
 ### 8.5 Cache-Aside Pattern (Redis)
 
@@ -1374,9 +1380,9 @@ Implementado en **`ms-catalog`** para optimizar lecturas del catálogo de produc
 
 Implementado en `ms-reporter`. Separa el modelo de lectura analítico del transaccional. Consume todos los eventos de Kafka, los guarda como inmutables (Event Sourcing en `JSONB`) y genera vistas preparadas (OLAP) para reportes de 500MB hacia S3 sin afectar las bases transaccionales.
 
-### 8.7 Strangler Fig Pattern (Fase 3)
+### 8.7 Anti-Corruption Layer — ACL Logística (Fase 3)
 
-Implementado en `ms-shipping`. Intercepta las llamadas de envío y, de forma progresiva, reemplaza el código del monolito legacy de cotización de envíos por la nueva lógica distribuida.
+Implementado en `ms-shipping`. Actúa como capa intermedia (ACL) que aísla al ecosistema de las particularidades de cada operador logístico externo (DHL, FedEx) y del monolito legacy de envíos, de forma análoga a como `ms-payment` aísla las pasarelas bancarias. Consume `OrderStatusChanged` (EN_DESPACHO) desde `order-events`, coordina con la API logística correspondiente y publica `ShippingDispatched` con los datos de tracking.
 
 ### 8.8 Circuit Breaker & Bulkhead
 
@@ -1426,7 +1432,7 @@ PostgreSQL 17: ACID estricto para inventario, órdenes, pagos y reportes
 
 | Componente                 | Tecnología                                 | Justificación                                                 |
 | -------------------------- | ------------------------------------------ | ------------------------------------------------------------- |
-| **Framework Backend**      | Spring Boot 3.2 (Java 21)                  | Madurez, ecosistema Spring, soporte WebFlux y Virtual Threads |
+| **Framework Backend**      | Spring Boot 4.0.3 (Java 21)                | Madurez, ecosistema Spring, soporte WebFlux y Virtual Threads |
 | **Paradigma Reactivo**     | Spring WebFlux + R2DBC / Reactive Mongo    | Alta concurrencia I/O-bound para servicios core               |
 | **Paradigma Imperativo**   | Spring MVC + Virtual Threads (Loom)        | SDKs bloqueantes y operaciones CPU-bound                      |
 | **Comunicación Síncrona**  | gRPC (Protocol Buffers)                    | Serialización ultrarrápida en red privada                     |
