@@ -1,29 +1,36 @@
 package com.arka.model.stockmovement;
 
-import com.arka.valueobjects.MovementType;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
 public record StockMovement(
-        UUID movementId,
-        UUID sku,
-        UUID orderId,
-        int quantity,
-        MovementType type,
-        LocalDateTime createdAt,
-        String createdBy
+        UUID id,
+        String sku,
+        MovementType movementType,
+        int quantityChange,
+        int previousQuantity,
+        int newQuantity,
+        UUID referenceId,
+        String reason,
+        Instant createdAt
 ) {
     public StockMovement {
-        if (movementId == null) throw new IllegalArgumentException("MovementId is required");
-        if (sku == null) throw new IllegalArgumentException("ProductId is required");
-        if (quantity <= 0) throw new IllegalArgumentException("Quantity must be greater than zero");
-        if (type == null) throw new IllegalArgumentException("MovementType is required");
-        if (createdAt == null) throw new IllegalArgumentException("CreatedAt is required");
-        if (createdBy == null || createdBy.isBlank()) {
-            throw new IllegalArgumentException("CreatedBy is required for audit purposes");
-        }
+        Objects.requireNonNull(sku, "sku is required");
+        Objects.requireNonNull(movementType, "movementType is required");
+        if (previousQuantity < 0) throw new IllegalArgumentException("previousQuantity must be >= 0");
+        if (newQuantity < 0) throw new IllegalArgumentException("newQuantity must be >= 0");
+        createdAt = createdAt != null ? createdAt : Instant.now();
+    }
+
+    public boolean isStockIncrease() {
+        return quantityChange > 0;
+    }
+
+    public boolean isStockDecrease() {
+        return quantityChange < 0;
     }
 }

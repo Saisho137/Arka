@@ -1,27 +1,46 @@
 package com.arka.model.stock;
 
-import com.arka.valueobjects.WarehouseLocation;
 import lombok.Builder;
 
+import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
 public record Stock(
-        UUID sku,
-        int availableQuantity,
+        UUID id,
+        String sku,
+        UUID productId,
+        int quantity,
         int reservedQuantity,
-        int stockThreshold,
-        WarehouseLocation warehouseLocation
+        int availableQuantity,
+        Instant updatedAt,
+        long version
 ) {
     public Stock {
-        if (sku == null) throw new IllegalArgumentException("SKU is required");
-        if (availableQuantity < 0) throw new IllegalArgumentException("Quantity cannot be negative");
-        if (reservedQuantity < 0) throw new IllegalArgumentException("Quantity cannot be negative");
-        if (stockThreshold < 0) throw new IllegalArgumentException("Stock threshold cannot be negative");
+        Objects.requireNonNull(sku, "sku is required");
+        Objects.requireNonNull(productId, "productId is required");
+        if (quantity < 0) throw new IllegalArgumentException("quantity must be >= 0");
+        if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
+        if (reservedQuantity > quantity)
+            throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
+        availableQuantity = quantity - reservedQuantity;
+        version = version > 0 ? version : 1;
     }
 
-    // Domain Logic Example: Calculate total physical stock
     public int getTotalPhysicalStock() {
-        return availableQuantity + reservedQuantity;
+        return quantity;
+    }
+
+    public boolean canReserve(int requestedQuantity) {
+        return availableQuantity >= requestedQuantity;
+    }
+
+    public boolean isBelowThreshold(int threshold) {
+        return availableQuantity <= threshold;
+    }
+
+    public boolean canUpdateQuantityTo(int newQuantity) {
+        return newQuantity >= reservedQuantity;
     }
 }

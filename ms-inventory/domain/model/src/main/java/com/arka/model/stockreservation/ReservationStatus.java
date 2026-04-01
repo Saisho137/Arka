@@ -1,8 +1,8 @@
-package com.arka.valueobjects;
+package com.arka.model.stockreservation;
 
 public enum ReservationStatus {
     PENDING,
     CONFIRMED,
     EXPIRED,
-    CANCELLED
+    RELEASED
 }

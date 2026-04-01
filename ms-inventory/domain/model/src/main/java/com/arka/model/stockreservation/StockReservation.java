@@ -1,31 +1,38 @@
 package com.arka.model.stockreservation;
 
-import com.arka.valueobjects.ReservationStatus;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
 public record StockReservation(
-        UUID reservationId,
-        UUID sku,
+        UUID id,
+        String sku,
         UUID orderId,
-        int reservedQuantity,
+        int quantity,
         ReservationStatus status,
-        LocalDateTime expiresAt
+        Instant createdAt,
+        Instant expiresAt
 ) {
+    public static final Duration DEFAULT_TTL = Duration.ofMinutes(15);
+
     public StockReservation {
-        if (reservationId == null) throw new IllegalArgumentException("ReservationId is required");
-        if (sku == null) throw new IllegalArgumentException("ProductId is required");
-        if (orderId == null) throw new IllegalArgumentException("OrderId is required");
-        if (reservedQuantity <= 0) throw new IllegalArgumentException("Reserved quantity must be greater than zero");
-        if (status == null) throw new IllegalArgumentException("Status is required");
-        if (expiresAt == null) throw new IllegalArgumentException("ExpiresAt is required");
+        Objects.requireNonNull(sku, "sku is required");
+        Objects.requireNonNull(orderId, "orderId is required");
+        if (quantity <= 0) throw new IllegalArgumentException("quantity must be > 0");
+        status = status != null ? status : ReservationStatus.PENDING;
+        createdAt = createdAt != null ? createdAt : Instant.now();
+        expiresAt = expiresAt != null ? expiresAt : Instant.now().plus(DEFAULT_TTL);
     }
 
-    // Domain Logic Example: Check if reservation is expired
-    public boolean isExpired(LocalDateTime currentTime) {
-        return status == ReservationStatus.PENDING && currentTime.isAfter(expiresAt);
+    public boolean isExpired(Instant now) {
+        return status == ReservationStatus.PENDING && now.isAfter(expiresAt);
+    }
+
+    public boolean isPending() {
+        return status == ReservationStatus.PENDING;
     }
 }

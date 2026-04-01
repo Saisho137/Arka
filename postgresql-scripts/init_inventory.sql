@@ -3,72 +3,125 @@
 -- Microservice: ms-inventory (Stock, Reservas, Locks)
 -- ═══════════════════════════════════════════════════
 
--- SKU (Stock Keeping Unit): identificador semántico de negocio, NO un UUID.
--- Codifica información legible: KB-MECH-001 = Keyboard, Mecánico, secuencial 001.
--- Usado en facturas, etiquetas de bodega, comunicación con proveedores y clientes B2B.
--- Es el "lenguaje ubicuo" del dominio de inventario (DDD).
+DO $$ BEGIN
+    CREATE TYPE movement_type AS ENUM (
+        'RESTOCK',
+        'SHRINKAGE',
+        'ORDER_RESERVE',
+        'ORDER_CONFIRM',
+        'RESERVATION_RELEASE',
+        'PRODUCT_CREATION'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE reservation_status AS ENUM (
+        'PENDING',
+        'CONFIRMED',
+        'EXPIRED',
+        'RELEASED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE outbox_status AS ENUM (
+        'PENDING',
+        'PUBLISHED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS stock (
-    id        UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku       VARCHAR(50)    NOT NULL UNIQUE,
-    quantity  INTEGER        NOT NULL DEFAULT 0 CHECK (quantity >= 0)
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    sku VARCHAR(50) NOT NULL UNIQUE,
+    product_id UUID NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
+    available_quantity INTEGER GENERATED ALWAYS AS (quantity - reserved_quantity) STORED,
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    version BIGINT NOT NULL DEFAULT 1,
+    CONSTRAINT chk_reserved_not_exceeds_quantity CHECK (reserved_quantity <= quantity)
 );
 
 CREATE TABLE IF NOT EXISTS stock_reservations (
-    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_id        UUID           NOT NULL,
-    sku             VARCHAR(50)    NOT NULL,
-    quantity        INTEGER        NOT NULL CHECK (quantity > 0),
-    status          VARCHAR(30)    NOT NULL DEFAULT 'ACTIVE',
-    expires_at      TIMESTAMP      NOT NULL DEFAULT (now() + INTERVAL '15 minutes'),
-    created_at      TIMESTAMP      NOT NULL DEFAULT now()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    sku VARCHAR(50) NOT NULL,
+    order_id UUID NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    status reservation_status NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT(now() + INTERVAL '15 minutes')
 );
 
 CREATE TABLE IF NOT EXISTS stock_movements (
-    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku             VARCHAR(50)    NOT NULL,
-    movement_type   VARCHAR(30)    NOT NULL,
-    quantity        INTEGER        NOT NULL,
-    reference_id    UUID,
-    created_at      TIMESTAMP      NOT NULL DEFAULT now()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    sku VARCHAR(50) NOT NULL,
+    movement_type movement_type NOT NULL,
+    quantity_change INTEGER NOT NULL,
+    previous_quantity INTEGER NOT NULL CHECK (previous_quantity >= 0),
+    new_quantity INTEGER NOT NULL CHECK (new_quantity >= 0),
+    reference_id UUID,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Outbox Pattern: eventos pendientes de publicar a Kafka.
--- No se almacena el tópico porque ms-inventory siempre publica a "inventory-events".
--- El relay lo tiene como configuración fija del servicio.
 CREATE TABLE IF NOT EXISTS outbox_events (
-    id              UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- aggregate_id: ID de la entidad raíz que generó el evento.
-    -- En ms-inventory se usa el SKU (texto) como partition key de Kafka,
-    -- pero aquí se almacena como texto para soportar ambos formatos.
-    aggregate_id    VARCHAR(50)    NOT NULL,
-    event_type      VARCHAR(100)   NOT NULL,
-    payload         JSONB          NOT NULL,
-    created_at      TIMESTAMP      NOT NULL DEFAULT now(),
-    published       BOOLEAN        NOT NULL DEFAULT FALSE,
-    published_at    TIMESTAMP
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    event_type VARCHAR(100) NOT NULL,
+    topic VARCHAR(100) NOT NULL DEFAULT 'inventory-events',
+    payload JSONB NOT NULL,
+    partition_key VARCHAR(100),
+    status outbox_status NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Idempotencia
 CREATE TABLE IF NOT EXISTS processed_events (
-    event_id        UUID           PRIMARY KEY,
-    processed_at    TIMESTAMP      NOT NULL DEFAULT now()
+    event_id UUID PRIMARY KEY,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_stock_sku               ON stock (sku);
-CREATE INDEX IF NOT EXISTS idx_reservations_order       ON stock_reservations (order_id);
-CREATE INDEX IF NOT EXISTS idx_reservations_status      ON stock_reservations (status);
-CREATE INDEX IF NOT EXISTS idx_reservations_expires     ON stock_reservations (expires_at) WHERE status = 'ACTIVE';
-CREATE INDEX IF NOT EXISTS idx_movements_sku            ON stock_movements (sku);
-CREATE INDEX IF NOT EXISTS idx_outbox_unpublished       ON outbox_events (published) WHERE published = FALSE;
+CREATE INDEX IF NOT EXISTS idx_stock_sku ON stock (sku);
 
--- ═══════════════════════════════════════════════════
--- Seed data: productos de prueba
--- ═══════════════════════════════════════════════════
-INSERT INTO stock (id, sku, quantity) VALUES
-    (gen_random_uuid(), 'KB-MECH-001', 50),
-    (gen_random_uuid(), 'MS-WIRE-002', 120),
-    (gen_random_uuid(), 'MN-UW-003',  15),
-    (gen_random_uuid(), 'GPU-RTX-004', 8),
-    (gen_random_uuid(), 'RAM-DDR5-005', 60)
-ON CONFLICT (sku) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_reservations_status_expires ON stock_reservations (status, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_reservations_sku_order ON stock_reservations (sku, order_id, status);
+
+CREATE INDEX IF NOT EXISTS idx_movements_sku_created ON stock_movements (sku, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox_events (status, created_at);
+
+-- Seed data
+INSERT INTO
+    stock (id, sku, product_id, quantity)
+VALUES (
+        gen_random_uuid (),
+        'KB-MECH-001',
+        gen_random_uuid (),
+        50
+    ),
+    (
+        gen_random_uuid (),
+        'MS-WIRE-002',
+        gen_random_uuid (),
+        120
+    ),
+    (
+        gen_random_uuid (),
+        'MN-UW-003',
+        gen_random_uuid (),
+        15
+    ),
+    (
+        gen_random_uuid (),
+        'GPU-RTX-004',
+        gen_random_uuid (),
+        8
+    ),
+    (
+        gen_random_uuid (),
+        'RAM-DDR5-005',
+        gen_random_uuid (),
+        60
+    ) ON CONFLICT (sku) DO NOTHING;
