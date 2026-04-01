@@ -11,7 +11,7 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 - **Reserva**: Bloqueo temporal de una cantidad de stock asociada a una orden de compra, con expiración de 15 minutos y estados PENDING, CONFIRMED, EXPIRED o RELEASED
 - **Lock_Pesimista**: Mecanismo de bloqueo a nivel de fila en PostgreSQL 17 mediante `SELECT ... FOR UPDATE` que previene race conditions durante la reserva de stock
 - **Movimiento_De_Stock**: Registro de auditoría en la tabla `stock_movements` que documenta cada cambio en el stock con tipo, cantidad, referencia y razón
-- **Tipo_Movimiento**: Enumeración de tipos de movimiento: MANUAL_ADJUSTMENT, ORDER_RESERVE, ORDER_CONFIRM, RESERVATION_RELEASE, PRODUCT_CREATION
+- **Tipo_Movimiento**: Enumeración de tipos de movimiento: RESTOCK, SHRINKAGE, ORDER_RESERVE, ORDER_CONFIRM, RESERVATION_RELEASE, PRODUCT_CREATION
 - **Outbox_Events**: Tabla PostgreSQL donde se insertan eventos de dominio atómicamente dentro de la misma transacción que la escritura de negocio, para ser publicados a Kafka por un relay asíncrono
 - **Processed_Events**: Tabla PostgreSQL que almacena el eventId de cada evento consumido para garantizar idempotencia y evitar procesamiento duplicado
 - **Evento_De_Dominio**: Mensaje publicado al tópico `inventory-events` de Kafka con sobre estándar (eventId, eventType, timestamp, source, correlationId, payload)
@@ -35,7 +35,7 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 2. THE Controlador_REST SHALL validar que el campo quantity esté presente y sea un entero no negativo mediante Bean Validation
 3. WHEN el Administrador envía una cantidad que resultaría en un available_quantity negativo (quantity < reserved_quantity), THE Controlador_REST SHALL rechazar la solicitud con código HTTP 409 (Conflict) y un mensaje indicando que la cantidad no puede ser menor que la cantidad reservada
 4. WHEN el Administrador intenta actualizar el Stock de un SKU que no existe, THE Controlador_REST SHALL retornar código HTTP 404 con un mensaje descriptivo
-5. WHEN el Stock se actualiza exitosamente, THE ms-inventory SHALL registrar un Movimiento_De_Stock de tipo MANUAL_ADJUSTMENT con la cantidad anterior, la cantidad nueva y la razón proporcionada por el Administrador
+5. WHEN el Stock se actualiza exitosamente, THE ms-inventory SHALL registrar un Movimiento_De_Stock de tipo RESTOCK (si la cantidad aumenta) o SHRINKAGE (si la cantidad disminuye) con la cantidad anterior, la cantidad nueva y la razón proporcionada por el Administrador
 6. WHEN el Stock se actualiza exitosamente, THE ms-inventory SHALL insertar un Evento_De_Dominio de tipo StockUpdated en la tabla Outbox_Events dentro de la misma transacción de base de datos
 7. WHEN el available_quantity resultante es menor o igual al Umbral_Crítico después de la actualización, THE ms-inventory SHALL insertar un Evento_De_Dominio adicional de tipo StockDepleted en la tabla Outbox_Events dentro de la misma transacción
 8. THE ms-inventory SHALL utilizar control de concurrencia optimista (campo version) para prevenir actualizaciones perdidas en el ajuste manual de stock

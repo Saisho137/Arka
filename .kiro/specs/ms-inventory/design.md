@@ -149,7 +149,7 @@ sequenceDiagram
         UseCase->>UseCase: Validar quantity >= reserved_quantity
         UseCase->>PG: UPDATE stock SET quantity = ?, version = version+1 WHERE sku = ? AND version = ?
         alt version match
-            UseCase->>PG: INSERT INTO stock_movements (MANUAL_ADJUSTMENT)
+            UseCase->>PG: INSERT INTO stock_movements (RESTOCK o SHRINKAGE)
             UseCase->>Outbox: INSERT StockUpdated event (PENDING)
             opt available_quantity <= threshold
                 UseCase->>Outbox: INSERT StockDepleted event (PENDING)
@@ -287,7 +287,7 @@ public interface ProcessedEventRepository {
 
 | Caso de Uso                    | Responsabilidad                                                                                                                                                                                        | Ports Usados                                                                                                                    |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `UpdateStockUseCase`           | Actualiza quantity con lock optimista (version), registra movimiento MANUAL_ADJUSTMENT, emite StockUpdated + StockDepleted si aplica                                                                   | `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                                                           |
+| `UpdateStockUseCase`           | Actualiza quantity con lock optimista (version), registra movimiento RESTOCK o SHRINKAGE según dirección del cambio, emite StockUpdated + StockDepleted si aplica                                      | `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                                                           |
 | `GetStockUseCase`              | Consulta stock por SKU                                                                                                                                                                                 | `StockRepository`                                                                                                               |
 | `GetStockHistoryUseCase`       | Lista movimientos paginados por SKU ordenados por fecha desc                                                                                                                                           | `StockMovementRepository`                                                                                                       |
 | `ReserveStockUseCase`          | Lock pesimista, verifica disponibilidad, crea reserva PENDING con TTL 15min, registra movimiento ORDER_RESERVE, emite StockReserved/StockReserveFailed + StockDepleted. Idempotente por (sku, orderId) | `StockRepository`, `StockReservationRepository`, `StockMovementRepository`, `OutboxEventRepository`                             |
@@ -494,7 +494,7 @@ public record StockMovement(
 
 // com.arka.model.movement.MovementType
 public enum MovementType {
-    MANUAL_ADJUSTMENT, ORDER_RESERVE, ORDER_CONFIRM, RESERVATION_RELEASE, PRODUCT_CREATION
+    RESTOCK, SHRINKAGE, ORDER_RESERVE, ORDER_CONFIRM, RESERVATION_RELEASE, PRODUCT_CREATION
 }
 ```
 
@@ -666,7 +666,7 @@ _Para cualquier_ registro de stock y cualquier operación (actualización manual
 
 ### Propiedad 4: Operaciones producen movimientos correctos
 
-_Para cualquier_ operación exitosa que modifique el stock (actualización manual, reserva, liberación por expiración, liberación por cancelación, creación por ProductCreated), debe existir un registro en `stock_movements` con el `movement_type` correspondiente (MANUAL_ADJUSTMENT, ORDER_RESERVE, RESERVATION_RELEASE, PRODUCT_CREATION), `previous_quantity` y `new_quantity` correctos, y `reference_id` cuando aplique.
+_Para cualquier_ operación exitosa que modifique el stock (actualización manual, reserva, liberación por expiración, liberación por cancelación, creación por ProductCreated), debe existir un registro en `stock_movements` con el `movement_type` correspondiente (RESTOCK, SHRINKAGE, ORDER_RESERVE, RESERVATION_RELEASE, PRODUCT_CREATION), `previous_quantity` y `new_quantity` correctos, y `reference_id` cuando aplique.
 
 **Valida: Requisitos 1.5, 4.6, 5.3, 6.3, 7.2**
 

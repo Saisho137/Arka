@@ -6,28 +6,28 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 
 ## Tareas
 
-- [ ] 1. Definir entidades de dominio, Value Objects, enums y excepciones
-  - [ ] 1.1 Crear el record `Stock` en `domain/model`
+- [x] 1. Definir entidades de dominio, Value Objects, enums y excepciones
+  - [x] 1.1 Crear el record `Stock` en `domain/model`
     - Crear `Stock` record con compact constructor: validación de `sku` y `productId` no nulos, `quantity >= 0`, `reservedQuantity >= 0`, cálculo de `availableQuantity = quantity - reservedQuantity`, default `version = 1`
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.stock`
     - _Requisitos: 1.1, 2.1, 10.1, 10.2, 10.3_
 
-  - [ ] 1.2 Crear el record `StockReservation` y enum `ReservationStatus` en `domain/model`
+  - [x] 1.2 Crear el record `StockReservation` y enum `ReservationStatus` en `domain/model`
     - Crear `StockReservation` record con compact constructor: validación de `sku` y `orderId` no nulos, `quantity > 0`, defaults para `status` (PENDING), `createdAt` (Instant.now()), `expiresAt` (Instant.now() + 15 min)
     - Crear enum `ReservationStatus` con valores: `PENDING`, `CONFIRMED`, `EXPIRED`, `RELEASED`
     - Usar `@Builder(toBuilder = true)` en el record
     - Paquete: `com.arka.model.reservation`
     - _Requisitos: 4.2, 4.3, 5.1, 5.2_
 
-  - [ ] 1.3 Crear el record `StockMovement` y enum `MovementType` en `domain/model`
+  - [x] 1.3 Crear el record `StockMovement` y enum `MovementType` en `domain/model`
     - Crear `StockMovement` record con compact constructor: validación de `sku` y `movementType` no nulos, default `createdAt` (Instant.now())
-    - Crear enum `MovementType` con valores: `MANUAL_ADJUSTMENT`, `ORDER_RESERVE`, `ORDER_CONFIRM`, `RESERVATION_RELEASE`, `PRODUCT_CREATION`
+    - Crear enum `MovementType` con valores: `RESTOCK`, `SHRINKAGE`, `ORDER_RESERVE`, `ORDER_CONFIRM`, `RESERVATION_RELEASE`, `PRODUCT_CREATION`
     - Usar `@Builder(toBuilder = true)` en el record
     - Paquete: `com.arka.model.movement`
     - _Requisitos: 1.5, 3.4, 4.6, 5.3, 6.3, 7.2_
 
-  - [ ] 1.4 Crear el record `OutboxEvent` y records de eventos de dominio en `domain/model`
+  - [x] 1.4 Crear el record `OutboxEvent` y records de eventos de dominio en `domain/model`
     - Crear `OutboxEvent` record con defaults en compact constructor: `id` (UUID.randomUUID()), `status` ("PENDING"), `topic` ("inventory-events"), `createdAt` (Instant.now())
     - Crear `DomainEventEnvelope` record con campos: eventId, eventType, timestamp, source ("ms-inventory"), correlationId, payload
     - Crear payloads: `StockReservedPayload`, `StockReserveFailedPayload`, `StockReleasedPayload`, `StockUpdatedPayload`, `StockDepletedPayload`
@@ -35,7 +35,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Paquete: `com.arka.model.outbox`
     - _Requisitos: 8.1, 8.2, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12_
 
-  - [ ] 1.5 Crear jerarquía de excepciones de dominio
+  - [x] 1.5 Crear jerarquía de excepciones de dominio
     - Crear `DomainException` abstracta con `getHttpStatus()` y `getCode()`
     - Crear subclases: `StockNotFoundException` (404, STOCK_NOT_FOUND), `InsufficientStockException` (409, INSUFFICIENT_STOCK), `InvalidStockQuantityException` (409, INVALID_STOCK_QUANTITY), `OptimisticLockException` (409, CONCURRENT_MODIFICATION), `StockConstraintViolationException` (409, STOCK_CONSTRAINT_VIOLATION)
     - Paquete: `com.arka.model.commons.exception`
@@ -103,7 +103,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Validar que `newQuantity >= reservedQuantity` (si no, lanzar `InvalidStockQuantityException`)
     - Actualizar con lock optimista: `stockRepository.updateQuantity(sku, newQuantity, expectedVersion)`
     - Si version mismatch, lanzar `OptimisticLockException`
-    - Registrar `StockMovement` de tipo `MANUAL_ADJUSTMENT` con previous/new quantity y razón
+    - Registrar `StockMovement` de tipo `RESTOCK` (si cantidad aumenta) o `SHRINKAGE` (si cantidad disminuye) con previous/new quantity y razón
     - Insertar `OutboxEvent` de tipo `StockUpdated` en la misma transacción
     - Si `availableQuantity <= threshold`, insertar `OutboxEvent` adicional de tipo `StockDepleted`
     - _Requisitos: 1.1, 1.3, 1.5, 1.6, 1.7, 1.8_
@@ -117,7 +117,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Valida: Requisitos 1.8**
 
   - [ ]\* 4.4 Escribir test de propiedad para operaciones producen movimientos
-    - **Propiedad 4: Operaciones producen movimientos correctos** — Generar actualizaciones manuales exitosas y verificar que existe un `StockMovement` con `MANUAL_ADJUSTMENT`, previous/new quantity correctos
+    - **Propiedad 4: Operaciones producen movimientos correctos** — Generar actualizaciones manuales exitosas y verificar que existe un `StockMovement` con `RESTOCK` o `SHRINKAGE` según dirección del cambio, previous/new quantity correctos
     - **Valida: Requisitos 1.5**
 
   - [ ]\* 4.5 Escribir test de propiedad para eventos outbox en actualización

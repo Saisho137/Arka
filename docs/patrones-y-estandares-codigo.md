@@ -613,6 +613,13 @@ void shouldCreateOrder_whenStockAvailable() {
 | Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                        | Evitar interferir con el EventLoop                                                         |
 | switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura | Compile-time safety vs runtime extensibility                                               |
 | Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                      | Centralizado, reactivo, sin try/catch en publishers                                        |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                        | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                            |
+| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                       | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                       |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta y `with*()` en el record                      | La entidad controla su propia consistencia sin depender del UseCase                        |
+| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                            | Interfaces no pueden extender clases; necesita `super(message)` compartido                 |
+| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`          | Trazabilidad sin depender de campos auxiliares como `reason`                               |
+| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                      | Validación en BD, mejor rendimiento, documentación implícita                               |
+| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                           | Estructura consistente; modificar contenido, nunca crear carpetas manualmente              |
 
 ---
 
@@ -725,7 +732,161 @@ public class CreateOrderUseCase {
 }
 ```
 
-## Apéndice B: Ejemplo Completo — Strategy + Factory con Supplier
+## Apéndice B: Estándares Adicionales Definidos Durante Implementación
+
+### B.1 Validación en Compact Constructors: `Objects.requireNonNull`
+
+Para precondiciones de nullidad en records, usar `Objects.requireNonNull(field, "message")` en lugar de `if (field == null) throw new IllegalArgumentException(...)`. Es el estándar de la JDK para precondiciones de nullidad, más conciso y semánticamente correcto (lanza `NullPointerException`, que es el contrato de Java para argumentos nulos).
+
+```java
+// ✅ Idiomático — Objects.requireNonNull
+public record Stock(UUID id, String sku, UUID productId, int quantity) {
+    public Stock {
+        Objects.requireNonNull(sku, "sku is required");
+        Objects.requireNonNull(productId, "productId is required");
+        if (quantity < 0) throw new IllegalArgumentException("quantity must be >= 0");
+    }
+}
+
+// ❌ Verbose — if/throw manual para nulls
+public record Stock(UUID id, String sku, UUID productId, int quantity) {
+    public Stock {
+        if (sku == null) throw new IllegalArgumentException("sku is required");
+    }
+}
+```
+
+### B.2 Timestamps: `Instant` sobre `LocalDateTime`
+
+Usar `Instant` para todos los campos de fecha/hora que se persisten en `TIMESTAMP WITH TIME ZONE` de PostgreSQL. `LocalDateTime` no tiene zona horaria, lo que causa bugs en entornos multi-región. `Instant` representa un punto absoluto en el tiempo (UTC), que es exactamente lo que `TIMESTAMPTZ` almacena.
+
+| Tipo              | Zona horaria | Columna SQL                  | Uso                                    |
+| ----------------- | ------------ | ---------------------------- | -------------------------------------- |
+| `Instant`         | UTC absoluto | `TIMESTAMP WITH TIME ZONE`   | Persistencia, eventos, auditoría       |
+| `LocalDateTime`   | Sin zona     | `TIMESTAMP` (sin time zone)  | Solo si la zona es irrelevante (raro)  |
+
+### B.3 Reglas de Dominio en Records
+
+Los records pueden y deben contener lógica de dominio que la entidad controla sin necesidad de UseCase. Esto incluye:
+
+- **Invariantes** en el compact constructor (validaciones que siempre deben cumplirse)
+- **Campos calculados** (e.g., `availableQuantity = quantity - reservedQuantity`)
+- **Métodos de consulta** que responden preguntas sobre el estado de la entidad
+- **Métodos `with*()`** para copias inmutables con mutaciones comunes
+
+```java
+@Builder(toBuilder = true)
+public record Stock(UUID id, String sku, UUID productId, int quantity,
+                    int reservedQuantity, int availableQuantity, Instant updatedAt, long version) {
+    public Stock {
+        // Invariantes
+        Objects.requireNonNull(sku, "sku is required");
+        if (reservedQuantity > quantity) {
+            throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
+        }
+        // Campo calculado
+        availableQuantity = quantity - reservedQuantity;
+        // Default condicional
+        version = version > 0 ? version : 1;
+    }
+
+    // Métodos de dominio — la entidad responde preguntas sobre sí misma
+    public boolean canReserve(int requestedQuantity) { return availableQuantity >= requestedQuantity; }
+    public boolean isBelowThreshold(int threshold) { return availableQuantity <= threshold; }
+    public boolean canUpdateQuantityTo(int newQuantity) { return newQuantity >= reservedQuantity; }
+}
+```
+
+### B.4 Excepciones de Dominio: Abstract Class (no Interface)
+
+`DomainException` es una clase abstracta que extiende `RuntimeException`, no una interfaz. Razones:
+
+1. Necesita extender `RuntimeException` para integrarse con `@ControllerAdvice` y el mecanismo de excepciones de Java
+2. Una interfaz no puede extender una clase
+3. La clase abstracta permite compartir el constructor `super(message)` y forzar la implementación de `getHttpStatus()` y `getCode()`
+
+```java
+public abstract class DomainException extends RuntimeException {
+    protected DomainException(String message) { super(message); }
+    public abstract int getHttpStatus();
+    public abstract String getCode();
+}
+
+public class StockNotFoundException extends DomainException {
+    public StockNotFoundException(String sku) { super("Stock not found for SKU: " + sku); }
+    @Override public int getHttpStatus() { return 404; }
+    @Override public String getCode() { return "STOCK_NOT_FOUND"; }
+}
+```
+
+### B.5 Enums Descriptivos con Trazabilidad
+
+Los enums de dominio deben ser autoexplicativos. Cada valor debe indicar exactamente qué operación representa, sin depender de campos auxiliares como `reason` para entender el movimiento.
+
+```java
+// ✅ Descriptivo — cada valor es autoexplicativo
+public enum MovementType {
+    RESTOCK,              // Ingreso de mercancía a bodega
+    SHRINKAGE,            // Reducción por merma, daño o ajuste
+    ORDER_RESERVE,        // Reserva asociada a una orden
+    ORDER_CONFIRM,        // Confirmación de orden
+    RESERVATION_RELEASE,  // Liberación de reserva
+    PRODUCT_CREATION      // Stock inicial al crear producto
+}
+
+// ❌ Genérico — requiere campo "reason" para entender qué pasó
+public enum MovementType {
+    MANUAL_ADJUSTMENT  // ¿Fue restock? ¿Fue merma? No se sabe sin leer "reason"
+}
+```
+
+### B.6 PostgreSQL ENUMs Sincronizados con Java
+
+Para campos con valores finitos y conocidos, usar `CREATE TYPE ... AS ENUM` en PostgreSQL en lugar de `VARCHAR`. Ventajas:
+
+- Validación a nivel de BD (rechaza valores inválidos)
+- Mejor rendimiento (almacenamiento interno como entero)
+- Documentación implícita del esquema
+- Sincronización explícita con los enums de Java
+
+Los valores del ENUM de PostgreSQL deben coincidir exactamente con los valores del enum de Java (case-sensitive).
+
+```sql
+-- Sincronizado con com.arka.model.stockmovement.MovementType
+CREATE TYPE movement_type AS ENUM (
+    'RESTOCK', 'SHRINKAGE', 'ORDER_RESERVE', 'ORDER_CONFIRM',
+    'RESERVATION_RELEASE', 'PRODUCT_CREATION'
+);
+
+CREATE TABLE stock_movements (
+    movement_type  movement_type NOT NULL,  -- ✅ ENUM, no VARCHAR
+    ...
+);
+```
+
+### B.7 Scaffold Bancolombia: Siempre Usar para Generar Componentes
+
+Todos los componentes del microservicio (modelos, use cases, driven adapters, entry points) deben generarse con el plugin Scaffold Bancolombia. Una vez generado el boilerplate, se modifica el contenido respetando la estructura de paquetes y archivos del plugin.
+
+```bash
+# Generar modelo (entidad + gateway interface)
+./gradlew generateModel --name=Stock
+
+# Generar caso de uso
+./gradlew generateUseCase --name=UpdateStock
+
+# Generar driven adapter
+./gradlew generateDrivenAdapter --type=r2dbc
+
+# Generar entry point
+./gradlew generateEntryPoint --type=webflux
+```
+
+**Regla:** Nunca crear manualmente las carpetas o archivos que el scaffold genera. Modificar solo el contenido.
+
+---
+
+## Apéndice C: Ejemplo Completo — Strategy + Factory con Supplier
 
 ```java
 // Strategy interface (domain)
