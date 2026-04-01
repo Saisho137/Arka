@@ -3,28 +3,39 @@ set -euo pipefail
 
 STACK_NAME="arka-infra-stack"
 TEMPLATE_FILE="$(dirname "$0")/infra.yaml"
-LOCALSTACK_ENDPOINT="http://localhost:4566"
 REGION="us-east-1"
 
 # ── Variables de entorno (inyectadas desde .env via Docker Compose) ──
 DB_USER="$POSTGRES_USER"
 DB_PASSWORD="$POSTGRES_PASSWORD"
+
+# PostgreSQL databases
 DB_ORDERS_NAME="$POSTGRES_ORDERS_DB"
-DB_ORDERS_PORT="$POSTGRES_ORDERS_PORT"
 DB_INVENTORY_NAME="$POSTGRES_INVENTORY_DB"
-DB_INVENTORY_PORT="$POSTGRES_INVENTORY_PORT"
 DB_PAYMENT_NAME="$POSTGRES_PAYMENT_DB"
-DB_PAYMENT_PORT="$POSTGRES_PAYMENT_PORT"
+DB_REPORTER_NAME="$POSTGRES_REPORTER_DB"
+DB_SHIPPING_NAME="$POSTGRES_SHIPPING_DB"
+DB_PROVIDER_NAME="$POSTGRES_PROVIDER_DB"
+
+# MongoDB
+MONGO_USR="$MONGO_USER"
+MONGO_PWD="$MONGO_PASSWORD"
+
+# Kafka
 KAFKA_BOOTSTRAP="$KAFKA_BOOTSTRAP_SERVERS"
-MS_ORDERS_URL="http://$MS_ORDERS_HOST:$MS_ORDERS_PORT"
 
+# Microservices hosts
+MS_ORDER_URL="http://$MS_ORDER_HOST:$MS_ORDER_PORT"
+MS_CATALOG_URL="http://$MS_CATALOG_HOST:$MS_CATALOG_PORT"
+MS_INVENTORY_URL="http://$MS_INVENTORY_HOST:$MS_INVENTORY_PORT"
+MS_CART_URL="http://$MS_CART_HOST:$MS_CART_PORT"
+
+echo "═══════════════════════════════════════════"
 echo "Desplegando stack CloudFormation: $STACK_NAME"
+echo "═══════════════════════════════════════════"
 
-# aws s3 ls --endpoint-url http://localhost:4566
-
-
-# Desplegar (o actualizar) el stack con variables de entorno
-aws cloudformation deploy \
+# Desplegar el stack con todas las variables
+awslocal cloudformation deploy \
   --stack-name "$STACK_NAME" \
   --template-file "$TEMPLATE_FILE" \
   --region "$REGION" \
@@ -34,47 +45,84 @@ aws cloudformation deploy \
     pDbPassword="$DB_PASSWORD" \
     pDbOrdersHost=arka-db-orders \
     pDbOrdersName="$DB_ORDERS_NAME" \
-    pDbOrdersPort="$DB_ORDERS_PORT" \
+    pDbOrdersPort=5432 \
     pDbInventoryHost=arka-db-inventory \
     pDbInventoryName="$DB_INVENTORY_NAME" \
-    pDbInventoryPort="$DB_INVENTORY_PORT" \
+    pDbInventoryPort=5432 \
     pDbPaymentHost=arka-db-payment \
     pDbPaymentName="$DB_PAYMENT_NAME" \
-    pDbPaymentPort="$DB_PAYMENT_PORT" \
+    pDbPaymentPort=5432 \
+    pDbReporterHost=arka-db-reporter \
+    pDbReporterName="$DB_REPORTER_NAME" \
+    pDbReporterPort=5432 \
+    pDbShippingHost=arka-db-shipping \
+    pDbShippingName="$DB_SHIPPING_NAME" \
+    pDbShippingPort=5432 \
+    pDbProviderHost=arka-db-provider \
+    pDbProviderName="$DB_PROVIDER_NAME" \
+    pDbProviderPort=5432 \
+    pMongoHost=arka-mongodb \
+    pMongoPort=27017 \
+    pMongoUser="$MONGO_USR" \
+    pMongoPassword="$MONGO_PWD" \
+    pRedisHost=arka-redis \
+    pRedisPort=6379 \
     pKafkaBootstrapServers="$KAFKA_BOOTSTRAP" \
-    pOrdersServiceHost="$MS_ORDERS_URL" \
+    pOrderServiceHost="$MS_ORDER_URL" \
+    pCatalogServiceHost="$MS_CATALOG_URL" \
+    pInventoryServiceHost="$MS_INVENTORY_URL" \
+    pCartServiceHost="$MS_CART_URL" \
   --no-fail-on-empty-changeset
-  --endpoint-url=http://localhost:4566
 
 echo ""
 echo "═══════════════════════════════════════════"
 echo "Stack desplegado exitosamente"
 echo "═══════════════════════════════════════════"
 
+# ═══════════════════════════════════════════════════
+# Verificar SES — Identidad de correo para ms-notifications
+# ═══════════════════════════════════════════════════
+echo ""
+echo "Configurando SES (identidad de correo)..."
+awslocal ses verify-email-identity \
+  --email-address "noreply@arka.com" \
+  --region "$REGION" 2>/dev/null || true
+
+echo "SES identidad verificada: noreply@arka.com"
+
+# ═══════════════════════════════════════════════════
 # Mostrar outputs del stack
+# ═══════════════════════════════════════════════════
 echo ""
 echo "Outputs del Stack:"
-aws cloudformation describe-stacks \
+awslocal cloudformation describe-stacks \
   --stack-name "$STACK_NAME" \
   --region "$REGION" \
   --query 'Stacks[0].Outputs' \
   --output table
-  --endpoint-url=http://localhost:4566
 
 # Verificar secretos creados
 echo ""
 echo "Secretos creados en Secrets Manager:"
-aws secretsmanager list-secrets \
+awslocal secretsmanager list-secrets \
   --region "$REGION" \
   --query 'SecretList[].Name' \
   --output table
-  --endpoint-url=http://localhost:4566
 
-# Verificar API Gateway v1 (REST API)
+# Verificar API Gateway
 echo ""
 echo "REST APIs creadas en API Gateway:"
-aws apigateway get-rest-apis \
+awslocal apigateway get-rest-apis \
   --region "$REGION" \
   --query 'items[].{Name:name, Id:id}' \
   --output table
-  --endpoint-url=http://localhost:4566
+
+# Verificar S3
+echo ""
+echo "Buckets S3 creados:"
+awslocal s3 ls --region "$REGION"
+
+echo ""
+echo "═══════════════════════════════════════════"
+echo "Infraestructura Arka lista"
+echo "═══════════════════════════════════════════"

@@ -1,6 +1,7 @@
 services:
   # ═══════════════════════════════════════════════════
-  # PostgreSQL 17 — Database per Service (3 instancias)
+  # PostgreSQL — Database per Service (6 instancias)
+  # ms-order, ms-inventory, ms-payment, ms-reporter, ms-shipping, ms-provider
   # ═══════════════════════════════════════════════════
   postgres-orders:
     image: postgres:17-alpine
@@ -15,7 +16,8 @@ services:
       - postgres-orders-data:/var/lib/postgresql/data
       - ./postgresql-scripts/init_orders.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arka -d db_orders"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_ORDERS_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,7 +37,11 @@ services:
       - postgres-inventory-data:/var/lib/postgresql/data
       - ./postgresql-scripts/init_inventory.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arka -d db_inventory"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_INVENTORY_DB}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,7 +61,83 @@ services:
       - postgres-payment-data:/var/lib/postgresql/data
       - ./postgresql-scripts/init_payment.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U arka -d db_payment"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_PAYMENT_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  postgres-reporter:
+    image: postgres:17-alpine
+    container_name: arka-db-reporter
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_REPORTER_DB}
+    ports:
+      - "${POSTGRES_REPORTER_PORT}:5432"
+    volumes:
+      - postgres-reporter-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_reporter.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_REPORTER_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  postgres-shipping:
+    image: postgres:17-alpine
+    container_name: arka-db-shipping
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_SHIPPING_DB}
+    ports:
+      - "${POSTGRES_SHIPPING_PORT}:5432"
+    volumes:
+      - postgres-shipping-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_shipping.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_SHIPPING_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  postgres-provider:
+    image: postgres:17-alpine
+    container_name: arka-db-provider
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_PROVIDER_DB}
+    ports:
+      - "${POSTGRES_PROVIDER_PORT}:5432"
+    volumes:
+      - postgres-provider-data:/var/lib/postgresql/data
+      - ./postgresql-scripts/init_provider.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_PROVIDER_DB}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,7 +145,46 @@ services:
       - arka-network
 
   # ═══════════════════════════════════════════════════
-  # Kafka — Message Broker (KRaft Mode)
+  # MongoDB — ms-catalog, ms-cart, ms-notifications
+  # ═══════════════════════════════════════════════════
+  mongodb:
+    image: mongo:7-jammy
+    container_name: arka-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # Redis — Cache-Aside para ms-catalog
+  # ═══════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: arka-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # Kafka — Message Broker (KRaft Mode, sin ZooKeeper)
   # ═══════════════════════════════════════════════════
   kafka:
     image: confluentinc/cp-kafka:8.0.4
@@ -98,8 +219,29 @@ services:
     networks:
       - arka-network
 
+  # Inicialización de tópicos: 1 tópico por Bounded Context
+  kafka-init:
+    image: confluentinc/cp-kafka:8.0.4
+    container_name: arka-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic product-events   --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic inventory-events --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic order-events     --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic cart-events      --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic payment-events   --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic shipping-events  --partitions 3 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic provider-events  --partitions 3 --replication-factor 1 &&
+      echo 'Todos los tópicos creados exitosamente'
+      "
+    networks:
+      - arka-network
+
   # ═══════════════════════════════════════════════════
-  # KafkaUI — Visualización de mensajes en Kafka
+  # Kafka UI — Visualización de mensajes
   # ═══════════════════════════════════════════════════
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -115,16 +257,21 @@ services:
       - arka-network
 
   # ═══════════════════════════════════════════════════
-  # LocalStack — AWS Simulado (Secrets Manager + API Gateway)
+  # LocalStack — AWS Simulado (Secrets Manager + API Gateway + S3 + SES)
   # ═══════════════════════════════════════════════════
   localstack:
     image: localstack/localstack:latest
     container_name: arka-localstack
     ports:
-      - "${LOCALSTACK_PORT}:${LOCALSTACK_PORT}"
+      - "4566:4566"
+      - "4510-4559:4510-4559"
     environment:
-      - DEBUG=0
-      - SERVICES=secretsmanager,apigateway,cloudformation
+      - SERVICES=secretsmanager,apigateway,cloudformation,s3,ses
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DEFAULT_REGION=us-east-1
+      - CFN_IGNORE_UNSUPPORTED_RESOURCE_TYPES=1
+      - LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT=1
     env_file:
       - .env
     volumes:
@@ -133,13 +280,7 @@ services:
       - ./localstack/bootstrap.sh:/etc/localstack/init/ready.d/bootstrap.sh
       - "/var/run/docker.sock:/var/run/docker.sock"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "curl",
-          "-f",
-          "http://localhost:${LOCALSTACK_PORT}/_localstack/health",
-        ]
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -149,38 +290,40 @@ services:
   # ═══════════════════════════════════════════════════
   # Traefik — Load Balancer Dinámico
   # ═══════════════════════════════════════════════════
-  traefik:
-    image: traefik:v3.6.9
-    container_name: arka-traefik
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "80:80" # Tráfico Web
-      - "8090:8080" # Dashboard
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    networks:
-      - arka-network
+  # traefik:
+  #   image: traefik:v3.6.9
+  #   container_name: arka-traefik
+  #   command:
+  #     - "--api.insecure=true"
+  #     - "--providers.docker=true"
+  #     - "--providers.docker.exposedbydefault=false"
+  #     - "--entrypoints.web.address=:80"
+  #   ports:
+  #     - "80:80"      # Tráfico Web
+  #     - "8090:8080"  # Dashboard
+  #   volumes:
+  #     - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  #   networks:
+  #     - arka-network
 
   # ═══════════════════════════════════════════════════
-  # MsOrders — Microservicio de Órdenes
+  # FASE 1: Núcleo Transaccional B2B
   # ═══════════════════════════════════════════════════
-  ms-orders:
+
+  # ── ms-catalog (Reactivo) — Catálogo + Reseñas (MongoDB + Redis) ──
+  ms-catalog:
     build:
-      context: ./ms-orders
+      context: ./ms-catalog
       dockerfile: deployment/Dockerfile
-      args:
-        - PORT=${MS_ORDERS_PORT}
-    container_name: arka-ms-orders
+    container_name: arka-ms-catalog
     ports:
-      - "${MS_ORDERS_PORT}:${MS_ORDERS_PORT}"
+      - "${MS_CATALOG_PORT}:${MS_CATALOG_PORT}"
     env_file:
       - .env
     depends_on:
-      postgres-orders:
+      mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       localstack:
         condition: service_healthy
@@ -192,7 +335,287 @@ services:
           "CMD",
           "curl",
           "-f",
-          "http://localhost:${MS_ORDERS_PORT}/actuator/health",
+          "http://localhost:${MS_CATALOG_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ── ms-inventory (Reactivo) — Stock, Reservas, Locks (PostgreSQL R2DBC) ──
+  ms-inventory:
+    build:
+      context: ./ms-inventory
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-inventory
+    ports:
+      - "${MS_INVENTORY_PORT}:${MS_INVENTORY_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-inventory:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_INVENTORY_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ── ms-order (Reactivo) — Orquestador Saga (PostgreSQL R2DBC + gRPC) ──
+  ms-order:
+    build:
+      context: ./ms-order
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-order
+    ports:
+      - "${MS_ORDER_PORT}:${MS_ORDER_PORT}"
+    environment:
+      - MS_INVENTORY_HOST=${MS_INVENTORY_HOST}
+      - MS_INVENTORY_PORT=${MS_INVENTORY_PORT}
+      - MS_PAYMENT_HOST=${MS_PAYMENT_HOST}
+      - MS_PAYMENT_PORT=${MS_PAYMENT_PORT}
+    env_file:
+      - .env
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      ms-inventory:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_ORDER_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ── ms-notifications (Reactivo) — Correos via AWS SES (MongoDB) ──
+  ms-notifications:
+    build:
+      context: ./ms-notifications
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-notifications
+    ports:
+      - "${MS_NOTIFICATIONS_PORT}:${MS_NOTIFICATIONS_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_NOTIFICATIONS_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # FASE 2: Autogestión B2B y Cierre Financiero
+  # ═══════════════════════════════════════════════════
+
+  # ── ms-cart (Reactivo) — Carritos temporales (MongoDB) ──
+  ms-cart:
+    build:
+      context: ./ms-cart
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-cart
+    ports:
+      - "${MS_CART_PORT}:${MS_CART_PORT}"
+    environment:
+      - MS_CATALOG_HOST=${MS_CATALOG_HOST}
+      - MS_CATALOG_PORT=${MS_CATALOG_PORT}
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      ms-catalog:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_CART_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ── ms-payment (Reactivo) — ACL Pasarelas de Pago (PostgreSQL R2DBC) ──
+  ms-payment:
+    build:
+      context: ./ms-payment
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-payment
+    ports:
+      - "${MS_PAYMENT_PORT}:${MS_PAYMENT_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-payment:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_PAYMENT_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # FASE 3: Analítica y Logística
+  # ═══════════════════════════════════════════════════
+
+  # ── ms-reporter (Imperativo / Virtual Threads) — CQRS + Event Sourcing (PostgreSQL JDBC + S3) ──
+  ms-reporter:
+    build:
+      context: ./ms-reporter
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-reporter
+    ports:
+      - "${MS_REPORTER_PORT}:${MS_REPORTER_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-reporter:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_REPORTER_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ── ms-shipping (Reactivo) — ACL Logística (PostgreSQL R2DBC) ──
+  ms-shipping:
+    build:
+      context: ./ms-shipping
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-shipping
+    ports:
+      - "${MS_SHIPPING_PORT}:${MS_SHIPPING_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-shipping:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_SHIPPING_PORT}/actuator/health",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    networks:
+      - arka-network
+
+  # ═══════════════════════════════════════════════════
+  # FASE 4: Abastecimiento
+  # ═══════════════════════════════════════════════════
+
+  # ── ms-provider (Reactivo) — ACL Proveedores (PostgreSQL R2DBC) ──
+  ms-provider:
+    build:
+      context: ./ms-provider
+      dockerfile: deployment/Dockerfile
+    container_name: arka-ms-provider
+    ports:
+      - "${MS_PROVIDER_PORT}:${MS_PROVIDER_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      postgres-provider:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MS_PROVIDER_PORT}/actuator/health",
         ]
       interval: 15s
       timeout: 5s
@@ -209,4 +632,9 @@ volumes:
   postgres-orders-data:
   postgres-inventory-data:
   postgres-payment-data:
+  postgres-reporter-data:
+  postgres-shipping-data:
+  postgres-provider-data:
+  mongodb-data:
+  redis-data:
   localstack-data:

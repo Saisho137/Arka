@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Arka Lab - Infraestructura completa (Secrets + API Gateway)"
+Description: "Arka - Infraestructura completa (Secrets + API Gateway + S3 + SES)"
 
 Parameters:
   pEnvironment:
@@ -8,73 +8,122 @@ Parameters:
     AllowedValues: [dev, staging, prod]
     Description: Entorno de despliegue
 
-  pOrdersServiceHost:
-    Type: String
-    Default: "http://ms-orders:8081"
-    Description: Host interno del Orders Service
-
-  # ── Credenciales de BD (inyectadas desde .env) ──
+  # ── Credenciales de BD PostgreSQL ──
   pDbUser:
     Type: String
     Default: arka
-    Description: Usuario de PostgreSQL 17
-
   pDbPassword:
     Type: String
     NoEcho: true
     Default: arkaSecret2025
-    Description: Contraseña de PostgreSQL 17
 
+  # ── PostgreSQL: ms-order ──
   pDbOrdersHost:
     Type: String
     Default: arka-db-orders
-    Description: Hostname del contenedor PostgreSQL 17 de orders
-
   pDbOrdersName:
     Type: String
     Default: db_orders
-    Description: Nombre de la base de datos de orders
-
   pDbOrdersPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL 17 de orders
 
+  # ── PostgreSQL: ms-inventory ──
   pDbInventoryHost:
     Type: String
     Default: arka-db-inventory
-    Description: Hostname del contenedor PostgreSQL 17 de inventory
-
   pDbInventoryName:
     Type: String
     Default: db_inventory
-    Description: Nombre de la base de datos de inventory
-
   pDbInventoryPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL 17 de inventory
 
+  # ── PostgreSQL: ms-payment ──
   pDbPaymentHost:
     Type: String
     Default: arka-db-payment
-    Description: Hostname del contenedor PostgreSQL 17 de payment
-
   pDbPaymentName:
     Type: String
     Default: db_payment
-    Description: Nombre de la base de datos de payment
-
   pDbPaymentPort:
     Type: Number
     Default: 5432
-    Description: Puerto interno de PostgreSQL 17 de payment
 
-  # ── Kafka (inyectado desde .env) ──
+  # ── PostgreSQL: ms-reporter ──
+  pDbReporterHost:
+    Type: String
+    Default: arka-db-reporter
+  pDbReporterName:
+    Type: String
+    Default: db_reporter
+  pDbReporterPort:
+    Type: Number
+    Default: 5432
+
+  # ── PostgreSQL: ms-shipping ──
+  pDbShippingHost:
+    Type: String
+    Default: arka-db-shipping
+  pDbShippingName:
+    Type: String
+    Default: db_shipping
+  pDbShippingPort:
+    Type: Number
+    Default: 5432
+
+  # ── PostgreSQL: ms-provider ──
+  pDbProviderHost:
+    Type: String
+    Default: arka-db-provider
+  pDbProviderName:
+    Type: String
+    Default: db_provider
+  pDbProviderPort:
+    Type: Number
+    Default: 5432
+
+  # ── MongoDB ──
+  pMongoHost:
+    Type: String
+    Default: arka-mongodb
+  pMongoPort:
+    Type: Number
+    Default: 27017
+  pMongoUser:
+    Type: String
+    Default: arka
+  pMongoPassword:
+    Type: String
+    NoEcho: true
+    Default: arkaSecret2025
+
+  # ── Redis ──
+  pRedisHost:
+    Type: String
+    Default: arka-redis
+  pRedisPort:
+    Type: Number
+    Default: 6379
+
+  # ── Kafka ──
   pKafkaBootstrapServers:
     Type: String
     Default: "kafka:29092"
-    Description: Kafka bootstrap servers internos
+
+  # ── Hosts de microservicios (para API Gateway) ──
+  pOrderServiceHost:
+    Type: String
+    Default: "http://arka-ms-order:8081"
+  pCatalogServiceHost:
+    Type: String
+    Default: "http://arka-ms-catalog:8084"
+  pInventoryServiceHost:
+    Type: String
+    Default: "http://arka-ms-inventory:8082"
+  pCartServiceHost:
+    Type: String
+    Default: "http://arka-ms-cart:8086"
 
 Resources:
   # ═══════════════════════════════════════════════════
@@ -84,7 +133,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-orders-creds"
-      Description: "Credenciales de PostgreSQL 17 para ms-orders"
+      Description: "Credenciales PostgreSQL para ms-order"
       SecretString: !Sub |
         {
           "host": "${pDbOrdersHost}",
@@ -95,7 +144,7 @@ Resources:
         }
       Tags:
         - Key: Service
-          Value: ms-orders
+          Value: ms-order
         - Key: Environment
           Value: !Ref pEnvironment
 
@@ -103,7 +152,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-inventory-creds"
-      Description: "Credenciales de PostgreSQL 17 para ms-inventory"
+      Description: "Credenciales PostgreSQL para ms-inventory"
       SecretString: !Sub |
         {
           "host": "${pDbInventoryHost}",
@@ -122,7 +171,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/db-payment-creds"
-      Description: "Credenciales de PostgreSQL 17 para ms-payment"
+      Description: "Credenciales PostgreSQL para ms-payment"
       SecretString: !Sub |
         {
           "host": "${pDbPaymentHost}",
@@ -137,25 +186,119 @@ Resources:
         - Key: Environment
           Value: !Ref pEnvironment
 
-  # Secreto compartido: configuración de Kafka (todos los servicios)
+  rReporterDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-reporter-creds"
+      Description: "Credenciales PostgreSQL para ms-reporter (JDBC)"
+      SecretString: !Sub |
+        {
+          "host": "${pDbReporterHost}",
+          "port": ${pDbReporterPort},
+          "database": "${pDbReporterName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-reporter
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  rShippingDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-shipping-creds"
+      Description: "Credenciales PostgreSQL para ms-shipping"
+      SecretString: !Sub |
+        {
+          "host": "${pDbShippingHost}",
+          "port": ${pDbShippingPort},
+          "database": "${pDbShippingName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-shipping
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  rProviderDbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/db-provider-creds"
+      Description: "Credenciales PostgreSQL para ms-provider"
+      SecretString: !Sub |
+        {
+          "host": "${pDbProviderHost}",
+          "port": ${pDbProviderPort},
+          "database": "${pDbProviderName}",
+          "username": "${pDbUser}",
+          "password": "${pDbPassword}"
+        }
+      Tags:
+        - Key: Service
+          Value: ms-provider
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  # ── MongoDB: secreto compartido (ms-catalog, ms-cart, ms-notifications) ──
+  rMongoSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/mongo-creds"
+      Description: "Credenciales MongoDB compartidas"
+      SecretString: !Sub |
+        {
+          "host": "${pMongoHost}",
+          "port": ${pMongoPort},
+          "username": "${pMongoUser}",
+          "password": "${pMongoPassword}",
+          "authSource": "admin"
+        }
+      Tags:
+        - Key: Component
+          Value: mongodb
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  # ── Redis: secreto para ms-catalog ──
+  rRedisSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${pEnvironment}/arka/redis-config"
+      Description: "Configuración Redis para Cache-Aside"
+      SecretString: !Sub |
+        {
+          "host": "${pRedisHost}",
+          "port": ${pRedisPort}
+        }
+      Tags:
+        - Key: Component
+          Value: redis
+        - Key: Environment
+          Value: !Ref pEnvironment
+
+  # ── Kafka: configuración compartida ──
   rKafkaSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "${pEnvironment}/arka/kafka-config"
-      Description: "Configuración de Kafka compartida entre todos los microservicios"
+      Description: "Configuración Kafka compartida entre todos los microservicios"
       SecretString: !Sub |
         {
           "bootstrapServers": "${pKafkaBootstrapServers}",
           "groupId": "arka-saga-group",
           "autoOffsetReset": "earliest",
           "topics": {
-            "orderCreated": "order-created",
-            "stockReserved": "stock-reserved",
-            "stockReleased": "stock-released",
-            "paymentProcessed": "payment-processed",
-            "paymentFailed": "payment-failed",
-            "orderConfirmed": "order-confirmed",
-            "orderCancelled": "order-cancelled"
+            "productEvents": "product-events",
+            "inventoryEvents": "inventory-events",
+            "orderEvents": "order-events",
+            "cartEvents": "cart-events",
+            "paymentEvents": "payment-events",
+            "shippingEvents": "shipping-events",
+            "providerEvents": "provider-events"
           }
         }
       Tags:
@@ -165,26 +308,85 @@ Resources:
           Value: !Ref pEnvironment
 
   # ═══════════════════════════════════════════════════
+  # S3 — Bucket para reportes de ms-reporter
+  # ═══════════════════════════════════════════════════
+  rReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "arka-reports-${pEnvironment}"
+
+  # ═══════════════════════════════════════════════════
+  # SES — Verificación de identidad para ms-notifications
+  # ═══════════════════════════════════════════════════
+  # Nota: En LocalStack, SES se configura via CLI en bootstrap.sh
+
+  # ═══════════════════════════════════════════════════
   # API Gateway v1 (REST API) — Punto de entrada HTTP
   # ═══════════════════════════════════════════════════
   rArkaRestApi:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: arka-api
-      Description: "API Gateway REST para el ecosistema Arka"
+      Description: "API Gateway REST para el ecosistema Arka (Zero Trust)"
       EndpointConfiguration:
         Types:
           - REGIONAL
 
-  # Recurso /orders
-  rOrdersResource:
+  # ── /api ──
+  rApiResource:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref rArkaRestApi
       ParentId: !GetAtt rArkaRestApi.RootResourceId
+      PathPart: api
+
+  # ── /api/v1 ──
+  rV1Resource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rApiResource
+      PathPart: v1
+
+  # ── /api/v1/products → ms-catalog ──
+  rProductsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rV1Resource
+      PathPart: products
+
+  rProductsProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rProductsResource
+      PathPart: "{proxy+}"
+
+  rProductsProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ResourceId: !Ref rProductsProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: ANY
+        Uri: !Sub "${pCatalogServiceHost}/api/v1/products/{proxy}"
+        RequestParameters:
+          integration.request.path.proxy: "method.request.path.proxy"
+
+  # ── /api/v1/orders → ms-order ──
+  rOrdersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rV1Resource
       PathPart: orders
 
-  # Recurso /orders/{proxy+} (catch-all)
   rOrdersProxyResource:
     Type: AWS::ApiGateway::Resource
     Properties:
@@ -192,7 +394,6 @@ Resources:
       ParentId: !Ref rOrdersResource
       PathPart: "{proxy+}"
 
-  # Método ANY en /orders/{proxy+} con integración HTTP_PROXY
   rOrdersProxyMethod:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -205,54 +406,123 @@ Resources:
       Integration:
         Type: HTTP_PROXY
         IntegrationHttpMethod: ANY
-        Uri: !Sub "${pOrdersServiceHost}/{proxy}"
+        Uri: !Sub "${pOrderServiceHost}/api/v1/orders/{proxy}"
         RequestParameters:
           integration.request.path.proxy: "method.request.path.proxy"
 
-  # Deployment
+  # ── /api/v1/inventory → ms-inventory ──
+  rInventoryResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rV1Resource
+      PathPart: inventory
+
+  rInventoryProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rInventoryResource
+      PathPart: "{proxy+}"
+
+  rInventoryProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ResourceId: !Ref rInventoryProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: ANY
+        Uri: !Sub "${pInventoryServiceHost}/api/v1/inventory/{proxy}"
+        RequestParameters:
+          integration.request.path.proxy: "method.request.path.proxy"
+
+  # ── /api/v1/cart → ms-cart ──
+  rCartResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rV1Resource
+      PathPart: cart
+
+  rCartProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ParentId: !Ref rCartResource
+      PathPart: "{proxy+}"
+
+  rCartProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref rArkaRestApi
+      ResourceId: !Ref rCartProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: HTTP_PROXY
+        IntegrationHttpMethod: ANY
+        Uri: !Sub "${pCartServiceHost}/api/v1/cart/{proxy}"
+        RequestParameters:
+          integration.request.path.proxy: "method.request.path.proxy"
+
+  # ── Deployment ──
   rApiDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
+      - rProductsProxyMethod
       - rOrdersProxyMethod
+      - rInventoryProxyMethod
+      - rCartProxyMethod
     Properties:
       RestApiId: !Ref rArkaRestApi
       StageName: v1
 
 Outputs:
   oApiGatewayUrl:
-    Description: "URL del API Gateway para ms-orders"
-    Value: !Sub "https://${rArkaRestApi}.execute-api.localhost.localstack.cloud:4566/v1/orders/"
+    Description: "URL base del API Gateway"
+    Value: !Sub "https://${rArkaRestApi}.execute-api.localhost.localstack.cloud:4566/v1/"
     Export:
       Name: !Sub "${AWS::StackName}-ApiUrl"
 
-  oOrdersSecretArn:
-    Description: "ARN del secreto de db-orders"
-    Value: !Ref rOrdersDbSecret
-
-  oInventorySecretArn:
-    Description: "ARN del secreto de db-inventory"
-    Value: !Ref rInventoryDbSecret
-
-  oPaymentSecretArn:
-    Description: "ARN del secreto de db-payment"
-    Value: !Ref rPaymentDbSecret
-
-  oKafkaSecretArn:
-    Description: "ARN del secreto de configuración de Kafka"
-    Value: !Ref rKafkaSecret
-
+  # ── Secretos PostgreSQL ──
   oOrdersSecretName:
-    Description: "Nombre del secreto de db-orders"
+    Description: "Secreto de db-orders"
     Value: !Sub "${pEnvironment}/arka/db-orders-creds"
-
   oInventorySecretName:
-    Description: "Nombre del secreto de db-inventory"
+    Description: "Secreto de db-inventory"
     Value: !Sub "${pEnvironment}/arka/db-inventory-creds"
-
   oPaymentSecretName:
-    Description: "Nombre del secreto de db-payment"
+    Description: "Secreto de db-payment"
     Value: !Sub "${pEnvironment}/arka/db-payment-creds"
+  oReporterSecretName:
+    Description: "Secreto de db-reporter"
+    Value: !Sub "${pEnvironment}/arka/db-reporter-creds"
+  oShippingSecretName:
+    Description: "Secreto de db-shipping"
+    Value: !Sub "${pEnvironment}/arka/db-shipping-creds"
+  oProviderSecretName:
+    Description: "Secreto de db-provider"
+    Value: !Sub "${pEnvironment}/arka/db-provider-creds"
 
+  # ── Secretos compartidos ──
+  oMongoSecretName:
+    Description: "Secreto de MongoDB"
+    Value: !Sub "${pEnvironment}/arka/mongo-creds"
+  oRedisSecretName:
+    Description: "Secreto de Redis"
+    Value: !Sub "${pEnvironment}/arka/redis-config"
   oKafkaSecretName:
-    Description: "Nombre del secreto de Kafka (para referencia en los microservicios)"
+    Description: "Secreto de Kafka"
     Value: !Sub "${pEnvironment}/arka/kafka-config"
+
+  # ── S3 ──
+  oReportsBucketName:
+    Description: "Bucket S3 para reportes"
+    Value: !Ref rReportsBucket
