@@ -14,7 +14,7 @@ public record StockMovement(
         int quantityChange,
         int previousQuantity,
         int newQuantity,
-        UUID referenceId,
+        UUID orderId,
         String reason,
         Instant createdAt
 ) {

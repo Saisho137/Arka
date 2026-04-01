@@ -472,7 +472,7 @@ public record StockReservation(
 // com.arka.model.reservation.ReservationStatus
 public enum ReservationStatus { PENDING, CONFIRMED, EXPIRED, RELEASED }
 
-// com.arka.model.movement.StockMovement
+// com.arka.model.stockmovement.StockMovement
 @Builder(toBuilder = true)
 public record StockMovement(
     UUID id,
@@ -481,13 +481,15 @@ public record StockMovement(
     int quantityChange,
     int previousQuantity,
     int newQuantity,
-    UUID referenceId,
+    UUID orderId,
     String reason,
     Instant createdAt
 ) {
     public StockMovement {
         Objects.requireNonNull(sku, "sku is required");
         Objects.requireNonNull(movementType, "movementType is required");
+        if (previousQuantity < 0) throw new IllegalArgumentException("previousQuantity must be >= 0");
+        if (newQuantity < 0) throw new IllegalArgumentException("newQuantity must be >= 0");
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 }
@@ -501,22 +503,33 @@ public enum MovementType {
 ### Eventos de Dominio (Records)
 
 ```java
-// com.arka.model.outbox.OutboxEvent
+// com.arka.model.outboxevent.OutboxEvent
 @Builder(toBuilder = true)
 public record OutboxEvent(
     UUID id,
-    String eventType,
-    String payload,       // JSON serializado
-    String partitionKey,  // SKU
-    String status,        // PENDING | PUBLISHED
+    EventType eventType,
+    String payload,       // JSON serializado en JSONB
+    String partitionKey,  // SKU como Kafka partition key
+    OutboxStatus status,
     Instant createdAt
 ) {
     public OutboxEvent {
+        Objects.requireNonNull(eventType, "eventType is required");
+        Objects.requireNonNull(payload, "payload is required");
+        Objects.requireNonNull(partitionKey, "partitionKey is required");
         id = id != null ? id : UUID.randomUUID();
-        status = status != null ? status : "PENDING";
+        status = status != null ? status : OutboxStatus.PENDING;
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 }
+
+// com.arka.model.outboxevent.EventType
+public enum EventType {
+    STOCK_RESERVED, STOCK_RESERVE_FAILED, STOCK_RELEASED, STOCK_UPDATED, STOCK_DEPLETED
+}
+
+// com.arka.model.outboxevent.OutboxStatus
+public enum OutboxStatus { PENDING, PUBLISHED }
 ```
 
 #### Sobre Estándar de Eventos Kafka
@@ -567,13 +580,14 @@ public record StockDepletedPayload(
 ```sql
 CREATE TABLE stock (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku                 VARCHAR(100) UNIQUE NOT NULL,
+    sku                 VARCHAR(50) UNIQUE NOT NULL,
     product_id          UUID NOT NULL,
     quantity            INTEGER NOT NULL CHECK (quantity >= 0),
     reserved_quantity   INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
     available_quantity  INTEGER GENERATED ALWAYS AS (quantity - reserved_quantity) STORED,
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    version             BIGINT NOT NULL DEFAULT 1
+    version             BIGINT NOT NULL DEFAULT 1,
+    CONSTRAINT chk_reserved_not_exceeds_quantity CHECK (reserved_quantity <= quantity)
 );
 
 CREATE INDEX idx_stock_sku ON stock(sku);
@@ -584,11 +598,11 @@ CREATE INDEX idx_stock_sku ON stock(sku);
 ```sql
 CREATE TABLE stock_reservations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku         VARCHAR(100) NOT NULL,
+    sku         VARCHAR(50) NOT NULL,
     order_id    UUID NOT NULL,
     quantity    INTEGER NOT NULL CHECK (quantity > 0),
-    status      VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    status      reservation_status NOT NULL DEFAULT 'PENDING',
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     expires_at  TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
@@ -601,12 +615,12 @@ CREATE INDEX idx_reservations_sku_order ON stock_reservations(sku, order_id, sta
 ```sql
 CREATE TABLE stock_movements (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku               VARCHAR(100) NOT NULL,
-    movement_type     VARCHAR(30) NOT NULL,
+    sku               VARCHAR(50) NOT NULL,
+    movement_type     movement_type NOT NULL,
     quantity_change   INTEGER NOT NULL,
-    previous_quantity INTEGER NOT NULL,
-    new_quantity      INTEGER NOT NULL,
-    reference_id      UUID,
+    previous_quantity INTEGER NOT NULL CHECK (previous_quantity >= 0),
+    new_quantity      INTEGER NOT NULL CHECK (new_quantity >= 0),
+    order_id          UUID,
     reason            TEXT,
     created_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -618,12 +632,12 @@ CREATE INDEX idx_movements_sku_created ON stock_movements(sku, created_at DESC);
 
 ```sql
 CREATE TABLE outbox_events (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_type  VARCHAR(50) NOT NULL,
-    payload     JSONB NOT NULL,
-    partition_key VARCHAR(100),
-    status      VARCHAR(20) NOT NULL DEFAULT 'PENDING',
-    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type    event_type NOT NULL,
+    payload       JSONB NOT NULL,
+    partition_key VARCHAR(50),
+    status        outbox_status NOT NULL DEFAULT 'PENDING',
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX idx_outbox_status_created ON outbox_events(status, created_at);

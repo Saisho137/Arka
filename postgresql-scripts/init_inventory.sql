@@ -33,6 +33,17 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN
+    CREATE TYPE event_type AS ENUM (
+        'STOCK_RESERVED',
+        'STOCK_RESERVE_FAILED',
+        'STOCK_RELEASED',
+        'STOCK_UPDATED',
+        'STOCK_DEPLETED'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 CREATE TABLE IF NOT EXISTS stock (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     sku VARCHAR(50) NOT NULL UNIQUE,
@@ -62,14 +73,14 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     quantity_change INTEGER NOT NULL,
     previous_quantity INTEGER NOT NULL CHECK (previous_quantity >= 0),
     new_quantity INTEGER NOT NULL CHECK (new_quantity >= 0),
-    reference_id UUID,
+    order_id UUID,
     reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
-    event_type VARCHAR(100) NOT NULL,
+    event_type event_type NOT NULL,
     payload JSONB NOT NULL,
     partition_key VARCHAR(50),
     status outbox_status NOT NULL DEFAULT 'PENDING',
