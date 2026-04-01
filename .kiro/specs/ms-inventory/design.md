@@ -506,7 +506,6 @@ public enum MovementType {
 public record OutboxEvent(
     UUID id,
     String eventType,
-    String topic,
     String payload,       // JSON serializado
     String partitionKey,  // SKU
     String status,        // PENDING | PUBLISHED
@@ -515,7 +514,6 @@ public record OutboxEvent(
     public OutboxEvent {
         id = id != null ? id : UUID.randomUUID();
         status = status != null ? status : "PENDING";
-        topic = topic != null ? topic : "inventory-events";
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 }
@@ -622,8 +620,8 @@ CREATE INDEX idx_movements_sku_created ON stock_movements(sku, created_at DESC);
 CREATE TABLE outbox_events (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_type  VARCHAR(50) NOT NULL,
-    topic       VARCHAR(100) NOT NULL DEFAULT 'inventory-events',
     payload     JSONB NOT NULL,
+    partition_key VARCHAR(100),
     status      VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -672,7 +670,7 @@ _Para cualquier_ operación exitosa que modifique el stock (actualización manua
 
 ### Propiedad 5: Operaciones producen eventos outbox correctos
 
-_Para cualquier_ operación exitosa que modifique el stock, debe existir al menos un evento en `outbox_events` con el `event_type` correspondiente (StockUpdated, StockReserved, StockReserveFailed, StockReleased), `status = PENDING`, `topic = inventory-events`, y partition key igual al SKU.
+_Para cualquier_ operación exitosa que modifique el stock, debe existir al menos un evento en `outbox_events` con el `event_type` correspondiente (StockUpdated, StockReserved, StockReserveFailed, StockReleased), `status = PENDING`, y partition key igual al SKU. El tópico destino (`inventory-events`) es fijo y lo determina el relay al publicar, no el record `OutboxEvent`.
 
 **Valida: Requisitos 1.6, 4.7, 4.8, 5.4, 7.3, 8.3**
 

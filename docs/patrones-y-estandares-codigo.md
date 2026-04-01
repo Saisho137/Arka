@@ -613,9 +613,9 @@ void shouldCreateOrder_whenStockAvailable() {
 | Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                        | Evitar interferir con el EventLoop                                                         |
 | switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura | Compile-time safety vs runtime extensibility                                               |
 | Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                      | Centralizado, reactivo, sin try/catch en publishers                                        |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                        | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                            |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                        | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                             |
 | Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                       | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                       |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta y `with*()` en el record                      | La entidad controla su propia consistencia sin depender del UseCase                        |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta y `with*()` en el record                       | La entidad controla su propia consistencia sin depender del UseCase                        |
 | DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                            | Interfaces no pueden extender clases; necesita `super(message)` compartido                 |
 | Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`          | Trazabilidad sin depender de campos auxiliares como `reason`                               |
 | SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                      | Validación en BD, mejor rendimiento, documentación implícita                               |
@@ -760,10 +760,10 @@ public record Stock(UUID id, String sku, UUID productId, int quantity) {
 
 Usar `Instant` para todos los campos de fecha/hora que se persisten en `TIMESTAMP WITH TIME ZONE` de PostgreSQL. `LocalDateTime` no tiene zona horaria, lo que causa bugs en entornos multi-región. `Instant` representa un punto absoluto en el tiempo (UTC), que es exactamente lo que `TIMESTAMPTZ` almacena.
 
-| Tipo              | Zona horaria | Columna SQL                  | Uso                                    |
-| ----------------- | ------------ | ---------------------------- | -------------------------------------- |
-| `Instant`         | UTC absoluto | `TIMESTAMP WITH TIME ZONE`   | Persistencia, eventos, auditoría       |
-| `LocalDateTime`   | Sin zona     | `TIMESTAMP` (sin time zone)  | Solo si la zona es irrelevante (raro)  |
+| Tipo            | Zona horaria | Columna SQL                 | Uso                                   |
+| --------------- | ------------ | --------------------------- | ------------------------------------- |
+| `Instant`       | UTC absoluto | `TIMESTAMP WITH TIME ZONE`  | Persistencia, eventos, auditoría      |
+| `LocalDateTime` | Sin zona     | `TIMESTAMP` (sin time zone) | Solo si la zona es irrelevante (raro) |
 
 ### B.3 Reglas de Dominio en Records
 

@@ -9,7 +9,6 @@ import java.util.UUID;
 public record OutboxEvent(
         UUID id,
         String eventType,
-        String topic,
         String payload,
         String partitionKey,
         String status,
@@ -18,7 +17,6 @@ public record OutboxEvent(
     public OutboxEvent {
         id = id != null ? id : UUID.randomUUID();
         status = status != null ? status : "PENDING";
-        topic = topic != null ? topic : "inventory-events";
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 }

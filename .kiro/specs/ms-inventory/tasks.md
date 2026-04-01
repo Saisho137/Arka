@@ -28,7 +28,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Requisitos: 1.5, 3.4, 4.6, 5.3, 6.3, 7.2_
 
   - [x] 1.4 Crear el record `OutboxEvent` y records de eventos de dominio en `domain/model`
-    - Crear `OutboxEvent` record con defaults en compact constructor: `id` (UUID.randomUUID()), `status` ("PENDING"), `topic` ("inventory-events"), `createdAt` (Instant.now())
+    - Crear `OutboxEvent` record con defaults en compact constructor: `id` (UUID.randomUUID()), `status` ("PENDING"), `createdAt` (Instant.now())
     - Crear `DomainEventEnvelope` record con campos: eventId, eventType, timestamp, source ("ms-inventory"), correlationId, payload
     - Crear payloads: `StockReservedPayload`, `StockReserveFailedPayload`, `StockReleasedPayload`, `StockUpdatedPayload`, `StockDepletedPayload`
     - Usar `@Builder(toBuilder = true)` en todos los records
@@ -121,7 +121,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Valida: Requisitos 1.5**
 
   - [ ]\* 4.5 Escribir test de propiedad para eventos outbox en actualización
-    - **Propiedad 5: Operaciones producen eventos outbox correctos** — Generar actualizaciones exitosas y verificar que existe un `OutboxEvent` con `StockUpdated`, status PENDING, topic `inventory-events`, partition key = SKU
+    - **Propiedad 5: Operaciones producen eventos outbox correctos** — Generar actualizaciones exitosas y verificar que existe un `OutboxEvent` con `StockUpdated`, status PENDING, partition key = SKU. El tópico destino es fijo en el relay (`inventory-events`), no en el record
     - **Valida: Requisitos 1.6**
 
   - [ ]\* 4.6 Escribir test de propiedad para StockDepleted en umbral
@@ -198,7 +198,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Tabla `stock`: id UUID PK, sku VARCHAR(100) UNIQUE NOT NULL, product_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK >= 0, reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK >= 0, available_quantity GENERATED ALWAYS AS (quantity - reserved_quantity) STORED, updated_at TIMESTAMPTZ, version BIGINT NOT NULL DEFAULT 1
     - Tabla `stock_reservations`: id UUID PK, sku VARCHAR(100) NOT NULL, order_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK > 0, status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ NOT NULL
     - Tabla `stock_movements`: id UUID PK, sku VARCHAR(100) NOT NULL, movement_type VARCHAR(30) NOT NULL, quantity_change INTEGER, previous_quantity INTEGER, new_quantity INTEGER, reference_id UUID, reason TEXT, created_at TIMESTAMPTZ
-    - Tabla `outbox_events`: id UUID PK, event_type VARCHAR(50) NOT NULL, topic VARCHAR(100) DEFAULT 'inventory-events', payload JSONB NOT NULL, partition_key VARCHAR(100), status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ
+    - Tabla `outbox_events`: id UUID PK, event_type VARCHAR(50) NOT NULL, payload JSONB NOT NULL, partition_key VARCHAR(100), status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ
     - Tabla `processed_events`: event_id UUID PK, processed_at TIMESTAMPTZ
     - Crear índices: `idx_stock_sku`, `idx_reservations_status_expires`, `idx_reservations_sku_order`, `idx_movements_sku_created`, `idx_outbox_status_created`
     - Ubicar en `applications/app-service/src/main/resources/` (schema.sql o migración Flyway)

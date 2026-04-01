@@ -1,14 +1,17 @@
 package com.arka.model.processedevent;
-import lombok.Builder;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-//import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-//@NoArgsConstructor
-@AllArgsConstructor
+import lombok.Builder;
+
+import java.time.Instant;
+import java.util.UUID;
+
 @Builder(toBuilder = true)
-public class ProcessedEvent {
+public record ProcessedEvent(
+        UUID eventId,
+        Instant processedAt
+) {
+    public ProcessedEvent {
+        java.util.Objects.requireNonNull(eventId, "eventId is required");
+        processedAt = processedAt != null ? processedAt : Instant.now();
+    }
 }
