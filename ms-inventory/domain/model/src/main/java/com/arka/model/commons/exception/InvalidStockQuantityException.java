@@ -6,6 +6,10 @@ public class InvalidStockQuantityException extends DomainException {
         super("Invalid stock quantity for SKU: " + sku + ". Quantity " + quantity + " cannot be less than reserved quantity " + reservedQuantity);
     }
 
+    public InvalidStockQuantityException(String sku, int quantity, String reason) {
+        super("Invalid stock quantity for SKU: " + sku + ". Quantity " + quantity + ": " + reason);
+    }
+
     @Override
     public int getHttpStatus() {
         return 409;

@@ -602,24 +602,24 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                   | Resolución                                                                                                 | Justificación                                                                              |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                    | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                  |
-| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                           | Optional bloquea semánticamente la cadena reactiva                                         |
-| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                    | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                        |
-| Router Functions           | **No**                                                                                                     | Complejidad sin beneficio; Spring maneja reactividad igual                                 |
-| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                             | Trazabilidad, simplicidad, compatibilidad reactiva                                         |
-| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales              | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos |
-| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                        | Evitar interferir con el EventLoop                                                         |
-| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura | Compile-time safety vs runtime extensibility                                               |
-| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                      | Centralizado, reactivo, sin try/catch en publishers                                        |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                        | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                             |
-| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                       | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                       |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta y `with*()` en el record                       | La entidad controla su propia consistencia sin depender del UseCase                        |
-| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                            | Interfaces no pueden extender clases; necesita `super(message)` compartido                 |
-| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`          | Trazabilidad sin depender de campos auxiliares como `reason`                               |
-| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                      | Validación en BD, mejor rendimiento, documentación implícita                               |
-| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                           | Estructura consistente; modificar contenido, nunca crear carpetas manualmente              |
+| Decisión                   | Resolución                                                                                                    | Justificación                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                       | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
+| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                              | Optional bloquea semánticamente la cadena reactiva                                          |
+| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                       | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
+| Router Functions           | **No**                                                                                                        | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
+| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
+| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                 | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
+| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                           | Evitar interferir con el EventLoop                                                          |
+| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura    | Compile-time safety vs runtime extensibility                                                |
+| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                         | Centralizado, reactivo, sin try/catch en publishers                                         |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                           | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
+| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                          | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
+| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                               | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
+| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`             | Trazabilidad sin depender de campos auxiliares como `reason`                                |
+| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                         | Validación en BD, mejor rendimiento, documentación implícita                                |
+| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                              | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
 
 ---
 
@@ -772,30 +772,98 @@ Los records pueden y deben contener lógica de dominio que la entidad controla s
 - **Invariantes** en el compact constructor (validaciones que siempre deben cumplirse)
 - **Campos calculados** (e.g., `availableQuantity = quantity - reservedQuantity`)
 - **Métodos de consulta** que responden preguntas sobre el estado de la entidad
+- **Métodos de mutación encapsulada** que devuelven nuevas instancias inmutables con validaciones de dominio
 - **Métodos `with*()`** para copias inmutables con mutaciones comunes
+
+#### B.3.1 Encapsulamiento de Mutaciones en Records
+
+Las entidades de dominio deben encapsular **todas las operaciones de mutación** como métodos que devuelven una nueva instancia inmutable vía `toBuilder()`. Esto garantiza que:
+
+1. **Las reglas de negocio viven en la entidad**, no en el UseCase ni en capas externas
+2. **Es imposible construir un estado inválido** — cada mutación valida internamente antes de producir la nueva instancia
+3. **Las excepciones son de dominio**, no genéricas (`IllegalArgumentException`) — cada violación de regla lanza una `DomainException` específica con HTTP status y código de error
+
+**Regla:** Nunca manipular campos de una entidad desde fuera usando `toBuilder()` directamente para operaciones que tienen reglas de negocio. Siempre usar el método de mutación encapsulada del record.
+
+```java
+// ❌ NUNCA — lógica de dominio fugada al UseCase
+Stock updated = stock.toBuilder()
+    .quantity(stock.quantity() - requested)
+    .updatedAt(Instant.now())
+    .build();
+
+// ✅ SIEMPRE — la entidad protege sus invariantes
+Stock updated = stock.decreaseBy(requested);
+```
+
+**Patrón de implementación:**
 
 ```java
 @Builder(toBuilder = true)
 public record Stock(UUID id, String sku, UUID productId, int quantity,
                     int reservedQuantity, int availableQuantity, Instant updatedAt, long version) {
     public Stock {
-        // Invariantes
+        // Invariantes en compact constructor
         Objects.requireNonNull(sku, "sku is required");
-        if (reservedQuantity > quantity) {
+        if (quantity < 0) throw new IllegalArgumentException("quantity must be >= 0");
+        if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
+        if (reservedQuantity > quantity)
             throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
-        }
         // Campo calculado
         availableQuantity = quantity - reservedQuantity;
         // Default condicional
         version = version > 0 ? version : 1;
     }
 
-    // Métodos de dominio — la entidad responde preguntas sobre sí misma
+    // --- Métodos de consulta ---
     public boolean canReserve(int requestedQuantity) { return availableQuantity >= requestedQuantity; }
     public boolean isBelowThreshold(int threshold) { return availableQuantity <= threshold; }
-    public boolean canUpdateQuantityTo(int newQuantity) { return newQuantity >= reservedQuantity; }
+
+    // --- Mutaciones encapsuladas con excepciones de dominio ---
+
+    public Stock increaseBy(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        return this.toBuilder().quantity(this.quantity + amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock decreaseBy(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > availableQuantity) throw new InsufficientStockException(sku, amount, availableQuantity);
+        return this.toBuilder().quantity(this.quantity - amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock setQuantity(int newQuantity) {
+        if (newQuantity < 0) throw new InvalidStockQuantityException(sku, newQuantity, "must be >= 0");
+        if (newQuantity < reservedQuantity)
+            throw new InvalidStockQuantityException(sku, newQuantity, reservedQuantity);
+        return this.toBuilder().quantity(newQuantity).updatedAt(Instant.now()).build();
+    }
+
+    public Stock reserve(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > availableQuantity) throw new InsufficientStockException(sku, amount, availableQuantity);
+        return this.toBuilder().reservedQuantity(this.reservedQuantity + amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock releaseReservation(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > reservedQuantity)
+            throw new ExcessiveReleaseException(sku, amount, reservedQuantity);
+        return this.toBuilder().reservedQuantity(this.reservedQuantity - amount).updatedAt(Instant.now()).build();
+    }
 }
 ```
+
+**Cuándo usar cada tipo de excepción en mutaciones:**
+
+| Violación                                           | Excepción                       | HTTP | Código                   |
+| --------------------------------------------------- | ------------------------------- | ---- | ------------------------ |
+| Cantidad solicitada > stock disponible              | `InsufficientStockException`    | 409  | `INSUFFICIENT_STOCK`     |
+| Cantidad inválida (negativa, cero cuando no aplica) | `InvalidStockQuantityException` | 409  | `INVALID_STOCK_QUANTITY` |
+| Liberación excede cantidad reservada                | `ExcessiveReleaseException`     | 409  | `EXCESSIVE_RELEASE`      |
+| Nuevo quantity < reservedQuantity                   | `InvalidStockQuantityException` | 409  | `INVALID_STOCK_QUANTITY` |
+
+> **Nota:** Este patrón aplica a cualquier entidad de dominio con reglas de negocio sobre sus campos, no solo a `Stock`. Cada microservicio debe encapsular las mutaciones de sus agregados de la misma forma.
 
 ### B.4 Excepciones de Dominio: Abstract Class (no Interface)
 

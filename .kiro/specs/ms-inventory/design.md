@@ -417,6 +417,7 @@ public class InsufficientStockException extends DomainException { /* 409, INSUFF
 public class InvalidStockQuantityException extends DomainException { /* 409, INVALID_STOCK_QUANTITY */ }
 public class OptimisticLockException extends DomainException { /* 409, CONCURRENT_MODIFICATION */ }
 public class StockConstraintViolationException extends DomainException { /* 409, STOCK_CONSTRAINT_VIOLATION */ }
+public class ExcessiveReleaseException extends DomainException { /* 409, EXCESSIVE_RELEASE */ }
 ```
 
 ---
@@ -443,8 +444,46 @@ public record Stock(
         Objects.requireNonNull(productId, "productId is required");
         if (quantity < 0) throw new IllegalArgumentException("quantity must be >= 0");
         if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
+        if (reservedQuantity > quantity)
+            throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
         availableQuantity = quantity - reservedQuantity;
         version = version > 0 ? version : 1;
+    }
+
+    // Métodos de consulta
+    public boolean canReserve(int requestedQuantity) { return availableQuantity >= requestedQuantity; }
+    public boolean isBelowThreshold(int threshold) { return availableQuantity <= threshold; }
+
+    // Mutaciones encapsuladas — devuelven nueva instancia inmutable con validaciones de dominio
+    public Stock increaseBy(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        return this.toBuilder().quantity(this.quantity + amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock decreaseBy(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > availableQuantity) throw new InsufficientStockException(sku, amount, availableQuantity);
+        return this.toBuilder().quantity(this.quantity - amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock setQuantity(int newQuantity) {
+        if (newQuantity < 0) throw new InvalidStockQuantityException(sku, newQuantity, "must be >= 0");
+        if (newQuantity < reservedQuantity)
+            throw new InvalidStockQuantityException(sku, newQuantity, reservedQuantity);
+        return this.toBuilder().quantity(newQuantity).updatedAt(Instant.now()).build();
+    }
+
+    public Stock reserve(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > availableQuantity) throw new InsufficientStockException(sku, amount, availableQuantity);
+        return this.toBuilder().reservedQuantity(this.reservedQuantity + amount).updatedAt(Instant.now()).build();
+    }
+
+    public Stock releaseReservation(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > reservedQuantity)
+            throw new ExcessiveReleaseException(sku, amount, reservedQuantity);
+        return this.toBuilder().reservedQuantity(this.reservedQuantity - amount).updatedAt(Instant.now()).build();
     }
 }
 
@@ -790,7 +829,8 @@ DomainException (abstract)
 ├── InsufficientStockException          → HTTP 409, code: INSUFFICIENT_STOCK
 ├── InvalidStockQuantityException       → HTTP 409, code: INVALID_STOCK_QUANTITY
 ├── OptimisticLockException             → HTTP 409, code: CONCURRENT_MODIFICATION
-└── StockConstraintViolationException   → HTTP 409, code: STOCK_CONSTRAINT_VIOLATION
+├── StockConstraintViolationException   → HTTP 409, code: STOCK_CONSTRAINT_VIOLATION
+└── ExcessiveReleaseException           → HTTP 409, code: EXCESSIVE_RELEASE
 ```
 
 ### GlobalExceptionHandler (`@ControllerAdvice`)

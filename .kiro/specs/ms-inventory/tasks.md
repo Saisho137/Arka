@@ -8,7 +8,9 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 
 - [x] 1. Definir entidades de dominio, Value Objects, enums y excepciones
   - [x] 1.1 Crear el record `Stock` en `domain/model`
-    - Crear `Stock` record con compact constructor: validación de `sku` y `productId` no nulos, `quantity >= 0`, `reservedQuantity >= 0`, cálculo de `availableQuantity = quantity - reservedQuantity`, default `version = 1`
+    - Crear `Stock` record con compact constructor: validación de `sku` y `productId` no nulos, `quantity >= 0`, `reservedQuantity >= 0`, `reservedQuantity <= quantity`, cálculo de `availableQuantity = quantity - reservedQuantity`, default `version = 1`
+    - Métodos de consulta: `canReserve(int)`, `isBelowThreshold(int)`
+    - Métodos de mutación encapsulada que devuelven nueva instancia inmutable: `increaseBy(int)`, `decreaseBy(int)`, `setQuantity(int)`, `reserve(int)`, `releaseReservation(int)` — cada uno valida internamente y lanza `DomainException` específica (`InsufficientStockException`, `InvalidStockQuantityException`, `ExcessiveReleaseException`)
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.stock`
     - _Requisitos: 1.1, 2.1, 10.1, 10.2, 10.3_
@@ -37,7 +39,9 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 
   - [x] 1.5 Crear jerarquía de excepciones de dominio
     - Crear `DomainException` abstracta con `getHttpStatus()` y `getCode()`
-    - Crear subclases: `StockNotFoundException` (404, STOCK_NOT_FOUND), `InsufficientStockException` (409, INSUFFICIENT_STOCK), `InvalidStockQuantityException` (409, INVALID_STOCK_QUANTITY), `OptimisticLockException` (409, CONCURRENT_MODIFICATION), `StockConstraintViolationException` (409, STOCK_CONSTRAINT_VIOLATION)
+    - Crear subclases: `StockNotFoundException` (404, STOCK_NOT_FOUND), `InsufficientStockException` (409, INSUFFICIENT_STOCK), `InvalidStockQuantityException` (409, INVALID_STOCK_QUANTITY), `OptimisticLockException` (409, CONCURRENT_MODIFICATION), `StockConstraintViolationException` (409, STOCK_CONSTRAINT_VIOLATION), `ExcessiveReleaseException` (409, EXCESSIVE_RELEASE)
+    - `InvalidStockQuantityException` soporta dos constructores: `(sku, quantity, reason)` para cantidades inválidas genéricas y `(sku, quantity, reservedQuantity)` para violación de quantity < reservedQuantity
+    - `ExcessiveReleaseException` para intentos de liberar más de lo reservado: `(sku, releaseAmount, reservedQuantity)`
     - Paquete: `com.arka.model.commons.exception`
     - _Requisitos: 1.3, 1.4, 1.8, 10.4, 11.1, 11.3_
 
