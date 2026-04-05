@@ -506,6 +506,20 @@ public record StockReservation(
         createdAt = createdAt != null ? createdAt : Instant.now();
         expiresAt = expiresAt != null ? expiresAt : Instant.now().plus(Duration.ofMinutes(15));
     }
+
+    // Métodos de consulta
+    public boolean isExpired(Instant now) { return status == PENDING && now.isAfter(expiresAt); }
+    public boolean isPending() { return status == PENDING; }
+
+    // Transiciones de estado encapsuladas — validan que el estado actual sea PENDING
+    public StockReservation expire() { assertPending("expire"); return toBuilder().status(EXPIRED).build(); }
+    public StockReservation release() { assertPending("release"); return toBuilder().status(RELEASED).build(); }
+    public StockReservation confirm() { assertPending("confirm"); return toBuilder().status(CONFIRMED).build(); }
+
+    private void assertPending(String operation) {
+        if (status != PENDING) throw new IllegalStateException(
+            "Cannot " + operation + " reservation " + id + " for SKU: " + sku + ". Current status: " + status);
+    }
 }
 
 // com.arka.model.reservation.ReservationStatus
@@ -529,8 +543,21 @@ public record StockMovement(
         Objects.requireNonNull(movementType, "movementType is required");
         if (previousQuantity < 0) throw new IllegalArgumentException("previousQuantity must be >= 0");
         if (newQuantity < 0) throw new IllegalArgumentException("newQuantity must be >= 0");
+        if (newQuantity != previousQuantity + quantityChange)
+            throw new IllegalArgumentException("Inconsistent movement: previousQuantity + quantityChange != newQuantity");
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
+
+    // Métodos de consulta
+    public boolean isStockIncrease() { return quantityChange > 0; }
+    public boolean isStockDecrease() { return quantityChange < 0; }
+
+    // Factory methods para creación semántica con validación implícita
+    public static StockMovement restock(String sku, int prevQty, int newQty, String reason) { /* ... */ }
+    public static StockMovement shrinkage(String sku, int prevQty, int newQty, String reason) { /* ... */ }
+    public static StockMovement orderReserve(String sku, int qty, int prevAvailable, UUID orderId) { /* ... */ }
+    public static StockMovement reservationRelease(String sku, int qty, int prevAvailable, UUID orderId, String reason) { /* ... */ }
+    public static StockMovement productCreation(String sku, int initialStock) { /* ... */ }
 }
 
 // com.arka.model.movement.MovementType
@@ -559,6 +586,17 @@ public record OutboxEvent(
         id = id != null ? id : UUID.randomUUID();
         status = status != null ? status : OutboxStatus.PENDING;
         createdAt = createdAt != null ? createdAt : Instant.now();
+    }
+
+    // Métodos de consulta
+    public boolean isPending() { return status == OutboxStatus.PENDING; }
+    public boolean isPublished() { return status == OutboxStatus.PUBLISHED; }
+
+    // Transición de estado encapsulada
+    public OutboxEvent markAsPublished() {
+        if (status != OutboxStatus.PENDING) throw new IllegalStateException(
+            "Cannot publish outbox event " + id + ". Current status: " + status);
+        return toBuilder().status(OutboxStatus.PUBLISHED).build();
     }
 }
 

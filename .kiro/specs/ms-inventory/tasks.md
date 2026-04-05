@@ -18,19 +18,25 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
   - [x] 1.2 Crear el record `StockReservation` y enum `ReservationStatus` en `domain/model`
     - Crear `StockReservation` record con compact constructor: validación de `sku` y `orderId` no nulos, `quantity > 0`, defaults para `status` (PENDING), `createdAt` (Instant.now()), `expiresAt` (Instant.now() + 15 min)
     - Crear enum `ReservationStatus` con valores: `PENDING`, `CONFIRMED`, `EXPIRED`, `RELEASED`
+    - Métodos de consulta: `isExpired(Instant)`, `isPending()`
+    - Transiciones de estado encapsuladas: `expire()`, `release()`, `confirm()` — cada una valida que el estado actual sea PENDING y lanza `IllegalStateException` si no lo es
     - Usar `@Builder(toBuilder = true)` en el record
     - Paquete: `com.arka.model.reservation`
     - _Requisitos: 4.2, 4.3, 5.1, 5.2_
 
   - [x] 1.3 Crear el record `StockMovement` y enum `MovementType` en `domain/model`
-    - Crear `StockMovement` record con compact constructor: validación de `sku` y `movementType` no nulos, default `createdAt` (Instant.now())
+    - Crear `StockMovement` record con compact constructor: validación de `sku` y `movementType` no nulos, `previousQuantity >= 0`, `newQuantity >= 0`, invariante de coherencia `newQuantity == previousQuantity + quantityChange`, default `createdAt` (Instant.now())
     - Crear enum `MovementType` con valores: `RESTOCK`, `SHRINKAGE`, `ORDER_RESERVE`, `ORDER_CONFIRM`, `RESERVATION_RELEASE`, `PRODUCT_CREATION`
+    - Métodos de consulta: `isStockIncrease()`, `isStockDecrease()`
+    - Factory methods estáticos para creación semántica: `restock()`, `shrinkage()`, `orderReserve()`, `reservationRelease()`, `productCreation()` — cada uno construye el movimiento con el `MovementType` correcto y calcula `quantityChange` automáticamente
     - Usar `@Builder(toBuilder = true)` en el record
     - Paquete: `com.arka.model.movement`
     - _Requisitos: 1.5, 3.4, 4.6, 5.3, 6.3, 7.2_
 
   - [x] 1.4 Crear el record `OutboxEvent` y records de eventos de dominio en `domain/model`
     - Crear `OutboxEvent` record con defaults en compact constructor: `id` (UUID.randomUUID()), `status` ("PENDING"), `createdAt` (Instant.now())
+    - Métodos de consulta: `isPending()`, `isPublished()`
+    - Transición de estado encapsulada: `markAsPublished()` — valida que el estado actual sea PENDING y lanza `IllegalStateException` si no lo es
     - Crear `DomainEventEnvelope` record con campos: eventId, eventType, timestamp, source ("ms-inventory"), correlationId, payload
     - Crear payloads: `StockReservedPayload`, `StockReserveFailedPayload`, `StockReleasedPayload`, `StockUpdatedPayload`, `StockDepletedPayload`
     - Usar `@Builder(toBuilder = true)` en todos los records

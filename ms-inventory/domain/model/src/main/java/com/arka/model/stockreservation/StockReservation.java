@@ -35,4 +35,27 @@ public record StockReservation(
     public boolean isPending() {
         return status == ReservationStatus.PENDING;
     }
+
+    public StockReservation expire() {
+        assertPending("expire");
+        return this.toBuilder().status(ReservationStatus.EXPIRED).build();
+    }
+
+    public StockReservation release() {
+        assertPending("release");
+        return this.toBuilder().status(ReservationStatus.RELEASED).build();
+    }
+
+    public StockReservation confirm() {
+        assertPending("confirm");
+        return this.toBuilder().status(ReservationStatus.CONFIRMED).build();
+    }
+
+    private void assertPending(String operation) {
+        if (status != ReservationStatus.PENDING)
+            throw new IllegalStateException(
+                    "Cannot " + operation + " reservation " + id + " for SKU: " + sku
+                            + ". Current status: " + status + ", expected: PENDING");
+
+    }
 }

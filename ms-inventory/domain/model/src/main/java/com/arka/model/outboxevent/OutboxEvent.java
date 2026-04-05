@@ -31,4 +31,12 @@ public record OutboxEvent(
     public boolean isPublished() {
         return status == OutboxStatus.PUBLISHED;
     }
+
+    public OutboxEvent markAsPublished() {
+        if (status != OutboxStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Cannot publish outbox event " + id + ". Current status: " + status + ", expected: PENDING");
+        }
+        return this.toBuilder().status(OutboxStatus.PUBLISHED).build();
+    }
 }
