@@ -390,72 +390,16 @@ Entonces, sí podrían estar juntos en un **Product Service** único. Pero dado 
 
 **Paradigma:** Reactivo (Java 21 + Spring WebFlux). 100% I/O-Bound.
 **HU cubierta:** HU1 - Registrar productos en el sistema
+**Base de Datos:** MongoDB (catalog_db) + Redis (Cache-Aside, TTL 1h)
 
-**Responsabilidades:**
+**Responsabilidades principales:**
 
-- 📦 **CRUD de productos** con atributos: SKU, nombre, descripción, precio, categoría
-- 📂 **Gestión de categorías** — CRUD básico de categorías maestras
-- ⭐ **Reseñas anidadas** — Las reseñas de productos se almacenan como subdocumentos dentro del documento de producto (no hay microservicio independiente de Recomendaciones)
-- ✅ **Validaciones de negocio:**
-  - Campos obligatorios (nombre, precio, SKU, categoría)
-  - Precio > 0
-  - SKU único en el sistema
-- 📊 **Publicación de eventos a Kafka:**
-  - `ProductCreated` → Consumido por `ms-inventory` para crear registro de stock inicial
-  - `ProductUpdated` → Informar cambios a otros servicios
-- 🔒 **Caché:** Implementa el patrón _Cache-Aside_ con Redis. Garantiza latencias <1ms para lecturas masivas.
-
-**Base de Datos:** MongoDB (catalog_db) + Redis (Cache)
-
-```text
-catalog_db (MongoDB)
-│
-├── Collection: products
-│   {
-│     _id: ObjectId,
-│     sku: "GPU-RTX4090"              (unique index),
-│     name: "NVIDIA RTX 4090",
-│     description: "GPU de alto rendimiento para gaming y IA",
-│     price: Decimal128(1599.99),
-│     category: {
-│       id: "uuid-cat-001",
-│       name: "GPUs"
-│     },
-│     active: true,
-│     reviews: [
-│       {
-│         userId: "uuid-user-001",
-│         rating: 5,
-│         comment: "Excelente producto para workstations",
-│         createdAt: ISODate("2026-01-15")
-│       }
-│     ],
-│     createdAt: ISODate("2026-01-01"),
-│     updatedAt: ISODate("2026-01-01")
-│   }
-│   Indexes:
-│     - { sku: 1 }, unique: true
-│     - { "category.id": 1 }
-│     - { active: 1, "category.id": 1 }
-│
-├── Collection: categories
-│   {
-│     _id: ObjectId,
-│     name: "GPUs"                    (unique index),
-│     description: "Tarjetas gráficas de alto rendimiento",
-│     createdAt: ISODate("2026-01-01")
-│   }
-│
-└── Collection: outbox_events
-    {
-      _id: ObjectId,
-      eventType: "ProductCreated",
-      topic: "product-events",
-      payload: { ... },
-      status: "PENDING" | "PUBLISHED",
-      createdAt: ISODate("2026-01-01")
-    }
-```
+- 📦 CRUD de productos con atributos: SKU, nombre, descripción, precio, categoría
+- 📂 Gestión de categorías maestras
+- ⭐ Reseñas anidadas como subdocumentos dentro del documento de producto en MongoDB
+- ✅ Validaciones: campos obligatorios, precio > 0, SKU único
+- 📊 Publicación de eventos a Kafka: `ProductCreated`, `ProductUpdated`, `PriceChanged`
+- 🔒 Cache-Aside con Redis: latencia <1ms para lecturas (95% cache hit), invalidación por write-through + TTL + eventos Kafka
 
 **Endpoints:**
 
@@ -469,86 +413,11 @@ catalog_db (MongoDB)
 | `POST`   | `/categories`    | ADMIN           | Crear categoría                   |
 | `GET`    | `/categories`    | CUSTOMER, ADMIN | Listar categorías                 |
 
-**Evento publicado a Kafka — `ProductCreated`:**
-
-```json
-{
-  "eventId": "uuid-event-001",
-  "eventType": "ProductCreated",
-  "timestamp": "2026-02-21T10:00:00Z",
-  "source": "ms-catalog",
-  "correlationId": "uuid-correlation",
-  "payload": {
-    "productId": "uuid-prod-001",
-    "sku": "GPU-RTX4090",
-    "name": "NVIDIA RTX 4090",
-    "price": 1599.99,
-    "initialStock": 50,
-    "categoryId": "uuid-cat-001"
-  }
-}
-```
-
-**Integración con Redis — Patrón Cache-Aside:**
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│           CATÁLOGO: PATRÓN CACHE-ASIDE                  │
-│                                                         │
-│  Cliente solicita GET /products                         │
-│          │                                              │
-│          ▼                                              │
-│  ┌──────────────────┐                                   │
-│  │   ms-catalog     │                                   │
-│  └────────┬─────────┘                                   │
-│           │                                              │
-│       1. Check Redis                                    │
-│           │                                              │
-│           ▼                                              │
-│    ┌──────────────┐      HIT (95%)                      │
-│    │    Redis     │ ───────────▶ Return <1ms            │
-│    │ (ElastiCache)│                                     │
-│    └──────┬───────┘                                     │
-│           │                                              │
-│       MISS (5%)                                         │
-│           │                                              │
-│           ▼                                              │
-│  2. Query MongoDB                                       │
-│    ┌────────────────┐                                   │
-│    │  catalog_db    │  Read ~10ms                       │
-│    │  (MongoDB)     │                                   │
-│    └────────┬───────┘                                   │
-│           │                                              │
-│       3. Store in Redis (TTL: 1h)                       │
-│           │                                              │
-│           ▼                                              │
-│    Return to client                                     │
-└─────────────────────────────────────────────────────────┘
-
-Invalidación de caché:
-  ProductCreated/Updated → Invalida key en Redis → Próxima lectura rebuilt from MongoDB
-```
-
-**Justificación de Redis en el catálogo:**
-
-| Criterio                    | MongoDB (solo)                 | MongoDB + Redis                                     |
-| --------------------------- | ------------------------------ | --------------------------------------------------- |
-| **Latencia de lectura**     | ~10-20ms (query + network)     | **<1ms** (in-memory cache) ✅                       |
-| **Throughput de lecturas**  | ~5,000 req/s                   | **10,000+ req/s** (Redis escala horizontalmente) ✅ |
-| **Carga en MongoDB**        | 100% de lecturas golpean la BD | **5% de lecturas** (solo cache misses) ✅           |
-| **Complejidad operacional** | Baja                           | Media (gestión de cache + invalidación)             |
-
-**Estrategia de invalidación:**
-
-- **Write-through:** Al crear/actualizar producto → escribe en MongoDB + invalida cache en Redis
-- **TTL:** 1 hora en Redis (auto-expiry para datos eventualmente consistentes)
-- **Eventos Kafka:** `ProductUpdated` → consumer invalida key específica en Redis
-
-**Lo que se DIFIERE para fases posteriores:**
-
-- Búsqueda con filtros dinámicos (marca, atributos técnicos) con Redis Search
-- Gestión de precios multi-moneda (COP, USD, PEN, CLP)
-- Imágenes de productos (S3 + CloudFront CDN)
+> **Documentación detallada:** El diseño completo de ms-catalog (esquema MongoDB, colecciones, estrategia de caché, eventos y plan de implementación) se encuentra en el spec del microservicio:
+>
+> - [Requisitos](../.kiro/specs/ms-catalog/requirements.md)
+> - [Diseño técnico](../.kiro/specs/ms-catalog/design.md)
+> - [Plan de tareas](../.kiro/specs/ms-catalog/tasks.md)
 
 ---
 
@@ -556,73 +425,18 @@ Invalidación de caché:
 
 **Paradigma:** Reactivo (Java 21 + Spring WebFlux + R2DBC).
 **HU cubierta:** HU2 - Actualizar stock de productos
+**Base de Datos:** PostgreSQL 17 (db_inventory) con R2DBC
 
-**Responsabilidades:**
+**Responsabilidades principales:**
 
-- 📊 **Control de stock en tiempo real** por SKU con constraint `stock >= 0` a nivel de BD
-- 🔒 **Reserva temporal de stock** con timeout de 15 minutos — Usa `SELECT ... FOR UPDATE` (lock pesimista) para prevenir race conditions de concurrencia (resuelve el problema crítico de sobreventa)
-- 📝 **Historial de cambios en stock** — Tabla `stock_movements` con trazabilidad completa (quién, cuándo, cuánto, por qué)
-- ⏰ **Liberación de reservas expiradas** — Job periódico que libera stock de reservas con más de 15 minutos
-- 🔗 **Servidor gRPC** — Expone servicio gRPC para que `ms-order` reserve stock de forma síncrona
-- 🔔 **Publicación de eventos a Kafka:**
-  - `StockReserved` → `ms-order` transiciona orden a `CONFIRMADO`
-  - `StockReserveFailed` → `ms-order` transiciona orden a `CANCELADO`
-  - `StockReleased` → Cuando se libera reserva por timeout o cancelación
-  - `StockUpdated` → Cuando admin actualiza stock manualmente
-  - `StockDepleted` → Alerta de stock bajo al alcanzar umbrales críticos (consumido por `ms-provider` para generar orden de compra automática, `ms-notifications` para alertar al admin, y `ms-reporter`)
-- 🆔 **Idempotencia:** Implementa validación estricta para ignorar eventos duplicados de Kafka, evitando doble descuento.
-
-**Base de Datos:** PostgreSQL 17 (inventory_db)
-
-```text
-inventory_db (PostgreSQL 17)
-├── stock
-│   ├── id (UUID, PK)
-│   ├── sku (VARCHAR, NOT NULL, UNIQUE)
-│   ├── product_id (UUID, NOT NULL)
-│   ├── quantity (INTEGER, NOT NULL, CHECK >= 0)  ← Constraint crítico
-│   ├── reserved_quantity (INTEGER, DEFAULT 0)
-│   ├── available_quantity (GENERATED: quantity - reserved_quantity)
-│   ├── updated_at (TIMESTAMP)
-│   └── version (BIGINT)  ← Optimistic locking adicional
-│
-├── stock_reservations
-│   ├── id (UUID, PK)
-│   ├── sku (VARCHAR, NOT NULL)
-│   ├── order_id (UUID, NOT NULL, UNIQUE per sku)
-│   ├── quantity (INTEGER, NOT NULL)
-│   ├── status (ENUM: PENDING, CONFIRMED, EXPIRED, RELEASED)
-│   ├── created_at (TIMESTAMP)
-│   └── expires_at (TIMESTAMP, DEFAULT NOW() + 15min)
-│
-├── stock_movements  ← Historial inmutable (stock_history)
-│   ├── id (UUID, PK)
-│   ├── sku (VARCHAR, NOT NULL)
-│   ├── movement_type (ENUM: MANUAL_ADJUSTMENT, ORDER_RESERVE,
-│   │                        ORDER_CONFIRM, RESERVATION_RELEASE,
-│   │                        PRODUCT_CREATION)
-│   ├── quantity_change (INTEGER, NOT NULL)  ← Positivo o negativo
-│   ├── previous_quantity (INTEGER)
-│   ├── new_quantity (INTEGER)
-│   ├── reference_id (UUID)  ← orderId o userId según contexto
-│   ├── reason (TEXT)
-│   └── created_at (TIMESTAMP)
-│
-└── outbox_events  ← Transactional Outbox
-    ├── id (UUID, PK)
-    ├── event_type (VARCHAR)
-    ├── topic (VARCHAR)
-    ├── payload (JSONB)
-    ├── status (ENUM: PENDING, PUBLISHED)
-    └── created_at (TIMESTAMP)
-```
-
-**Consumer de Eventos Kafka:**
-
-| Evento consumido | Tópico           | Acción                                                     |
-| ---------------- | ---------------- | ---------------------------------------------------------- |
-| `ProductCreated` | `product-events` | Crea registro en tabla `stock` con quantity = initialStock |
-| `OrderCancelled` | `order-events`   | Libera reserva de stock, restaura quantity                 |
+- 📊 Control de stock en tiempo real por SKU con constraints `quantity >= 0` y `reserved_quantity >= 0` a nivel de BD
+- 🔒 Reserva temporal de stock con lock pesimista (`SELECT ... FOR UPDATE`) y timeout de 15 minutos — resuelve el problema crítico #1 de Arka (sobreventa por concurrencia)
+- 📝 Historial inmutable de movimientos de stock (`stock_movements`) con trazabilidad completa
+- ⏰ Liberación automática de reservas expiradas (job periódico cada 60s)
+- 🔗 Servidor gRPC para reserva síncrona de stock desde `ms-order`
+- 🔔 Publicación de eventos a Kafka vía Transactional Outbox Pattern: `StockReserved`, `StockReserveFailed`, `StockReleased`, `StockUpdated`, `StockDepleted`
+- 🎯 Umbral de alerta de stock bajo (`depletion_threshold`) configurable por producto — cada SKU tiene su propio umbral según volumen de ventas y disponibilidad típica
+- 🆔 Idempotencia en consumidores Kafka mediante tabla `processed_events`
 
 **Endpoints:**
 
@@ -632,51 +446,24 @@ inventory_db (PostgreSQL 17)
 | `GET`  | `/inventory/{sku}`         | CUSTOMER, ADMIN | Consultar disponibilidad de un SKU |
 | `GET`  | `/inventory/{sku}/history` | ADMIN           | Ver historial de movimientos (HU2) |
 
-#### Detalle Crítico: Prevención de Sobreventa (gRPC + Lock Pesimista)
+**Eventos Kafka:**
 
-Este es el servicio que resuelve el **problema #1 de Arka** (sobreventa por concurrencia). Al recibir una solicitud síncrona (vía gRPC desde `ms-order`), abre una transacción SQL ultracorta, ejecuta el lock pesimista, descuenta el stock, inserta el evento de dominio en la tabla Outbox y cierra la conexión en milisegundos:
+| Dirección | Evento               | Tópico             | Descripción                                     |
+| --------- | -------------------- | ------------------ | ----------------------------------------------- |
+| Produce   | `StockReserved`      | `inventory-events` | Stock reservado exitosamente para una orden     |
+| Produce   | `StockReserveFailed` | `inventory-events` | Reserva fallida por stock insuficiente          |
+| Produce   | `StockReleased`      | `inventory-events` | Stock liberado por expiración o cancelación     |
+| Produce   | `StockUpdated`       | `inventory-events` | Stock actualizado manualmente por admin         |
+| Produce   | `StockDepleted`      | `inventory-events` | Alerta de stock bajo (umbral por producto)      |
+| Consume   | `ProductCreated`     | `product-events`   | Crea registro de stock inicial desde ms-catalog |
+| Consume   | `OrderCancelled`     | `order-events`     | Libera reserva de stock de orden cancelada      |
 
-```sql
-── Solicitud gRPC de ms-order llega ──
-
-BEGIN TRANSACTION;
-  SELECT * FROM stock WHERE sku = 'GPU-RTX4090' FOR UPDATE;
-  -- Lock adquirido: ningún otro thread puede modificar este row
-
-  IF available_quantity >= requested_quantity THEN
-    -- Decrementar available
-    UPDATE stock SET reserved_quantity = reserved_quantity + :qty WHERE sku = :sku;
-
-    -- Crear reserva con expiración
-    INSERT INTO stock_reservations (sku, order_id, quantity, status, expires_at)
-    VALUES (:sku, :orderId, :qty, 'PENDING', NOW() + INTERVAL '15 minutes');
-
-    -- Registrar movimiento
-    INSERT INTO stock_movements (sku, movement_type, quantity_change, ...)
-    VALUES (:sku, 'ORDER_RESERVE', -:qty, ...);
-
-    -- Guardar evento en outbox (MISMA transacción)
-    INSERT INTO outbox_events (event_type, topic, payload, status)
-    VALUES ('StockReserved', 'inventory-events', :json, 'PENDING');
-  ELSE
-    -- Stock insuficiente: rechaza la llamada gRPC inmediatamente
-    INSERT INTO outbox_events (event_type, topic, payload, status)
-    VALUES ('StockReserveFailed', 'inventory-events', :json, 'PENDING');
-  END IF;
-COMMIT;
--- Lock liberado en milisegundos
-```
-
-**Liberación de reservas expiradas:**
-
-Job periódico que ejecuta cada 60 segundos:
-
-1. Busca reservas con `expires_at < NOW()` y `status = PENDING`
-2. Para cada reserva expirada:
-   - Marca como `EXPIRED`
-   - Restaura stock (`quantity += reserved_qty`, `reserved_quantity -= reserved_qty`)
-   - Registra movimiento en `stock_movements` (tipo: `RESERVATION_RELEASE`)
-   - Publica evento `StockReleased` a Kafka (vía outbox)
+> **Documentación detallada:** El diseño completo de ms-inventory (esquema SQL, entidades de dominio, casos de uso, flujos de reserva, propiedades de correctitud y plan de implementación) se encuentra en el spec del microservicio:
+>
+> - [Requisitos](../.kiro/specs/ms-inventory/requirements.md)
+> - [Diseño técnico](../.kiro/specs/ms-inventory/design.md)
+> - [Plan de tareas](../.kiro/specs/ms-inventory/tasks.md)
+> - [Script SQL](../postgresql-scripts/init_inventory.sql)
 
 ---
 
@@ -684,87 +471,15 @@ Job periódico que ejecuta cada 60 segundos:
 
 **Paradigma:** Reactivo (Java 21 + Spring WebFlux + R2DBC).
 **HU cubierta:** HU4 - Registrar una orden de compra
+**Base de Datos:** PostgreSQL 17 (db_order) con R2DBC
 
-**Responsabilidades:**
+**Responsabilidades principales:**
 
-- 📝 **Creación de pedidos** con múltiples productos — Validación síncrona de stock vía gRPC
-- 🎯 **Máquina de estados** del pedido. Actúa como el orquestador pasivo de la **Saga Secuencial**
-- 🔄 **Flujo Interno:** Recibe la petición REST del Gateway. Llama a `ms-inventory` síncronamente por **gRPC**. Si hay stock, guarda la orden y el evento en la tabla Outbox en la misma transacción.
-- 📊 **Publicación de eventos a Kafka:**
-  - `OrderCreated` → Inicia flujo asíncrono
-  - `OrderConfirmed` → `ms-notifications` envía confirmación
-  - `OrderStatusChanged` → `ms-notifications` envía actualización
-  - `OrderCancelled` → `ms-inventory` libera stock + `ms-notifications` notifica
-
-**Estados del pedido (Fase 1 - MVP):**
-
-| Estado              | Descripción                                                   |
-| ------------------- | ------------------------------------------------------------- |
-| `PENDIENTE_RESERVA` | Estado efímero en memoria mientras se verifica stock vía gRPC |
-| `CONFIRMADO`        | Stock reservado. Pago B2B offline (facturación 30-60 días)    |
-| `EN_DESPACHO`       | Admin marca como despachado                                   |
-| `ENTREGADO`         | Admin confirma recepción por almacén B2B                      |
-| `CANCELADO`         | Fallo (stock insuficiente) o cancelación manual               |
-
-**Estados adicionales (Fase 2 - con `ms-payment`):**
-
-| Estado           | Descripción                                               |
-| ---------------- | --------------------------------------------------------- |
-| `PENDIENTE_PAGO` | Stock bloqueado. Orden aguarda validación de `ms-payment` |
-
-> En Fase 2, el flujo incorpora `PENDIENTE_PAGO` entre la reserva de stock y la confirmación: `PENDIENTE_RESERVA` → `PENDIENTE_PAGO` → `CONFIRMADO`.
-
-**Base de Datos:** PostgreSQL 17 (order_db)
-
-```text
-order_db (PostgreSQL 17)
-├── orders
-│   ├── id (UUID, PK)
-│   ├── customer_id (UUID, NOT NULL)
-│   ├── status (ENUM: PENDIENTE_RESERVA, PENDIENTE_PAGO, CONFIRMADO,
-│   │                  EN_DESPACHO, ENTREGADO, CANCELADO)
-│   ├── total_amount (DECIMAL(12,2))
-│   ├── customer_email (VARCHAR, NOT NULL)  ← Para notificaciones
-│   ├── shipping_address (TEXT)
-│   ├── notes (TEXT)
-│   ├── created_at (TIMESTAMP)
-│   └── updated_at (TIMESTAMP)
-│
-├── order_items
-│   ├── id (UUID, PK)
-│   ├── order_id (UUID, FK → orders.id)
-│   ├── product_id (UUID, NOT NULL)
-│   ├── sku (VARCHAR, NOT NULL)
-│   ├── product_name (VARCHAR)  ← Snapshot al momento de compra
-│   ├── quantity (INTEGER, NOT NULL, CHECK > 0)
-│   ├── unit_price (DECIMAL(12,2), NOT NULL)
-│   └── subtotal (DECIMAL(12,2), GENERATED: quantity * unit_price)
-│
-├── order_state_history  ← Auditoría de estados
-│   ├── id (UUID, PK)
-│   ├── order_id (UUID, FK → orders.id)
-│   ├── previous_status (VARCHAR)
-│   ├── new_status (VARCHAR, NOT NULL)
-│   ├── changed_by (UUID)  ← userId del que hizo el cambio
-│   ├── reason (TEXT)
-│   └── created_at (TIMESTAMP)
-│
-└── outbox_events  ← Transactional Outbox
-    ├── id (UUID, PK)
-    ├── event_type (VARCHAR)
-    ├── topic (VARCHAR)
-    ├── payload (JSONB)
-    ├── status (ENUM: PENDING, PUBLISHED)
-    └── created_at (TIMESTAMP)
-```
-
-**Consumer de Eventos Kafka:**
-
-| Evento consumido     | Tópico            | Acción                                                                |
-| -------------------- | ----------------- | --------------------------------------------------------------------- |
-| `PaymentProcessed`   | `payment-events`  | Transiciona orden a `CONFIRMADO` (Fase 2)                             |
-| `PaymentFailed`      | `payment-events`  | Transiciona a `CANCELADO`, publica `ReleaseStock` (Fase 2)            |
-| `ShippingDispatched` | `shipping-events` | Actualiza orden con datos de tracking del operador logístico (Fase 3) |
+- 📝 Creación de pedidos con múltiples productos — validación síncrona de stock vía gRPC a `ms-inventory`
+- 🎯 Máquina de estados del pedido: `PENDIENTE_RESERVA` → `CONFIRMADO` → `EN_DESPACHO` → `ENTREGADO` (o `CANCELADO`). Fase 2 agrega `PENDIENTE_PAGO`
+- 🔄 Orquestador pasivo de la Saga Secuencial (Catálogo → Inventario → Pago)
+- 📊 Publicación de eventos a Kafka: `OrderCreated`, `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`
+- 📋 Auditoría de transiciones de estado en tabla `order_state_history`
 
 **Endpoints:**
 
@@ -776,46 +491,11 @@ order_db (PostgreSQL 17)
 | `PUT`  | `/orders/{id}/status` | ADMIN           | Cambiar estado (dispatch, deliver)                 |
 | `PUT`  | `/orders/{id}/cancel` | CUSTOMER, ADMIN | Cancelar orden (solo si PENDIENTE_PAGO/CONFIRMADO) |
 
-**Request para crear orden (HU4):**
-
-```json
-{
-  "customerId": "uuid-customer-001",
-  "customerEmail": "almacen-bogota@email.com",
-  "shippingAddress": "Cra 7 #32-16, Bogotá, Colombia",
-  "items": [
-    {
-      "productId": "uuid-prod-001",
-      "sku": "GPU-RTX4090",
-      "quantity": 5
-    },
-    {
-      "productId": "uuid-prod-002",
-      "sku": "RAM-DDR5-32GB",
-      "quantity": 20
-    }
-  ],
-  "notes": "Entregar en horario laboral"
-}
-```
-
-**Response (202 Accepted):**
-
-```json
-{
-  "orderId": "uuid-order-001",
-  "status": "CONFIRMADO",
-  "message": "Orden registrada. Stock reservado exitosamente.",
-  "items": [
-    { "sku": "GPU-RTX4090", "quantity": 5, "unitPrice": 1599.99 },
-    { "sku": "RAM-DDR5-32GB", "quantity": 20, "unitPrice": 89.99 }
-  ],
-  "totalAmount": 9799.75,
-  "createdAt": "2026-02-21T10:00:00Z"
-}
-```
-
-> **Nota:** Se responde `202 Accepted` porque la validación síncrona de stock por gRPC es inmediata, pero los procesos asíncronos posteriores (notificaciones, eventos) aún están en cola. En Fase 2 con `ms-payment`, la respuesta será `PENDIENTE_PAGO` y el cliente consultará el estado con `GET /orders/{id}`.
+> **Documentación detallada:** El diseño completo de ms-order (esquema SQL, máquina de estados, flujo de Saga, eventos y plan de implementación) se encuentra en el spec del microservicio:
+>
+> - [Requisitos](../.kiro/specs/ms-order/requirements.md)
+> - [Diseño técnico](../.kiro/specs/ms-order/design.md)
+> - [Plan de tareas](../.kiro/specs/ms-order/tasks.md)
 
 ---
 
@@ -823,87 +503,31 @@ order_db (PostgreSQL 17)
 
 **Paradigma:** Reactivo (Java 21 + Spring WebFlux).
 **HU cubierta:** HU6 - Notificación de cambio de estado del pedido
-
-**Responsabilidades:**
-
-- 📧 **Envío de emails transaccionales** mediante AWS SES para cada cambio de estado del pedido
-- 🔔 **Consumidor "Catch-All" pasivo.** Escucha tópicos de Kafka (`OrderConfirmed`, `ShippingDispatched`, etc.), mapea los datos a sus plantillas y dispara correos vía **AWS SES**
-- 🔄 **Estrategia de reintentos** — Implementa backoff exponencial ante fallos del servicio de email
-- 🆔 **Idempotencia garantizada** — Para evitar spam al cliente por reintentos de red, registra el `eventId` procesado en su base de datos MongoDB
-
-**Eventos cubiertos:**
-
-| Evento consumido       | Tópico             | Acción                                          |
-| ---------------------- | ------------------ | ----------------------------------------------- |
-| `OrderConfirmed`       | `order-events`     | Email de confirmación al cliente                |
-| `OrderStatusChanged`   | `order-events`     | Email con nuevo estado (dispatch/deliver)       |
-| `OrderCancelled`       | `order-events`     | Email de cancelación con motivo                 |
-| `StockDepleted`        | `inventory-events` | Email de alerta de stock bajo al admin          |
-| `ShippingDispatched`   | `shipping-events`  | Email de despacho con tracking (Fase 3)         |
-| `PurchaseOrderCreated` | `provider-events`  | Email al proveedor con orden de compra (Fase 4) |
-| `CartAbandoned`        | `cart-events`      | Email recordatorio de carrito (Fase 2)          |
-
 **Base de Datos:** MongoDB (notifications_db)
 
-```text
-notifications_db (MongoDB)
-│
-├── Collection: templates
-│   {
-│     _id: ObjectId,
-│     eventType: "OrderConfirmed",
-│     subject: "Tu pedido #{{orderId}} ha sido confirmado",
-│     bodyTemplate: "<html>...",
-│     active: true,
-│     createdAt: ISODate("2026-01-01")
-│   }
-│
-└── Collection: notification_history
-    {
-      _id: ObjectId,
-      eventId: "uuid-event-001"       (unique index — idempotency),
-      eventType: "OrderConfirmed",
-      orderId: "uuid-order-001",
-      customerEmail: "almacen@empresa.com",
-      status: "SENT" | "FAILED",
-      processedAt: ISODate("2026-01-15"),
-      createdAt: ISODate("2026-01-15")
-    }
-    Indexes:
-      - { eventId: 1 }, unique: true     // Garantía de idempotencia
-      - { createdAt: 1 }, expireAfterSeconds: 7776000  // TTL: 90 días
-```
+**Responsabilidades principales:**
 
-**Flujo de idempotencia:**
+- 📧 Envío de emails transaccionales mediante AWS SES para cada cambio de estado del pedido
+- 🔔 Consumidor "Catch-All" pasivo: escucha múltiples tópicos de Kafka, mapea datos a plantillas y dispara correos
+- 🔄 Reintentos con backoff exponencial ante fallos de AWS SES
+- 🆔 Idempotencia garantizada mediante unique index en `eventId` (MongoDB)
 
-```text
-1. Evento llega de Kafka (OrderConfirmed)
-   ↓
-2. MongoDB findOne({ eventId: "uuid-event-001" })
-   ↓
-3a. Documento existe → LOG "Duplicate event, skip" → FIN
-3b. Documento NO existe → Continuar
-   ↓
-4. Mapear datos a plantilla y enviar email vía AWS SES
-   ↓
-5. MongoDB insertOne({ eventId, eventType, status: "SENT", ... })
-   ↓
-6. Commit offset de Kafka
-```
+**Eventos consumidos (Fase 1):**
 
-**Justificación de MongoDB para `ms-notifications`:**
+| Evento consumido     | Tópico             | Acción                                 |
+| -------------------- | ------------------ | -------------------------------------- |
+| `OrderConfirmed`     | `order-events`     | Email de confirmación al cliente       |
+| `OrderStatusChanged` | `order-events`     | Email con nuevo estado                 |
+| `OrderCancelled`     | `order-events`     | Email de cancelación con motivo        |
+| `StockDepleted`      | `inventory-events` | Email de alerta de stock bajo al admin |
 
-- **Esquema flexible** para plantillas JSON dinámicas que varían por tipo de evento
-- **TTL Index nativo** para limpieza automática del historial (90 días) sin necesidad de jobs
-- **Unique Index** en `eventId` garantiza idempotencia a nivel de BD
-- MongoDB es ya parte del stack (`ms-catalog` lo usa), por lo que no agrega complejidad operacional adicional
+**Eventos adicionales (fases posteriores):** `ShippingDispatched` (Fase 3), `PurchaseOrderCreated` (Fase 4), `CartAbandoned` (Fase 2)
 
-**Lo que se DIFIERE para fases posteriores:**
-
-- Notificaciones SMS / Push notifications
-- Plantillas de email avanzadas con localización
-- Recordatorios de carrito abandonado (requiere `ms-cart` - Fase 2)
-- Dead Letter Queue para eventos fallidos tras reintentos
+> **Documentación detallada:** El diseño completo de ms-notifications (esquema MongoDB, plantillas, flujo de idempotencia y plan de implementación) se encuentra en el spec del microservicio:
+>
+> - [Requisitos](../.kiro/specs/ms-notifications/requirements.md)
+> - [Diseño técnico](../.kiro/specs/ms-notifications/design.md)
+> - [Plan de tareas](../.kiro/specs/ms-notifications/tasks.md)
 
 ---
 
