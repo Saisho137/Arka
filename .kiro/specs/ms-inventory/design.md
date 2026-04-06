@@ -33,13 +33,9 @@ graph TB
     end
 
     subgraph "Use Cases (domain/usecase)"
-        USU[UpdateStockUseCase]
-        GSU[GetStockUseCase]
-        GHU[GetStockHistoryUseCase]
-        RSU[ReserveStockUseCase]
-        ERU[ExpireReservationsUseCase]
-        PCU[ProcessProductCreatedUseCase]
-        OCU[ProcessOrderCancelledUseCase]
+        SU[StockUseCase]
+        SRU[StockReservationUseCase]
+        ORU[OutboxRelayUseCase]
     end
 
     subgraph "Domain Model (domain/model)"
@@ -71,17 +67,13 @@ graph TB
         Kafka[Apache Kafka]
     end
 
-    SC --> USU & GSU & GHU
-    GS --> RSU
-    KC --> PCU & OCU
+    SC --> SU
+    GS --> SU
+    KC --> SU & SRU
 
-    USU --> SP & SMP & OEP
-    GSU --> SP
-    GHU --> SMP
-    RSU --> SP & SRP & SMP & OEP
-    ERU --> SRP & SP & SMP & OEP
-    PCU --> SP & SMP & PEP
-    OCU --> SRP & SP & SMP & OEP & PEP
+    SU --> SP & SMP & OEP & SRP & PEP
+    SRU --> SRP & SP & SMP & OEP & PEP
+    ORU --> OEP
 
     R2S -.-> SP
     R2SR -.-> SRP
@@ -90,8 +82,8 @@ graph TB
     R2PE -.-> PEP
 
     R2S & R2SR & R2SM & R2OE & R2PE --> PG
-    KOR --> Kafka & R2OE
-    ERS --> ERU
+    KOR --> Kafka & ORU
+    ERS --> SRU
     KC --> Kafka
 ```
 
@@ -101,7 +93,7 @@ graph TB
 sequenceDiagram
     participant MsOrder as ms-order
     participant GrpcService as GrpcStockService
-    participant UseCase as ReserveStockUseCase
+    participant UseCase as StockUseCase.reserveStock
     participant PG as PostgreSQL 17
     participant Outbox as outbox_events
 
@@ -135,7 +127,7 @@ sequenceDiagram
 sequenceDiagram
     participant Admin
     participant Controller as StockController
-    participant UseCase as UpdateStockUseCase
+    participant UseCase as StockUseCase.updateStock
     participant PG as PostgreSQL 17
     participant Outbox as outbox_events
 
@@ -169,7 +161,7 @@ sequenceDiagram
 sequenceDiagram
     participant Kafka
     participant Consumer as KafkaEventConsumer
-    participant UseCase as ProcessProductCreatedUseCase
+    participant UseCase as StockUseCase.processProductCreated
     participant PG as PostgreSQL 17
 
     Kafka->>Consumer: ProductCreated event
@@ -217,7 +209,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Scheduler as ExpiredReservationScheduler (cada 60s)
-    participant UseCase as ExpireReservationsUseCase
+    participant UseCase as StockReservationUseCase.expireReservations
     participant PG as PostgreSQL 17
     participant Outbox as outbox_events
 
@@ -285,15 +277,19 @@ public interface ProcessedEventRepository {
 
 ### Capa de Dominio — Casos de Uso (`domain/usecase`)
 
-| Caso de Uso                    | Responsabilidad                                                                                                                                                                                        | Ports Usados                                                                                                                    |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `UpdateStockUseCase`           | Actualiza quantity con lock optimista (version), registra movimiento RESTOCK o SHRINKAGE según dirección del cambio, emite StockUpdated + StockDepleted si aplica                                      | `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                                                           |
-| `GetStockUseCase`              | Consulta stock por SKU                                                                                                                                                                                 | `StockRepository`                                                                                                               |
-| `GetStockHistoryUseCase`       | Lista movimientos paginados por SKU ordenados por fecha desc                                                                                                                                           | `StockMovementRepository`                                                                                                       |
-| `ReserveStockUseCase`          | Lock pesimista, verifica disponibilidad, crea reserva PENDING con TTL 15min, registra movimiento ORDER_RESERVE, emite StockReserved/StockReserveFailed + StockDepleted. Idempotente por (sku, orderId) | `StockRepository`, `StockReservationRepository`, `StockMovementRepository`, `OutboxEventRepository`                             |
-| `ExpireReservationsUseCase`    | Busca reservas PENDING expiradas, cambia a EXPIRED, decrementa reserved_quantity, registra movimiento RESERVATION_RELEASE, emite StockReleased                                                         | `StockReservationRepository`, `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                             |
-| `ProcessProductCreatedUseCase` | Verifica idempotencia, crea registro de stock inicial, registra movimiento PRODUCT_CREATION                                                                                                            | `StockRepository`, `StockMovementRepository`, `ProcessedEventRepository`                                                        |
-| `ProcessOrderCancelledUseCase` | Verifica idempotencia, libera reserva PENDING, decrementa reserved_quantity, registra movimiento RESERVATION_RELEASE, emite StockReleased                                                              | `StockReservationRepository`, `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`, `ProcessedEventRepository` |
+> **Convención:** Un UseCase por entidad de dominio principal, con múltiples métodos públicos que cubren toda la lógica de negocio de esa entidad. No se usa el patrón de un solo método `execute()` por operación.
+
+| UseCase                   | Método                            | Responsabilidad                                                                                                                                                                                        | Ports Usados                                                                                                                    |
+| ------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `StockUseCase`            | `getBySku(sku)`                   | Consulta stock por SKU, lanza `StockNotFoundException` si no existe                                                                                                                                    | `StockRepository`                                                                                                               |
+| `StockUseCase`            | `getHistory(sku, page, size)`     | Lista movimientos paginados por SKU ordenados por fecha desc                                                                                                                                           | `StockMovementRepository`                                                                                                       |
+| `StockUseCase`            | `updateStock(sku, qty, reason)`   | Actualiza quantity con lock optimista (version), registra movimiento RESTOCK o SHRINKAGE, emite StockUpdated + StockDepleted si aplica                                                                 | `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                                                           |
+| `StockUseCase`            | `reserveStock(sku, orderId, qty)` | Lock pesimista, verifica disponibilidad, crea reserva PENDING con TTL 15min, registra movimiento ORDER_RESERVE, emite StockReserved/StockReserveFailed + StockDepleted. Idempotente por (sku, orderId) | `StockRepository`, `StockReservationRepository`, `StockMovementRepository`, `OutboxEventRepository`                             |
+| `StockUseCase`            | `processProductCreated(...)`      | Verifica idempotencia, crea registro de stock inicial, registra movimiento PRODUCT_CREATION                                                                                                            | `StockRepository`, `StockMovementRepository`, `ProcessedEventRepository`                                                        |
+| `StockReservationUseCase` | `expireReservations()`            | Busca reservas PENDING expiradas, cambia a EXPIRED, decrementa reserved_quantity, registra movimiento RESERVATION_RELEASE, emite StockReleased                                                         | `StockReservationRepository`, `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`                             |
+| `StockReservationUseCase` | `processOrderCancelled(...)`      | Verifica idempotencia, libera reserva PENDING, decrementa reserved_quantity, registra movimiento RESERVATION_RELEASE, emite StockReleased                                                              | `StockReservationRepository`, `StockRepository`, `StockMovementRepository`, `OutboxEventRepository`, `ProcessedEventRepository` |
+| `OutboxRelayUseCase`      | `fetchPendingEvents()`            | Consulta eventos PENDING del outbox (batch de 100)                                                                                                                                                     | `OutboxEventRepository`                                                                                                         |
+| `OutboxRelayUseCase`      | `markAsPublished(event)`          | Marca un evento como PUBLISHED tras publicación exitosa a Kafka                                                                                                                                        | `OutboxEventRepository`                                                                                                         |
 
 ### Capa de Infraestructura — Entry Points
 
@@ -384,24 +380,24 @@ message ReserveStockResponse {
 
 #### Consumidor Kafka
 
-| Consumer             | Tópico           | Eventos Procesados                                         |
-| -------------------- | ---------------- | ---------------------------------------------------------- |
-| `KafkaEventConsumer` | `product-events` | `ProductCreated` → delega a `ProcessProductCreatedUseCase` |
-| `KafkaEventConsumer` | `order-events`   | `OrderCancelled` → delega a `ProcessOrderCancelledUseCase` |
+| Consumer             | Tópico           | Eventos Procesados                                                            |
+| -------------------- | ---------------- | ----------------------------------------------------------------------------- |
+| `KafkaEventConsumer` | `product-events` | `ProductCreated` → delega a `StockUseCase.processProductCreated()`            |
+| `KafkaEventConsumer` | `order-events`   | `OrderCancelled` → delega a `StockReservationUseCase.processOrderCancelled()` |
 
 Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WARN.
 
 ### Capa de Infraestructura — Driven Adapters
 
-| Adapter                        | Implementa                   | Tecnología                                 |
-| ------------------------------ | ---------------------------- | ------------------------------------------ |
-| `R2dbcStockAdapter`            | `StockRepository`            | R2DBC DatabaseClient / `@Transactional`    |
-| `R2dbcStockReservationAdapter` | `StockReservationRepository` | R2DBC DatabaseClient                       |
-| `R2dbcStockMovementAdapter`    | `StockMovementRepository`    | R2DBC DatabaseClient                       |
-| `R2dbcOutboxAdapter`           | `OutboxEventRepository`      | R2DBC DatabaseClient                       |
-| `R2dbcProcessedEventAdapter`   | `ProcessedEventRepository`   | R2DBC DatabaseClient                       |
-| `KafkaOutboxRelay`             | Scheduled relay (cada 5s)    | ReactiveKafkaProducer                      |
-| `ExpiredReservationScheduler`  | Scheduled job (cada 60s)     | `@Scheduled` → `ExpireReservationsUseCase` |
+| Adapter                        | Implementa                   | Tecnología                                                    |
+| ------------------------------ | ---------------------------- | ------------------------------------------------------------- |
+| `R2dbcStockAdapter`            | `StockRepository`            | R2DBC DatabaseClient / `@Transactional`                       |
+| `R2dbcStockReservationAdapter` | `StockReservationRepository` | R2DBC DatabaseClient                                          |
+| `R2dbcStockMovementAdapter`    | `StockMovementRepository`    | R2DBC DatabaseClient                                          |
+| `R2dbcOutboxAdapter`           | `OutboxEventRepository`      | R2DBC DatabaseClient                                          |
+| `R2dbcProcessedEventAdapter`   | `ProcessedEventRepository`   | R2DBC DatabaseClient                                          |
+| `KafkaOutboxRelay`             | Scheduled relay (cada 5s)    | ReactiveKafkaProducer                                         |
+| `ExpiredReservationScheduler`  | Scheduled job (cada 60s)     | `@Scheduled` → `StockReservationUseCase.expireReservations()` |
 
 ### Excepciones de Dominio
 

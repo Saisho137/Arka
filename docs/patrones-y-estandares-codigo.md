@@ -618,6 +618,7 @@ void shouldCreateOrder_whenStockAvailable() {
 | Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
 | DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                               | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
 | Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`             | Trazabilidad sin depender de campos auxiliares como `reason`                                |
+| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`        | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
 | SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                         | Validación en BD, mejor rendimiento, documentación implícita                                |
 | Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                              | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
 
@@ -951,6 +952,57 @@ Todos los componentes del microservicio (modelos, use cases, driven adapters, en
 ```
 
 **Regla:** Nunca crear manualmente las carpetas o archivos que el scaffold genera. Modificar solo el contenido.
+
+### B.8 Organización de UseCases: 1 UseCase por Entidad de Dominio
+
+Los UseCases se organizan por **entidad de dominio principal** (agregado), no por operación individual. Cada UseCase agrupa todos los métodos de negocio que operan sobre esa entidad, en lugar de crear una clase separada con un solo método `execute()` por cada operación.
+
+**Regla:** Generar con `./gradlew generateUseCase --name=<Entidad>` (e.g., `--name=Stock`). El scaffold crea el paquete y la clase. Luego agregar los métodos de negocio como métodos públicos con nombres descriptivos.
+
+**Criterio de agrupación:** La entidad que es el sujeto principal de la operación determina a qué UseCase pertenece. Si una operación modifica `Stock` como efecto principal, va en `StockUseCase` aunque también toque `StockReservation` o `OutboxEvent`.
+
+```java
+// ✅ 1 UseCase por entidad — múltiples métodos descriptivos
+@RequiredArgsConstructor
+public class StockUseCase {
+    private final StockRepository stockRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    // ... otros ports necesarios
+
+    public Mono<Stock> getBySku(String sku) { /* ... */ }
+    public Flux<StockMovement> getHistory(String sku, int page, int size) { /* ... */ }
+    public Mono<Stock> updateStock(String sku, int newQuantity, String reason) { /* ... */ }
+    public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) { /* ... */ }
+    public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId, int initialStock) { /* ... */ }
+}
+
+// ❌ NUNCA — 1 UseCase por operación con execute()
+public class GetStockUseCase {
+    public Mono<Stock> execute(String sku) { /* ... */ }
+}
+public class UpdateStockUseCase {
+    public Mono<Stock> execute(String sku, int qty, String reason) { /* ... */ }
+}
+public class ReserveStockUseCase {
+    public Mono<ReserveStockResult> execute(String sku, UUID orderId, int qty) { /* ... */ }
+}
+```
+
+**Ventajas:**
+
+- Cohesión por agregado: toda la lógica de `Stock` vive en un solo lugar
+- Menos clases: 3 UseCases en lugar de 7+ para ms-inventory
+- DI simplificada: los entry-points inyectan 1 UseCase en lugar de 3-4
+- Los métodos privados auxiliares (e.g., `emitStockDepletedIfNeeded`) se comparten naturalmente entre operaciones del mismo agregado
+
+**Ejemplo de mapeo entidad → UseCase:**
+
+| Entidad principal  | UseCase                   | Métodos                                                                          |
+| ------------------ | ------------------------- | -------------------------------------------------------------------------------- |
+| `Stock`            | `StockUseCase`            | `getBySku`, `getHistory`, `updateStock`, `reserveStock`, `processProductCreated` |
+| `StockReservation` | `StockReservationUseCase` | `expireReservations`, `processOrderCancelled`                                    |
+| `OutboxEvent`      | `OutboxRelayUseCase`      | `fetchPendingEvents`, `markAsPublished`                                          |
 
 ---
 
