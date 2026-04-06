@@ -1,0 +1,6 @@
+# Perfil DOCKER — cuando corre dentro de Docker Compose
+spring:
+  datasource:
+    url: jdbc:postgresql://arka-db-reporter:5432/db_reporter
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}

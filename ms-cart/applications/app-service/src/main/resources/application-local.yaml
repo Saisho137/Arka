@@ -1,0 +1,5 @@
+# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+spring:
+  data:
+    mongodb:
+      uri: mongodb://arka:arkaSecret2025@localhost:27017/db_cart?authSource=admin

@@ -1,14 +1,11 @@
-##Spring Configuration
 server:
-  port: 8080
+  port: ${MS_NOTIFICATIONS_PORT:8085}
+
 spring:
   application:
     name: ms-notifications
-  devtools:
-    add-properties: false
-  h2:
-    console:
-      enabled: true
-      path: /h2
   profiles:
-    include:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_notifications?authSource=admin

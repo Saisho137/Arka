@@ -1,0 +1,6 @@
+# Perfil DOCKER — cuando corre dentro de Docker Compose
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://arka-db-payment:5432/db_payment
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}

@@ -1,0 +1,6 @@
+# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5435/db_reporter
+    username: arka
+    password: arkaSecret2025

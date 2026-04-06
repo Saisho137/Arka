@@ -622,6 +622,7 @@ void shouldCreateOrder_whenStockAvailable() {
 | SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                |
 | Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
 | Driven Adapters R2DBC      | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                       |
+| Spring Profiles            | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                  | Cambio automático entre BD local y contenedores sin tocar código                            |
 
 ---
 
@@ -1293,6 +1294,87 @@ com/arka/r2dbc/stock/
 ├── StockDTOMapper.java             # Mapper DTO ↔ Dominio
 └── StockRowMapper.java             # Mapper Readable → Dominio (para DatabaseClient)
 ```
+
+### B.10 Spring Profiles: Configuración Local vs Docker
+
+Cada microservicio usa Spring Profiles para cambiar automáticamente entre la BD local (desarrollo en IntelliJ) y los contenedores Docker (ecosistema completo con Compose).
+
+#### Archivos de configuración por microservicio
+
+```text
+ms-<name>/applications/app-service/src/main/resources/
+├── application.yaml          # Config compartida + defaults para local
+├── application-local.yaml    # Override para desarrollo en IntelliJ (perfil por defecto)
+└── application-docker.yaml   # Override para Docker Compose (hostnames de contenedores)
+```
+
+#### Cómo funciona
+
+- `application.yaml` define `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` — si no se define la variable, usa `local`
+- Desde IntelliJ: no se configura nada. El perfil `local` se activa automáticamente. Apunta a `localhost` con el puerto mapeado del `.env`
+- Desde Docker Compose: `SPRING_PROFILES_ACTIVE=docker` se inyecta como variable de entorno en `compose.yaml`. El perfil `docker` apunta al hostname del contenedor de BD (e.g., `arka-db-inventory`) en el puerto interno 5432
+
+#### Ejemplo — Microservicio con PostgreSQL R2DBC
+
+```yaml
+# application.yaml — config base con defaults para local
+server:
+  port: ${MS_INVENTORY_PORT:8082}
+spring:
+  application:
+    name: ms-inventory
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  r2dbc:
+    url: r2dbc:postgresql://${R2DBC_HOST:localhost}:${R2DBC_PORT:5433}/${R2DBC_DB:db_inventory}
+    username: ${R2DBC_USER:arka}
+    password: ${R2DBC_PASSWORD:arkaSecret2025}
+```
+
+```yaml
+# application-local.yaml — desarrollo en IntelliJ
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5433/db_inventory
+    username: arka
+    password: arkaSecret2025
+```
+
+```yaml
+# application-docker.yaml — Docker Compose
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://arka-db-inventory:5432/db_inventory
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+```
+
+#### Diferencia clave entre local y docker
+
+| Aspecto      | Perfil `local`                         | Perfil `docker`                                     |
+| ------------ | -------------------------------------- | --------------------------------------------------- |
+| Host de BD   | `localhost`                            | Hostname del contenedor (e.g., `arka-db-inventory`) |
+| Puerto de BD | Puerto mapeado del `.env` (e.g., 5433) | Puerto interno del contenedor (siempre 5432)        |
+| Credenciales | Hardcoded en el YAML                   | Variables de entorno del `.env`                     |
+| Activación   | Automática (default)                   | `SPRING_PROFILES_ACTIVE=docker` en `compose.yaml`   |
+
+#### Convención en compose.yaml
+
+Todos los microservicios deben tener `SPRING_PROFILES_ACTIVE=docker` en su sección `environment`:
+
+```yaml
+ms-inventory:
+  environment:
+    - SPRING_PROFILES_ACTIVE=docker
+  env_file:
+    - .env
+```
+
+#### Flujo de desarrollo recomendado
+
+1. Levantar solo la BD: `docker compose up postgres-inventory -d`
+2. Correr el micro desde IntelliJ (perfil `local` automático, apunta a `localhost:5433`)
+3. Para el ecosistema completo: `docker compose up -d` (perfil `docker` automático para todos)
 
 ---
 

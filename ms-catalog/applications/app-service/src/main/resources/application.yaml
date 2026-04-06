@@ -1,14 +1,11 @@
-##Spring Configuration
 server:
-  port: 8080
+  port: ${MS_CATALOG_PORT:8084}
+
 spring:
   application:
     name: ms-catalog
-  devtools:
-    add-properties: false
-  h2:
-    console:
-      enabled: true
-      path: /h2
   profiles:
-    include:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_catalog?authSource=admin

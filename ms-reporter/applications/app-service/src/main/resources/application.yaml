@@ -1,14 +1,16 @@
-##Spring Configuration
 server:
-  port: 8080
+  port: ${MS_REPORTER_PORT:8087}
+
 spring:
   application:
     name: ms-reporter
-  devtools:
-    add-properties: false
-  h2:
-    console:
-      enabled: true
-      path: /h2
   profiles:
-    include:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: jdbc:postgresql://${JDBC_HOST:localhost}:${JDBC_PORT:5435}/${JDBC_DB:db_reporter}
+    username: ${JDBC_USER:arka}
+    password: ${JDBC_PASSWORD:arkaSecret2025}
+    driver-class-name: org.postgresql.Driver
+  threads:
+    virtual:
+      enabled: true

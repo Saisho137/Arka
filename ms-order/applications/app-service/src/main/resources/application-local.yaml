@@ -1,0 +1,6 @@
+# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/db_orders
+    username: arka
+    password: arkaSecret2025

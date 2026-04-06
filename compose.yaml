@@ -318,6 +318,8 @@ services:
     container_name: arka-ms-catalog
     ports:
       - "${MS_CATALOG_PORT}:${MS_CATALOG_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
@@ -387,6 +389,7 @@ services:
     ports:
       - "${MS_ORDER_PORT}:${MS_ORDER_PORT}"
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
       - MS_INVENTORY_HOST=${MS_INVENTORY_HOST}
       - MS_INVENTORY_PORT=${MS_INVENTORY_PORT}
       - MS_PAYMENT_HOST=${MS_PAYMENT_HOST}
@@ -425,6 +428,8 @@ services:
     container_name: arka-ms-notifications
     ports:
       - "${MS_NOTIFICATIONS_PORT}:${MS_NOTIFICATIONS_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
@@ -462,6 +467,7 @@ services:
     ports:
       - "${MS_CART_PORT}:${MS_CART_PORT}"
     environment:
+      - SPRING_PROFILES_ACTIVE=docker
       - MS_CATALOG_HOST=${MS_CATALOG_HOST}
       - MS_CATALOG_PORT=${MS_CATALOG_PORT}
     env_file:
@@ -498,6 +504,8 @@ services:
     container_name: arka-ms-payment
     ports:
       - "${MS_PAYMENT_PORT}:${MS_PAYMENT_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
@@ -534,6 +542,8 @@ services:
     container_name: arka-ms-reporter
     ports:
       - "${MS_REPORTER_PORT}:${MS_REPORTER_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
@@ -566,6 +576,8 @@ services:
     container_name: arka-ms-shipping
     ports:
       - "${MS_SHIPPING_PORT}:${MS_SHIPPING_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
@@ -602,6 +614,8 @@ services:
     container_name: arka-ms-provider
     ports:
       - "${MS_PROVIDER_PORT}:${MS_PROVIDER_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:
