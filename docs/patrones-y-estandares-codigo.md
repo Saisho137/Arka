@@ -602,25 +602,25 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                   | Resolución                                                                                                    | Justificación                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                       | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
-| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                              | Optional bloquea semánticamente la cadena reactiva                                          |
-| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                       | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
-| Router Functions           | **No**                                                                                                        | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
-| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
-| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                 | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
-| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                           | Evitar interferir con el EventLoop                                                          |
-| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura    | Compile-time safety vs runtime extensibility                                                |
-| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                         | Centralizado, reactivo, sin try/catch en publishers                                         |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                           | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
-| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                          | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
-| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                               | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
-| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`             | Trazabilidad sin depender de campos auxiliares como `reason`                                |
-| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`        | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
-| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos                         | Validación en BD, mejor rendimiento, documentación implícita                                |
-| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                              | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
+| Decisión                   | Resolución                                                                                                                      | Justificación                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                         | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
+| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                | Optional bloquea semánticamente la cadena reactiva                                          |
+| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                         | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
+| Router Functions           | **No**                                                                                                                          | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
+| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                  | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
+| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                   | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
+| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                             | Evitar interferir con el EventLoop                                                          |
+| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                      | Compile-time safety vs runtime extensibility                                                |
+| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                           | Centralizado, reactivo, sin try/catch en publishers                                         |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                             | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
+| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                            | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                   | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
+| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                 | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
+| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                               | Trazabilidad sin depender de campos auxiliares como `reason`                                |
+| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                          | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
+| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6) | Validación en BD, mejor rendimiento, documentación implícita                                |
+| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
 
 ---
 
@@ -937,6 +937,111 @@ CREATE TABLE stock_movements (
     ...
 );
 ```
+
+#### Configuración Obligatoria de `EnumCodec` en Driven Adapters R2DBC
+
+El driver `r2dbc-postgresql` soporta ENUMs de PostgreSQL, pero **requiere configuración explícita** mediante `EnumCodec`. Sin esta configuración, el driver no puede codificar ni decodificar los tipos ENUM custom de PostgreSQL y lanzará `IllegalArgumentException: Cannot encode parameter of type <EnumClass>`.
+
+**Paso 1 — Registrar cada ENUM en la configuración de conexión:**
+
+Cada ENUM de PostgreSQL debe mapearse a su clase Java correspondiente usando `EnumCodec.builder()`. Esto se registra como `CodecRegistrar` en la configuración de la `ConnectionFactory`.
+
+```java
+// infrastructure/driven-adapters — configuración R2DBC
+@Configuration
+public class R2dbcConfig {
+
+    @Bean
+    public ConnectionFactoryOptionsBuilderCustomizer enumCodecCustomizer() {
+        return builder -> builder.option(
+            PostgresqlConnectionFactoryProvider.OPTIONS,
+            Map.of("lock_timeout", "10s")
+        );
+    }
+
+    @Bean
+    public CodecRegistrar enumCodecRegistrar() {
+        return EnumCodec.builder()
+            .withEnum("movement_type", MovementType.class)
+            .withEnum("reservation_status", ReservationStatus.class)
+            .withEnum("outbox_status", OutboxStatus.class)
+            .withEnum("event_type", EventType.class)
+            .build();
+    }
+}
+```
+
+**Paso 2 — Registrar el `CodecRegistrar` en la `ConnectionFactory`:**
+
+Si se usa configuración programática de la `ConnectionFactory` (en lugar de auto-config puro), registrar el codec directamente:
+
+```java
+PostgresqlConnectionConfiguration.builder()
+    .host("localhost")
+    .port(5433)
+    .database("db_inventory")
+    .username("user")
+    .password("pass")
+    .codecRegistrar(EnumCodec.builder()
+        .withEnum("movement_type", MovementType.class)
+        .withEnum("reservation_status", ReservationStatus.class)
+        .withEnum("outbox_status", OutboxStatus.class)
+        .withEnum("event_type", EventType.class)
+        .build())
+    .build();
+```
+
+**Paso 3 — Registrar `WritingConverter` para Spring Data R2DBC:**
+
+Spring Data R2DBC necesita converters adicionales para mapear enums de Java a los tipos ENUM de PostgreSQL al usar `R2dbcEntityTemplate` o `ReactiveCrudRepository`. Crear un `@WritingConverter` por cada enum usando `EnumWriteSupport`:
+
+```java
+// Un converter por cada enum que se persiste como ENUM de PostgreSQL
+@WritingConverter
+public class MovementTypeWritingConverter extends EnumWriteSupport<MovementType> {}
+
+@WritingConverter
+public class ReservationStatusWritingConverter extends EnumWriteSupport<ReservationStatus> {}
+
+@WritingConverter
+public class OutboxStatusWritingConverter extends EnumWriteSupport<OutboxStatus> {}
+
+@WritingConverter
+public class EventTypeWritingConverter extends EnumWriteSupport<EventType> {}
+```
+
+Registrar los converters en la configuración de R2DBC:
+
+```java
+@Configuration
+public class R2dbcCustomConversionsConfig extends AbstractR2dbcConfiguration {
+
+    @Override
+    public ConnectionFactory connectionFactory() {
+        // ... configuración de ConnectionFactory
+    }
+
+    @Override
+    protected List<Object> getCustomConverters() {
+        return List.of(
+            new MovementTypeWritingConverter(),
+            new ReservationStatusWritingConverter(),
+            new OutboxStatusWritingConverter(),
+            new EventTypeWritingConverter()
+        );
+    }
+}
+```
+
+**Alternativa con `DatabaseClient` (sin Spring Data):** Si el driven adapter usa `DatabaseClient` directamente con SQL manual, los `WritingConverter` no son necesarios — basta con el `EnumCodec` del Paso 1/2. El `DatabaseClient` usa los codecs del driver directamente al hacer `.bind("status", ReservationStatus.PENDING)`.
+
+**Checklist al agregar un nuevo ENUM:**
+
+1. Crear el `CREATE TYPE ... AS ENUM` en el script SQL de inicialización
+2. Crear el `enum` Java correspondiente con valores idénticos (case-sensitive)
+3. Registrar el mapeo en `EnumCodec.builder().withEnum("pg_type", JavaEnum.class)`
+4. Si se usa Spring Data R2DBC: crear `@WritingConverter` con `EnumWriteSupport<JavaEnum>`
+5. Verificar que lectura y escritura funcionan en tests de integración
 
 ### B.7 Scaffold Bancolombia: Siempre Usar para Generar Componentes
 

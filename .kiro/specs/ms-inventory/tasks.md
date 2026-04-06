@@ -203,11 +203,11 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Inyectar dependencia: `OutboxEventRepository`
     - _Requisitos: 8.4, 8.5_
 
-- [ ] 6. Checkpoint — Verificar dominio y casos de uso core
+- [x] 6. Checkpoint — Verificar dominio y casos de uso core
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 7. Crear esquema SQL de PostgreSQL 17
-  - [ ] 7.1 Crear script de migración con las tablas `stock`, `stock_reservations`, `stock_movements`, `outbox_events` y `processed_events`
+- [x] 7. Crear esquema SQL de PostgreSQL 17
+  - [x] 7.1 Crear script de migración con las tablas `stock`, `stock_reservations`, `stock_movements`, `outbox_events` y `processed_events`
     - Tabla `stock`: id UUID PK, sku VARCHAR(100) UNIQUE NOT NULL, product_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK >= 0, reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK >= 0, available_quantity GENERATED ALWAYS AS (quantity - reserved_quantity) STORED, depletion_threshold INTEGER NOT NULL DEFAULT 10 CHECK >= 0, updated_at TIMESTAMPTZ, version BIGINT NOT NULL DEFAULT 1
     - Tabla `stock_reservations`: id UUID PK, sku VARCHAR(100) NOT NULL, order_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK > 0, status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ NOT NULL
     - Tabla `stock_movements`: id UUID PK, sku VARCHAR(100) NOT NULL, movement_type VARCHAR(30) NOT NULL, quantity_change INTEGER, previous_quantity INTEGER, new_quantity INTEGER, reference_id UUID, reason TEXT, created_at TIMESTAMPTZ
