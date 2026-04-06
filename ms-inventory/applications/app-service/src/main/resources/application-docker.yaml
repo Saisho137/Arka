@@ -1,0 +1,7 @@
+# Perfil DOCKER — cuando corre dentro de Docker Compose
+# Apunta al hostname del contenedor PostgreSQL definido en compose.yaml
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://arka-db-inventory:5432/db_inventory
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}

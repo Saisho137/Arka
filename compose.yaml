@@ -352,6 +352,8 @@ services:
     container_name: arka-ms-inventory
     ports:
       - "${MS_INVENTORY_PORT}:${MS_INVENTORY_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
     env_file:
       - .env
     depends_on:

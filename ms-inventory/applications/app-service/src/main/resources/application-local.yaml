@@ -1,0 +1,7 @@
+# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+# PostgreSQL corriendo en localhost (instalación local o solo el contenedor de DB)
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5433/db_inventory
+    username: postgres
+    password: root
