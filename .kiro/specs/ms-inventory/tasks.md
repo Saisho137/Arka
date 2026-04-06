@@ -59,27 +59,27 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Propiedad 3: Invariante de stock no negativo** — Generar operaciones que intentan establecer `quantity < 0` o `reservedQuantity < 0` y verificar que el compact constructor lanza excepción. Verificar que `availableQuantity == quantity - reservedQuantity` siempre
     - **Valida: Requisitos 1.3, 10.1, 10.2, 10.3, 10.4, 10.5**
 
-- [ ] 2. Definir ports (gateway interfaces)
-  - [ ] 2.1 Crear interfaz `StockRepository` en `domain/model/stock/gateways`
+- [x] 2. Definir ports (gateway interfaces)
+  - [x] 2.1 Crear interfaz `StockRepository` en `domain/model/stock/gateways`
     - Métodos: `findBySku(String sku)`, `findBySkuForUpdate(String sku)` (SELECT FOR UPDATE), `save(Stock stock)`, `updateQuantity(String sku, int newQuantity, long expectedVersion)`, `updateReservedQuantity(String sku, int newReservedQuantity)`
     - Todos retornan `Mono<Stock>`
     - _Requisitos: 1.1, 1.8, 2.1, 4.1, 4.3_
 
-  - [ ] 2.2 Crear interfaz `StockReservationRepository` en `domain/model/reservation/gateways`
+  - [x] 2.2 Crear interfaz `StockReservationRepository` en `domain/model/reservation/gateways`
     - Métodos: `save(StockReservation)`, `findBySkuAndOrderIdAndStatus(String sku, UUID orderId, ReservationStatus status)`, `findExpiredPending(Instant now)`, `updateStatus(UUID id, ReservationStatus status)`
     - Retornos: `Mono<StockReservation>` y `Flux<StockReservation>`
     - _Requisitos: 4.2, 4.5, 5.1, 7.1_
 
-  - [ ] 2.3 Crear interfaz `StockMovementRepository` en `domain/model/movement/gateways`
+  - [x] 2.3 Crear interfaz `StockMovementRepository` en `domain/model/movement/gateways`
     - Métodos: `save(StockMovement)`, `findBySkuOrderByCreatedAtDesc(String sku, int page, int size)`
     - Retornos: `Mono<StockMovement>` y `Flux<StockMovement>`
     - _Requisitos: 1.5, 3.1, 3.4_
 
-  - [ ] 2.4 Crear interfaz `OutboxEventRepository` en `domain/model/outbox/gateways`
+  - [x] 2.4 Crear interfaz `OutboxEventRepository` en `domain/model/outbox/gateways`
     - Métodos: `save(OutboxEvent)`, `findPending(int limit)`, `markAsPublished(UUID id)`
     - _Requisitos: 8.1, 8.4, 8.5_
 
-  - [ ] 2.5 Crear interfaz `ProcessedEventRepository` en `domain/model/processedevent/gateways`
+  - [x] 2.5 Crear interfaz `ProcessedEventRepository` en `domain/model/processedevent/gateways`
     - Métodos: `exists(UUID eventId)`, `save(UUID eventId)`
     - _Requisitos: 9.1, 9.3, 9.4_
 
