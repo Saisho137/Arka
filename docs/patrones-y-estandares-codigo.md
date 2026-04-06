@@ -802,7 +802,10 @@ Stock updated = stock.decreaseBy(requested);
 ```java
 @Builder(toBuilder = true)
 public record Stock(UUID id, String sku, UUID productId, int quantity,
-                    int reservedQuantity, int availableQuantity, Instant updatedAt, long version) {
+                    int reservedQuantity, int availableQuantity,
+                    int depletionThreshold, Instant updatedAt, long version) {
+    public static final int DEFAULT_DEPLETION_THRESHOLD = 10;
+
     public Stock {
         // Invariantes en compact constructor
         Objects.requireNonNull(sku, "sku is required");
@@ -810,15 +813,17 @@ public record Stock(UUID id, String sku, UUID productId, int quantity,
         if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
         if (reservedQuantity > quantity)
             throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
+        if (depletionThreshold < 0) throw new IllegalArgumentException("depletionThreshold must be >= 0");
         // Campo calculado
         availableQuantity = quantity - reservedQuantity;
-        // Default condicional
+        // Defaults condicionales
+        depletionThreshold = depletionThreshold > 0 ? depletionThreshold : DEFAULT_DEPLETION_THRESHOLD;
         version = version > 0 ? version : 1;
     }
 
     // --- Métodos de consulta ---
     public boolean canReserve(int requestedQuantity) { return availableQuantity >= requestedQuantity; }
-    public boolean isBelowThreshold(int threshold) { return availableQuantity <= threshold; }
+    public boolean isBelowThreshold() { return availableQuantity <= depletionThreshold; }
 
     // --- Mutaciones encapsuladas con excepciones de dominio ---
 

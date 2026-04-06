@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS stock (
     quantity INTEGER NOT NULL CHECK (quantity >= 0),
     reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
     available_quantity INTEGER GENERATED ALWAYS AS (quantity - reserved_quantity) STORED,
+    depletion_threshold INTEGER NOT NULL DEFAULT 10 CHECK (depletion_threshold >= 0),
     updated_at TIMESTAMPTZ DEFAULT now(),
     version BIGINT NOT NULL DEFAULT 1,
     CONSTRAINT chk_reserved_not_exceeds_quantity CHECK (reserved_quantity <= quantity)
@@ -104,34 +105,39 @@ CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox_events (status, c
 
 -- Seed data
 INSERT INTO
-    stock (id, sku, product_id, quantity)
+    stock (id, sku, product_id, quantity, depletion_threshold)
 VALUES (
         gen_random_uuid (),
         'KB-MECH-001',
         gen_random_uuid (),
-        50
+        50,
+        10
     ),
     (
         gen_random_uuid (),
         'MS-WIRE-002',
         gen_random_uuid (),
-        120
+        120,
+        20
     ),
     (
         gen_random_uuid (),
         'MN-UW-003',
         gen_random_uuid (),
-        15
+        15,
+        3
     ),
     (
         gen_random_uuid (),
         'GPU-RTX-004',
         gen_random_uuid (),
-        8
+        8,
+        2
     ),
     (
         gen_random_uuid (),
         'RAM-DDR5-005',
         gen_random_uuid (),
-        60
+        60,
+        10
     ) ON CONFLICT (sku) DO NOTHING;

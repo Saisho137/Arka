@@ -17,9 +17,12 @@ public record Stock(
         int quantity,
         int reservedQuantity,
         int availableQuantity,
+        int depletionThreshold,
         Instant updatedAt,
         long version
 ) {
+    public static final int DEFAULT_DEPLETION_THRESHOLD = 10;
+
     public Stock {
         Objects.requireNonNull(sku, "sku is required");
         Objects.requireNonNull(productId, "productId is required");
@@ -27,7 +30,9 @@ public record Stock(
         if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
         if (reservedQuantity > quantity)
             throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
+        if (depletionThreshold < 0) throw new IllegalArgumentException("depletionThreshold must be >= 0");
         availableQuantity = quantity - reservedQuantity;
+        depletionThreshold = depletionThreshold > 0 ? depletionThreshold : DEFAULT_DEPLETION_THRESHOLD;
         version = version > 0 ? version : 1;
     }
 
@@ -37,8 +42,8 @@ public record Stock(
         return availableQuantity >= requestedQuantity;
     }
 
-    public boolean isBelowThreshold(int threshold) {
-        return availableQuantity <= threshold;
+    public boolean isBelowThreshold() {
+        return availableQuantity <= depletionThreshold;
     }
 
     // --- Mutaciones encapsuladas ---

@@ -20,7 +20,7 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 - **API_Gateway**: Punto de entrada único que valida JWT, inyecta `X-User-Email` y enruta tráfico a la VPC privada
 - **Controlador_REST**: Entry-point `@RestController` con retornos `Mono`/`Flux` que expone los endpoints HTTP del servicio
 - **Servidor_gRPC**: Entry-point gRPC que expone el servicio `ReserveStock` para que `ms-order` reserve stock de forma síncrona
-- **Umbral_Crítico**: Nivel de stock configurable por debajo del cual se emite un evento `StockDepleted` como alerta de reabastecimiento
+- **Umbral_Crítico**: Nivel de stock por producto (campo `depletion_threshold` en la tabla `stock`) por debajo del cual se emite un evento `StockDepleted` como alerta de reabastecimiento. Cada producto tiene su propio umbral según su volumen de ventas y disponibilidad típica (default: 10)
 - **Relay_Outbox**: Proceso asíncrono que consulta la tabla Outbox_Events cada 5 segundos y publica los eventos pendientes a Kafka
 
 ## Requisitos
@@ -37,7 +37,7 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 4. WHEN el Administrador intenta actualizar el Stock de un SKU que no existe, THE Controlador_REST SHALL retornar código HTTP 404 con un mensaje descriptivo
 5. WHEN el Stock se actualiza exitosamente, THE ms-inventory SHALL registrar un Movimiento_De_Stock de tipo RESTOCK (si la cantidad aumenta) o SHRINKAGE (si la cantidad disminuye) con la cantidad anterior, la cantidad nueva y la razón proporcionada por el Administrador
 6. WHEN el Stock se actualiza exitosamente, THE ms-inventory SHALL insertar un Evento_De_Dominio de tipo StockUpdated en la tabla Outbox_Events dentro de la misma transacción de base de datos
-7. WHEN el available_quantity resultante es menor o igual al Umbral_Crítico después de la actualización, THE ms-inventory SHALL insertar un Evento_De_Dominio adicional de tipo StockDepleted en la tabla Outbox_Events dentro de la misma transacción
+7. WHEN el available_quantity resultante es menor o igual al Umbral_Crítico del producto (campo `depletion_threshold` del registro de Stock) después de la actualización, THE ms-inventory SHALL insertar un Evento_De_Dominio adicional de tipo StockDepleted en la tabla Outbox_Events dentro de la misma transacción
 8. THE ms-inventory SHALL utilizar control de concurrencia optimista (campo version) para prevenir actualizaciones perdidas en el ajuste manual de stock
 
 ### Requisito 2: Consultar disponibilidad de stock
@@ -76,7 +76,7 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 7. WHEN una Reserva se crea exitosamente, THE ms-inventory SHALL insertar un Evento_De_Dominio de tipo StockReserved en la tabla Outbox_Events dentro de la misma transacción
 8. WHEN una Reserva falla por stock insuficiente, THE ms-inventory SHALL insertar un Evento_De_Dominio de tipo StockReserveFailed en la tabla Outbox_Events dentro de la misma transacción
 9. THE ms-inventory SHALL ejecutar la verificación de stock, creación de Reserva, registro de Movimiento_De_Stock e inserción de Evento_De_Dominio dentro de una única transacción R2DBC ultra-corta
-10. WHEN el available_quantity resultante después de la reserva es menor o igual al Umbral_Crítico, THE ms-inventory SHALL insertar un Evento_De_Dominio adicional de tipo StockDepleted en la tabla Outbox_Events dentro de la misma transacción
+10. WHEN el available_quantity resultante después de la reserva es menor o igual al Umbral_Crítico del producto (campo `depletion_threshold`), THE ms-inventory SHALL insertar un Evento_De_Dominio adicional de tipo StockDepleted en la tabla Outbox_Events dentro de la misma transacción
 
 ### Requisito 5: Liberar reservas expiradas
 

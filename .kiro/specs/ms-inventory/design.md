@@ -432,9 +432,12 @@ public record Stock(
     int quantity,
     int reservedQuantity,
     int availableQuantity,  // generado: quantity - reservedQuantity
+    int depletionThreshold, // umbral por producto, default 10
     Instant updatedAt,
     long version
 ) {
+    public static final int DEFAULT_DEPLETION_THRESHOLD = 10;
+
     public Stock {
         Objects.requireNonNull(sku, "sku is required");
         Objects.requireNonNull(productId, "productId is required");
@@ -442,13 +445,15 @@ public record Stock(
         if (reservedQuantity < 0) throw new IllegalArgumentException("reservedQuantity must be >= 0");
         if (reservedQuantity > quantity)
             throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
+        if (depletionThreshold < 0) throw new IllegalArgumentException("depletionThreshold must be >= 0");
         availableQuantity = quantity - reservedQuantity;
+        depletionThreshold = depletionThreshold > 0 ? depletionThreshold : DEFAULT_DEPLETION_THRESHOLD;
         version = version > 0 ? version : 1;
     }
 
     // Métodos de consulta
     public boolean canReserve(int requestedQuantity) { return availableQuantity >= requestedQuantity; }
-    public boolean isBelowThreshold(int threshold) { return availableQuantity <= threshold; }
+    public boolean isBelowThreshold() { return availableQuantity <= depletionThreshold; }
 
     // Mutaciones encapsuladas — devuelven nueva instancia inmutable con validaciones de dominio
     public Stock increaseBy(int amount) {
@@ -658,6 +663,7 @@ CREATE TABLE stock (
     quantity            INTEGER NOT NULL CHECK (quantity >= 0),
     reserved_quantity   INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
     available_quantity  INTEGER GENERATED ALWAYS AS (quantity - reserved_quantity) STORED,
+    depletion_threshold INTEGER NOT NULL DEFAULT 10 CHECK (depletion_threshold >= 0),
     updated_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     version             BIGINT NOT NULL DEFAULT 1,
     CONSTRAINT chk_reserved_not_exceeds_quantity CHECK (reserved_quantity <= quantity)

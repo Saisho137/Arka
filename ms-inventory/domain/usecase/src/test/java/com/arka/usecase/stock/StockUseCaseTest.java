@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -32,7 +33,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -50,25 +50,22 @@ class StockUseCaseTest {
     @Mock private ProcessedEventRepository processedEventRepository;
     @Mock private JsonSerializer jsonSerializer;
 
+    @InjectMocks
     private StockUseCase useCase;
 
-    private static final int THRESHOLD = 10;
     private static final String SKU = "SKU-001";
     private static final UUID PRODUCT_ID = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
         lenient().when(jsonSerializer.serialize(any())).thenReturn("{}");
-        useCase = new StockUseCase(
-                stockRepository, stockMovementRepository, outboxEventRepository,
-                stockReservationRepository, processedEventRepository,
-                THRESHOLD, jsonSerializer);
     }
 
     private Stock buildStock(int quantity, int reserved) {
         return Stock.builder()
                 .id(UUID.randomUUID()).sku(SKU).productId(PRODUCT_ID)
                 .quantity(quantity).reservedQuantity(reserved)
+                .depletionThreshold(10)
                 .updatedAt(Instant.now()).version(1)
                 .build();
     }
@@ -272,13 +269,14 @@ class StockUseCaseTest {
             when(stockMovementRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
             when(processedEventRepository.save(eventId)).thenReturn(Mono.empty());
 
-            StepVerifier.create(useCase.processProductCreated(eventId, SKU, PRODUCT_ID, 50))
+            StepVerifier.create(useCase.processProductCreated(eventId, SKU, PRODUCT_ID, 50, 5))
                     .verifyComplete();
 
             ArgumentCaptor<Stock> stockCaptor = ArgumentCaptor.forClass(Stock.class);
             verify(stockRepository).save(stockCaptor.capture());
             assertThat(stockCaptor.getValue().quantity()).isEqualTo(50);
             assertThat(stockCaptor.getValue().reservedQuantity()).isZero();
+            assertThat(stockCaptor.getValue().depletionThreshold()).isEqualTo(5);
         }
 
         @Test
@@ -287,7 +285,7 @@ class StockUseCaseTest {
             UUID eventId = UUID.randomUUID();
             when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(true));
 
-            StepVerifier.create(useCase.processProductCreated(eventId, SKU, PRODUCT_ID, 50))
+            StepVerifier.create(useCase.processProductCreated(eventId, SKU, PRODUCT_ID, 50, 10))
                     .verifyComplete();
 
             verify(stockRepository, never()).save(any());

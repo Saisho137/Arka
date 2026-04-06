@@ -8,8 +8,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 
 - [x] 1. Definir entidades de dominio, Value Objects, enums y excepciones
   - [x] 1.1 Crear el record `Stock` en `domain/model`
-    - Crear `Stock` record con compact constructor: validación de `sku` y `productId` no nulos, `quantity >= 0`, `reservedQuantity >= 0`, `reservedQuantity <= quantity`, cálculo de `availableQuantity = quantity - reservedQuantity`, default `version = 1`
-    - Métodos de consulta: `canReserve(int)`, `isBelowThreshold(int)`
+    - Crear `Stock` record con compact constructor: validación de `sku` y `productId` no nulos, `quantity >= 0`, `reservedQuantity >= 0`, `reservedQuantity <= quantity`, `depletionThreshold >= 0`, cálculo de `availableQuantity = quantity - reservedQuantity`, default `depletionThreshold = 10`, default `version = 1`
+    - Métodos de consulta: `canReserve(int)`, `isBelowThreshold()` (usa `depletionThreshold` interno)
     - Métodos de mutación encapsulada que devuelven nueva instancia inmutable: `increaseBy(int)`, `decreaseBy(int)`, `setQuantity(int)`, `reserve(int)`, `releaseReservation(int)` — cada uno valida internamente y lanza `DomainException` específica (`InsufficientStockException`, `InvalidStockQuantityException`, `ExcessiveReleaseException`)
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.stock`
@@ -112,7 +112,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Todo dentro de una única transacción R2DBC ultra-corta
     - _Requisitos: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
 
-  - [x] 3.4 Implementar método `processProductCreated(UUID eventId, String sku, UUID productId, int initialStock)` en `StockUseCase`
+  - [x] 3.4 Implementar método `processProductCreated(UUID eventId, String sku, UUID productId, int initialStock, int depletionThreshold)` en `StockUseCase`
     - Verificar idempotencia: `processedEventRepository.exists(eventId)` — si existe, ignorar (retornar Mono.empty)
     - Crear registro de stock: `quantity = initialStock`, `reservedQuantity = 0`, `productId` del evento
     - Registrar `StockMovement` (PRODUCT_CREATION)
@@ -208,7 +208,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 
 - [ ] 7. Crear esquema SQL de PostgreSQL 17
   - [ ] 7.1 Crear script de migración con las tablas `stock`, `stock_reservations`, `stock_movements`, `outbox_events` y `processed_events`
-    - Tabla `stock`: id UUID PK, sku VARCHAR(100) UNIQUE NOT NULL, product_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK >= 0, reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK >= 0, available_quantity GENERATED ALWAYS AS (quantity - reserved_quantity) STORED, updated_at TIMESTAMPTZ, version BIGINT NOT NULL DEFAULT 1
+    - Tabla `stock`: id UUID PK, sku VARCHAR(100) UNIQUE NOT NULL, product_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK >= 0, reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK >= 0, available_quantity GENERATED ALWAYS AS (quantity - reserved_quantity) STORED, depletion_threshold INTEGER NOT NULL DEFAULT 10 CHECK >= 0, updated_at TIMESTAMPTZ, version BIGINT NOT NULL DEFAULT 1
     - Tabla `stock_reservations`: id UUID PK, sku VARCHAR(100) NOT NULL, order_id UUID NOT NULL, quantity INTEGER NOT NULL CHECK > 0, status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ NOT NULL
     - Tabla `stock_movements`: id UUID PK, sku VARCHAR(100) NOT NULL, movement_type VARCHAR(30) NOT NULL, quantity_change INTEGER, previous_quantity INTEGER, new_quantity INTEGER, reference_id UUID, reason TEXT, created_at TIMESTAMPTZ
     - Tabla `outbox_events`: id UUID PK, event_type VARCHAR(50) NOT NULL, payload JSONB NOT NULL, partition_key VARCHAR(100), status VARCHAR(20) DEFAULT 'PENDING', created_at TIMESTAMPTZ
@@ -338,7 +338,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Configuración Kafka: bootstrap-servers, producer config (serializers), consumer config (group-id, deserializers, tópicos)
     - Configuración gRPC: puerto del servidor
     - Configuración de scheduling: habilitar `@EnableScheduling`
-    - Propiedad `stock.depletion.threshold` configurable (default: 10)
+    - Propiedad `stock.depletion.default-threshold` configurable (default: 10) — usado solo como fallback al crear stock desde ProductCreated si el evento no incluye threshold
     - Logging con SLF4J, `CommandLineRunner` para log de inicio
     - _Requisitos: 1.7, 8.3_
 

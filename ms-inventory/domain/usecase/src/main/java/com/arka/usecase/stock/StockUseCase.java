@@ -31,7 +31,6 @@ public class StockUseCase {
     private final OutboxEventRepository outboxEventRepository;
     private final StockReservationRepository stockReservationRepository;
     private final ProcessedEventRepository processedEventRepository;
-    private final int depletionThreshold;
     private final JsonSerializer jsonSerializer;
 
     // --- Consultas ---
@@ -146,7 +145,7 @@ public class StockUseCase {
 
     // --- Consumidor Kafka: ProductCreated ---
 
-    public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId, int initialStock) {
+    public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId, int initialStock, int depletionThreshold) {
         return processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
@@ -158,6 +157,7 @@ public class StockUseCase {
                             .productId(productId)
                             .quantity(initialStock)
                             .reservedQuantity(0)
+                            .depletionThreshold(depletionThreshold)
                             .build();
 
                     StockMovement movement = StockMovement.productCreation(sku, initialStock);
@@ -171,13 +171,13 @@ public class StockUseCase {
     // --- Helpers privados ---
 
     private Mono<Void> emitStockDepletedIfNeeded(Stock stock) {
-        if (stock.isBelowThreshold(depletionThreshold)) {
+        if (stock.isBelowThreshold()) {
             OutboxEvent depletedEvent = buildOutboxEvent(
                     EventType.STOCK_DEPLETED, stock.sku(),
                     StockDepletedPayload.builder()
                             .sku(stock.sku())
                             .currentQuantity(stock.availableQuantity())
-                            .threshold(depletionThreshold)
+                            .threshold(stock.depletionThreshold())
                             .build());
             return outboxEventRepository.save(depletedEvent).then();
         }
