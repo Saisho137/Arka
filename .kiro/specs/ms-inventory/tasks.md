@@ -217,8 +217,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Ubicar en `applications/app-service/src/main/resources/` (schema.sql o migración Flyway)
     - _Requisitos: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ] 8. Implementar driven adapters — R2DBC (PostgreSQL 17)
-  - [ ] 8.1 Implementar `R2dbcStockAdapter` que implementa `StockRepository`
+- [x] 8. Implementar driven adapters — R2DBC (PostgreSQL 17)
+  - [x] 8.1 Implementar `R2dbcStockAdapter` que implementa `StockRepository`
     - Usar `R2dbcEntityTemplate` o `DatabaseClient` para todas las operaciones
     - `findBySkuForUpdate`: ejecutar `SELECT * FROM stock WHERE sku = ? FOR UPDATE` con `DatabaseClient`
     - `updateQuantity`: ejecutar `UPDATE stock SET quantity = ?, version = version + 1, updated_at = NOW() WHERE sku = ? AND version = ?` — retornar `Mono.empty()` si 0 rows afectadas (version mismatch)
@@ -226,22 +226,22 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Crear data class interna y mapper estático para convertir entre dominio y row
     - _Requisitos: 1.1, 1.8, 4.1_
 
-  - [ ] 8.2 Implementar `R2dbcStockReservationAdapter` que implementa `StockReservationRepository`
+  - [x] 8.2 Implementar `R2dbcStockReservationAdapter` que implementa `StockReservationRepository`
     - `findExpiredPending`: `SELECT * FROM stock_reservations WHERE status = 'PENDING' AND expires_at < ?`
     - `findBySkuAndOrderIdAndStatus`: consulta por los tres campos
     - `updateStatus`: `UPDATE stock_reservations SET status = ? WHERE id = ?`
     - _Requisitos: 4.2, 4.5, 5.1, 7.1_
 
-  - [ ] 8.3 Implementar `R2dbcStockMovementAdapter` que implementa `StockMovementRepository`
+  - [x] 8.3 Implementar `R2dbcStockMovementAdapter` que implementa `StockMovementRepository`
     - `findBySkuOrderByCreatedAtDesc`: consulta paginada con `OFFSET` y `LIMIT`, ordenada por `created_at DESC`
     - _Requisitos: 1.5, 3.1_
 
-  - [ ] 8.4 Implementar `R2dbcOutboxAdapter` que implementa `OutboxEventRepository`
+  - [x] 8.4 Implementar `R2dbcOutboxAdapter` que implementa `OutboxEventRepository`
     - `findPending`: `SELECT * FROM outbox_events WHERE status = 'PENDING' ORDER BY created_at LIMIT ?`
     - `markAsPublished`: `UPDATE outbox_events SET status = 'PUBLISHED' WHERE id = ?`
     - _Requisitos: 8.1, 8.4, 8.5_
 
-  - [ ] 8.5 Implementar `R2dbcProcessedEventAdapter` que implementa `ProcessedEventRepository`
+  - [x] 8.5 Implementar `R2dbcProcessedEventAdapter` que implementa `ProcessedEventRepository`
     - `exists`: `SELECT COUNT(*) FROM processed_events WHERE event_id = ?`
     - `save`: `INSERT INTO processed_events (event_id, processed_at) VALUES (?, NOW())`
     - _Requisitos: 9.1, 9.3, 9.4_

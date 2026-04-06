@@ -602,25 +602,26 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                   | Resolución                                                                                                                      | Justificación                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                         | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
-| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                | Optional bloquea semánticamente la cadena reactiva                                          |
-| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                         | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
-| Router Functions           | **No**                                                                                                                          | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
-| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                  | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
-| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                   | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
-| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                             | Evitar interferir con el EventLoop                                                          |
-| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                      | Compile-time safety vs runtime extensibility                                                |
-| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                           | Centralizado, reactivo, sin try/catch en publishers                                         |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                             | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
-| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                            | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                   | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
-| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                 | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
-| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                               | Trazabilidad sin depender de campos auxiliares como `reason`                                |
-| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                          | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
-| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6) | Validación en BD, mejor rendimiento, documentación implícita                                |
-| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
+| Decisión                   | Resolución                                                                                                                       | Justificación                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                          | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
+| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                 | Optional bloquea semánticamente la cadena reactiva                                          |
+| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                          | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
+| Router Functions           | **No**                                                                                                                           | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
+| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                   | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
+| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                    | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
+| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                              | Evitar interferir con el EventLoop                                                          |
+| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                       | Compile-time safety vs runtime extensibility                                                |
+| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                            | Centralizado, reactivo, sin try/catch en publishers                                         |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                              | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
+| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                             | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                    | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
+| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                  | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
+| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                | Trazabilidad sin depender de campos auxiliares como `reason`                                |
+| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                           | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
+| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                |
+| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
+| Driven Adapters R2DBC      | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                       |
 
 ---
 
@@ -1113,6 +1114,185 @@ public class ReserveStockUseCase {
 | `Stock`            | `StockUseCase`            | `getBySku`, `getHistory`, `updateStock`, `reserveStock`, `processProductCreated` |
 | `StockReservation` | `StockReservationUseCase` | `expireReservations`, `processOrderCancelled`                                    |
 | `OutboxEvent`      | `OutboxRelayUseCase`      | `fetchPendingEvents`, `markAsPublished`                                          |
+
+### B.9 Driven Adapters R2DBC: Enfoque Híbrido (ReactiveCrudRepository + DatabaseClient)
+
+Los driven adapters R2DBC usan un **enfoque híbrido** que combina `ReactiveCrudRepository` para operaciones CRUD simples con `DatabaseClient` para SQL complejo. Esto maximiza la simplicidad sin sacrificar control.
+
+#### Decisión y Justificación
+
+| Enfoque                                 | Cuándo usar                                                          | Ejemplo                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `ReactiveCrudRepository` + DTO `@Table` | CRUD simple, query methods derivados, `@Query` con SQL nativo        | `save()`, `findBySku()`, `findByStatus()`, `deleteById()`                       |
+| `DatabaseClient` + RowMapper            | SQL que no se puede expresar en `@Query` o que requiere control fino | `SELECT ... FOR UPDATE`, `UPDATE ... WHERE version = ?` con retorno condicional |
+
+**¿Por qué no solo `ReactiveCrudRepository`?**
+
+- `@Query` soporta SQL nativo incluyendo `FOR UPDATE`, pero no permite lógica condicional sobre el resultado (e.g., retornar `Mono.empty()` si 0 rows afectadas para lock optimista)
+- `@Modifying @Query` retorna `Mono<Integer>` (rows afectadas), pero no la entidad actualizada — requiere una segunda query
+
+**¿Por qué no solo `DatabaseClient`?**
+
+- Para operaciones simples (save, findBy...) es código innecesario — `ReactiveCrudRepository` lo resuelve en una línea
+- Los query methods derivados son más legibles y menos propensos a errores de SQL
+
+#### Estructura del Adapter Híbrido
+
+Cada adapter inyecta tanto el `ReactiveCrudRepository` (para CRUD) como el `DatabaseClient` (para SQL complejo). El DTO `@Table` es la entidad de infraestructura que Spring Data necesita; el RowMapper se usa solo para las queries manuales con `DatabaseClient`.
+
+```java
+@Repository
+@RequiredArgsConstructor
+public class R2dbcStockAdapter implements StockRepository {
+
+    private final SpringDataStockRepository repository;  // ReactiveCrudRepository
+    private final DatabaseClient client;                  // Para SQL complejo
+
+    // ✅ CRUD simple → ReactiveCrudRepository
+    @Override
+    public Mono<Stock> findBySku(String sku) {
+        return repository.findBySku(sku)
+                .map(StockDTOMapper::toDomain);
+    }
+
+    @Override
+    public Mono<Stock> save(Stock stock) {
+        return repository.save(StockDTOMapper.toDTO(stock))
+                .map(StockDTOMapper::toDomain);
+    }
+
+    // ✅ SQL complejo → DatabaseClient
+    @Override
+    public Mono<Stock> findBySkuForUpdate(String sku) {
+        return client.sql("SELECT * FROM stock WHERE sku = :sku FOR UPDATE")
+                .bind("sku", sku)
+                .map(StockRowMapper::map)
+                .one();
+    }
+
+    @Override
+    public Mono<Stock> updateQuantity(String sku, int newQuantity, long expectedVersion) {
+        return client.sql("UPDATE stock SET quantity = :qty, version = version + 1, " +
+                        "updated_at = NOW() WHERE sku = :sku AND version = :version")
+                .bind("qty", newQuantity)
+                .bind("sku", sku)
+                .bind("version", expectedVersion)
+                .fetch().rowsUpdated()
+                .filter(rows -> rows > 0)
+                .flatMap(rows -> findBySku(sku));
+    }
+}
+```
+
+#### DTO `@Table` (Entidad de Infraestructura)
+
+El DTO vive en el paquete del driven adapter, nunca en `domain/model`. Usa `@Table` y `@Column` de Spring Data R2DBC. Los campos deben coincidir con las columnas de la tabla.
+
+```java
+// infrastructure/driven-adapters — DTO de persistencia
+@Table("stock")
+@Builder(toBuilder = true)
+public record StockDTO(
+    @Id UUID id,
+    String sku,
+    @Column("product_id") UUID productId,
+    int quantity,
+    @Column("reserved_quantity") int reservedQuantity,
+    @Column("depletion_threshold") int depletionThreshold,
+    @Column("updated_at") Instant updatedAt,
+    long version
+) {}
+```
+
+> **Nota:** `available_quantity` es `GENERATED ALWAYS AS` en PostgreSQL — no se incluye en el DTO porque no se puede insertar ni actualizar.
+
+#### Mapper entre DTO y Dominio
+
+Clase con métodos estáticos que convierte entre el DTO de infraestructura y la entidad de dominio. Vive junto al DTO en el paquete del driven adapter.
+
+```java
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+final class StockDTOMapper {
+
+    static Stock toDomain(StockDTO dto) {
+        return Stock.builder()
+                .id(dto.id())
+                .sku(dto.sku())
+                .productId(dto.productId())
+                .quantity(dto.quantity())
+                .reservedQuantity(dto.reservedQuantity())
+                .depletionThreshold(dto.depletionThreshold())
+                .updatedAt(dto.updatedAt())
+                .version(dto.version())
+                .build();
+    }
+
+    static StockDTO toDTO(Stock domain) {
+        return StockDTO.builder()
+                .id(domain.id())
+                .sku(domain.sku())
+                .productId(domain.productId())
+                .quantity(domain.quantity())
+                .reservedQuantity(domain.reservedQuantity())
+                .depletionThreshold(domain.depletionThreshold())
+                .updatedAt(domain.updatedAt())
+                .version(domain.version())
+                .build();
+    }
+}
+```
+
+#### RowMapper para DatabaseClient
+
+Para las queries manuales con `DatabaseClient`, se usa un RowMapper con `Readable` (interfaz de R2DBC SPI, compatible con Spring Boot 4.x / Spring Framework 7.x). El RowMapper mapea directamente de la fila SQL a la entidad de dominio — no pasa por el DTO porque `DatabaseClient` no usa Spring Data mapping.
+
+```java
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+final class StockRowMapper {
+
+    static Stock map(Readable row) {
+        return Stock.builder()
+                .id(row.get("id", UUID.class))
+                .sku(row.get("sku", String.class))
+                .productId(row.get("product_id", UUID.class))
+                .quantity(row.get("quantity", Integer.class))
+                .reservedQuantity(row.get("reserved_quantity", Integer.class))
+                .depletionThreshold(row.get("depletion_threshold", Integer.class))
+                .updatedAt(row.get("updated_at", Instant.class))
+                .version(row.get("version", Long.class))
+                .build();
+    }
+}
+```
+
+**¿Qué es `Readable`?** Es la interfaz padre de `Row` en R2DBC SPI (`io.r2dbc.spi.Readable`). En Spring Boot 4.x, `DatabaseClient.map()` acepta `Function<? super Readable, T>`. El método `row.get("columna", Tipo.class)` lee el valor de la columna y lo convierte al tipo Java automáticamente (UUID↔uuid, Integer↔integer, Instant↔timestamptz).
+
+**¿Por qué el RowMapper no usa el DTO?** Porque `DatabaseClient` no pasa por el mapping de Spring Data — trabaja directamente con filas R2DBC. Crear un DTO intermedio sería código muerto. El RowMapper ya cumple la función de aislamiento entre SQL y dominio.
+
+#### Cuándo usar cada herramienta — Guía rápida
+
+| Operación                                              | Herramienta                     | Razón                                             |
+| ------------------------------------------------------ | ------------------------------- | ------------------------------------------------- |
+| `save(entity)`                                         | `ReactiveCrudRepository.save()` | Insert/Update automático con `@Id`                |
+| `findBySku(sku)`                                       | Query method derivado           | Una línea, sin SQL                                |
+| `findByStatusAndExpiresAtBefore(...)`                  | Query method derivado           | Composición de condiciones                        |
+| `SELECT ... FOR UPDATE`                                | `DatabaseClient` + RowMapper    | `@Query` no permite lógica condicional post-query |
+| `UPDATE ... WHERE version = ?` con retorno condicional | `DatabaseClient`                | Necesita `filter(rows > 0)` para lock optimista   |
+| `@Query("SELECT ... ORDER BY ... LIMIT ...")`          | `@Query` en Repository          | SQL nativo simple sin lógica post-query           |
+| `@Modifying @Query("UPDATE ...")`                      | `@Query` en Repository          | UPDATE/DELETE simple que retorna rows afectadas   |
+
+#### Archivos por Adapter
+
+Cada adapter produce estos archivos en su paquete:
+
+```text
+com/arka/r2dbc/stock/
+├── R2dbcStockAdapter.java          # Implementa StockRepository (port)
+├── SpringDataStockRepository.java  # ReactiveCrudRepository<StockDTO, UUID>
+├── StockDTO.java                   # DTO @Table (entidad de infraestructura)
+├── StockDTOMapper.java             # Mapper DTO ↔ Dominio
+└── StockRowMapper.java             # Mapper Readable → Dominio (para DatabaseClient)
+```
 
 ---
 
