@@ -602,28 +602,35 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                   | Resolución                                                                                                                       | Justificación                                                                                |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                          | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                    |
-| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                 | Optional bloquea semánticamente la cadena reactiva                                           |
-| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                          | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                          |
-| Router Functions           | **No**                                                                                                                           | Complejidad sin beneficio; Spring maneja reactividad igual                                   |
-| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                   | Trazabilidad, simplicidad, compatibilidad reactiva                                           |
-| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                    | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos   |
-| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                              | Evitar interferir con el EventLoop                                                           |
-| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                       | Compile-time safety vs runtime extensibility                                                 |
-| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                            | Centralizado, reactivo, sin try/catch en publishers                                          |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                              | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                               |
-| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                             | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                         |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                    | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas  |
-| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                  | Interfaces no pueden extender clases; necesita `super(message)` compartido                   |
-| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                | Trazabilidad sin depender de campos auxiliares como `reason`                                 |
-| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                           | Cohesión por agregado, menos clases, inyección de dependencias simplificada                  |
-| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                 |
-| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente                |
-| Driven Adapters R2DBC      | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                        |
-| Spring Profiles            | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                  | Cambio automático entre BD local y contenedores sin tocar código                             |
-| Driven Adapter Kafka       | **`reactor-kafka` directo** (`KafkaSender`), no `reactive-commons`. Módulo manual `kafka-producer` (ver §B.11)                   | Outbox Pattern requiere partition key, tópico y ack explícito que `DomainEventBus` no expone |
+| Decisión                    | Resolución                                                                                                                       | Justificación                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio  | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                          | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                    |
+| Optional en reactivo        | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                 | Optional bloquea semánticamente la cadena reactiva                                           |
+| Controladores               | **`@RestController`** con `Mono`/`Flux`                                                                                          | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                          |
+| Router Functions            | **No**                                                                                                                           | Complejidad sin beneficio; Spring maneja reactividad igual                                   |
+| MapStruct                   | **No.** Mappers manuales con métodos estáticos                                                                                   | Trazabilidad, simplicidad, compatibilidad reactiva                                           |
+| Builder                     | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                    | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos   |
+| Estructuras concurrentes    | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                              | Evitar interferir con el EventLoop                                                           |
+| switch vs Strategy          | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                       | Compile-time safety vs runtime extensibility                                                 |
+| Manejo de errores           | **`@ControllerAdvice`** + operadores de error Reactor                                                                            | Centralizado, reactivo, sin try/catch en publishers                                          |
+| Null checks en records      | **`Objects.requireNonNull`** en compact constructor                                                                              | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                               |
+| Timestamps                  | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                             | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                         |
+| Reglas en records           | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                    | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas  |
+| DomainException             | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                  | Interfaces no pueden extender clases; necesita `super(message)` compartido                   |
+| Enums descriptivos          | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                | Trazabilidad sin depender de campos auxiliares como `reason`                                 |
+| Organización de UseCases    | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                           | Cohesión por agregado, menos clases, inyección de dependencias simplificada                  |
+| SQL ENUMs                   | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                 |
+| Generación de componentes   | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente                |
+| Driven Adapters R2DBC       | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                        |
+| Spring Profiles             | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                  | Cambio automático entre BD local y contenedores sin tocar código                             |
+| Driven Adapter Kafka        | **`reactor-kafka` directo** (`KafkaSender`), no `reactive-commons`. Módulo manual `kafka-producer` (ver §B.11)                   | Outbox Pattern requiere partition key, tópico y ack explícito que `DomainEventBus` no expone |
+| Transacciones R2DBC         | **`@Transactional`** en UseCases que modifican múltiples tablas. `R2dbcTransactionManager` auto-configurado (ver §D.1)           | Garantiza atomicidad del Outbox Pattern; rollback automático ante `onError`                  |
+| Documentación API           | **Springdoc OpenAPI** (`springdoc-openapi-starter-webflux-ui`). Swagger UI en `/swagger-ui.html` (ver §D.2)                      | Generación automática desde `@RestController`; anotaciones `@Operation` opcionales           |
+| Constantes                  | **`static final`** con nombre descriptivo; valores configurables en YAML con `@Value` (ver §D.3)                                 | Elimina magic numbers/strings; facilita cambios sin recompilar                               |
+| `Mono.defer` vs `Mono.just` | **`Mono.defer()`** cuando el argumento produce side-effects o depende de estado mutable (ver §D.4)                               | Evita evaluación eager en `switchIfEmpty` y otros operadores                                 |
+| Paginación                  | **Offset (`LIMIT/OFFSET`)** para MVP; **Cursor (keyset)** para endpoints de alto volumen en fases posteriores (ver §D.5)         | Simplicidad para datasets pequeños; cursor cuando supere 10K registros frecuentes            |
+| Schedulers                  | **Intervalos externalizados** a `application.yaml` sin defaults inline; schedulers en entry-points (ver §D.6)                    | Fallo rápido si falta propiedad; configuración sin recompilar                                |
+| Logging producción          | **JSON estructurado** en perfil `docker`; formato legible en perfil `local` (ver §D.7)                                           | Facilita ingesta en CloudWatch/Grafana/Loki sin parsing adicional                            |
 
 ---
 
@@ -1538,3 +1545,580 @@ public class SendNotificationUseCase {
     }
 }
 ```
+
+## Apéndice D: Estándares Adicionales — Transacciones, Paginación, Schedulers y Más
+
+### D.1 Transacciones Reactivas R2DBC: `@Transactional` y el Outbox Pattern
+
+En servicios reactivos con R2DBC, Spring provee `R2dbcTransactionManager` que implementa `ReactiveTransactionManager`. La anotación `@Transactional` funciona en métodos que retornan `Mono`/`Flux`, pero con diferencias fundamentales respecto al modelo imperativo:
+
+- **No usa `ThreadLocal`**: El contexto transaccional se propaga vía Reactor Context (subscriber context), no por hilo
+- **Requiere `R2dbcTransactionManager` como bean**: Spring Boot lo auto-configura si hay un `ConnectionFactory` R2DBC
+- **Rollback automático**: Ante cualquier excepción (checked o unchecked) que se propague como `onError` en la cadena reactiva
+
+**Regla crítica para el Outbox Pattern:** Toda operación que modifique datos de negocio Y escriba un evento en `outbox_events` **debe ejecutarse dentro de la misma transacción R2DBC**. Sin `@Transactional`, cada `save()` es una transacción independiente — si la escritura del outbox falla después de guardar el stock, se pierde el evento (Dual-Write Problem).
+
+#### Dónde colocar `@Transactional`
+
+| Capa                         | Anotación                                                  | Justificación                                                                      |
+| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **UseCase** (domain/usecase) | `@Transactional` en métodos que modifican múltiples tablas | El UseCase define la unidad de trabajo de negocio                                  |
+| **Driven Adapter**           | **No**                                                     | El adapter ejecuta operaciones individuales; la transacción la controla el UseCase |
+| **Entry Point**              | **No**                                                     | El controlador delega al UseCase; no debe manejar transacciones                    |
+
+#### Patrón de implementación
+
+```java
+import org.springframework.transaction.annotation.Transactional;
+
+@RequiredArgsConstructor
+public class StockUseCase {
+
+    private final StockRepository stockRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final OutboxEventRepository outboxEventRepository;
+
+    // ✅ @Transactional envuelve stock + movement + outbox en UNA transacción R2DBC
+    @Transactional
+    public Mono<Stock> updateStock(String sku, int newQuantity, String reason) {
+        return stockRepository.findBySku(sku)
+                .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
+                .flatMap(stock -> {
+                    Stock updated = stock.setQuantity(newQuantity);
+                    return stockRepository.updateQuantity(sku, newQuantity, stock.version())
+                            .switchIfEmpty(Mono.error(new OptimisticLockException(sku)))
+                            .flatMap(saved -> {
+                                StockMovement movement = /* ... */;
+                                OutboxEvent event = /* ... */;
+                                // Ambas escrituras participan en la MISMA transacción
+                                return stockMovementRepository.save(movement)
+                                        .then(outboxEventRepository.save(event))
+                                        .thenReturn(saved);
+                            });
+                });
+    }
+
+    // ✅ Reserva con lock pesimista — la transacción incluye FOR UPDATE + reserve + outbox
+    @Transactional
+    public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) {
+        return stockRepository.findBySkuForUpdate(sku) // SELECT ... FOR UPDATE
+                .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
+                .flatMap(stock -> /* ... reserva + movement + outbox ... */);
+    }
+
+    // ✅ Consumidor Kafka — idempotencia + stock + movement en una transacción
+    @Transactional
+    public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId,
+                                            int initialStock, int depletionThreshold) {
+        return processedEventRepository.exists(eventId)
+                .flatMap(exists -> exists ? Mono.empty() : /* crear stock + movement + processed_event */);
+    }
+
+    // ✅ Consultas de solo lectura — @Transactional(readOnly = true) es opcional pero documenta intención
+    @Transactional(readOnly = true)
+    public Mono<Stock> getBySku(String sku) {
+        return stockRepository.findBySku(sku)
+                .switchIfEmpty(Mono.error(new StockNotFoundException(sku)));
+    }
+}
+```
+
+#### Rollback
+
+El rollback es automático cuando un `onError` se propaga fuera del método `@Transactional`. No se necesita configuración adicional:
+
+```java
+// Si outboxEventRepository.save() falla, el UPDATE de stock se revierte automáticamente
+return stockRepository.updateQuantity(sku, newQuantity, version)
+        .then(outboxEventRepository.save(event))  // Si esto falla → rollback de todo
+        .thenReturn(saved);
+```
+
+**Excepciones que NO causan rollback por defecto:** Ninguna en el modelo reactivo — cualquier señal `onError` causa rollback. Esto difiere del modelo imperativo donde solo `RuntimeException` causa rollback por defecto.
+
+#### Configuración requerida
+
+Spring Boot auto-configura `R2dbcTransactionManager` si detecta un `ConnectionFactory` R2DBC. No se necesita configuración manual salvo que se requiera un `TransactionalOperator` programático:
+
+```java
+// Solo si se necesita control programático (raro — preferir @Transactional)
+@Bean
+public TransactionalOperator transactionalOperator(ReactiveTransactionManager txManager) {
+    return TransactionalOperator.create(txManager);
+}
+```
+
+#### Cuándo usar `TransactionalOperator` en lugar de `@Transactional`
+
+| Escenario                                                                   | Herramienta                                 | Razón                                                             |
+| --------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| UseCase con múltiples escrituras                                            | `@Transactional`                            | Declarativo, limpio, Spring lo maneja                             |
+| Transacción dentro de un `flatMap` anidado donde `@Transactional` no aplica | `TransactionalOperator.transactional(mono)` | Control programático cuando la anotación no alcanza               |
+| Scheduler que ejecuta lógica transaccional                                  | `@Transactional` en el UseCase invocado     | El scheduler delega al UseCase; la transacción vive en el UseCase |
+
+---
+
+### D.2 Documentación de API con Springdoc/OpenAPI
+
+Cada microservicio debe exponer documentación interactiva de su API REST mediante [Springdoc OpenAPI](https://springdoc.org/). Springdoc escanea los controladores `@RestController` y genera automáticamente la especificación OpenAPI 3.x.
+
+#### Dependencia
+
+Agregar en el `build.gradle` del módulo `entry-points` (webflux):
+
+```groovy
+// Para servicios reactivos (WebFlux)
+implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:2.8.8'
+
+// Para ms-reporter (MVC imperativo)
+implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8'
+```
+
+> **Nota:** Verificar la última versión estable de `springdoc-openapi` compatible con Spring Boot 4.0.3 antes de implementar. La versión 2.8.x es la última conocida al momento de escribir este documento.
+
+#### Configuración en `application.yaml`
+
+```yaml
+springdoc:
+  api-docs:
+    path: /api-docs # JSON spec en /api-docs
+  swagger-ui:
+    path: /swagger-ui.html # UI interactiva
+    enabled: true # Habilitar en local/docker, deshabilitar en producción
+  show-actuator: false # No exponer endpoints de Actuator en la doc
+```
+
+#### Metadata del servicio
+
+Crear una clase `OpenApiConfig` en `applications/app-service`:
+
+```java
+@Configuration
+public class OpenApiConfig {
+
+    @Bean
+    public OpenAPI inventoryOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("ms-inventory API")
+                        .description("Gestión de stock, reservas y movimientos de inventario")
+                        .version("1.0.0")
+                        .contact(new Contact().name("Equipo Arka").email("dev@arka.com")));
+    }
+}
+```
+
+#### Anotaciones en controladores
+
+Usar anotaciones de OpenAPI para enriquecer la documentación generada automáticamente:
+
+```java
+@RestController
+@RequestMapping("/inventory")
+@Tag(name = "Inventory", description = "Operaciones de stock e inventario")
+@RequiredArgsConstructor
+public class StockController {
+
+    @Operation(summary = "Actualizar stock manualmente",
+               description = "Actualiza la cantidad de stock de un SKU. Requiere rol ADMIN.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Stock actualizado"),
+        @ApiResponse(responseCode = "404", description = "SKU no encontrado"),
+        @ApiResponse(responseCode = "409", description = "Conflicto de concurrencia o constraint")
+    })
+    @PutMapping("/{sku}/stock")
+    public Mono<StockResponse> updateStock(@PathVariable String sku,
+                                           @Valid @RequestBody UpdateStockRequest request) {
+        // ...
+    }
+}
+```
+
+**Regla:** Las anotaciones de OpenAPI son opcionales para el MVP. Springdoc genera documentación funcional solo con `@RestController`, `@RequestMapping` y Bean Validation. Las anotaciones `@Operation`/`@ApiResponse` se agregan progresivamente para mejorar la calidad de la doc.
+
+#### URLs de acceso
+
+| Recurso      | URL                                       | Descripción          |
+| ------------ | ----------------------------------------- | -------------------- |
+| Swagger UI   | `http://localhost:{port}/swagger-ui.html` | Interfaz interactiva |
+| OpenAPI JSON | `http://localhost:{port}/api-docs`        | Especificación JSON  |
+| OpenAPI YAML | `http://localhost:{port}/api-docs.yaml`   | Especificación YAML  |
+
+---
+
+### D.3 Constantes: Evitar Magic Numbers y Magic Strings
+
+Todos los valores literales que representan configuración, umbrales, nombres de tópicos, códigos de error o cualquier valor con significado de negocio deben extraerse a constantes con nombre descriptivo.
+
+#### Reglas
+
+1. **Constantes de dominio** (umbrales, TTLs, defaults) → `static final` en la entidad o record que las usa
+2. **Constantes de infraestructura** (tópicos Kafka, nombres de tablas, códigos HTTP) → `static final` en la clase que las usa o en una clase de constantes del módulo
+3. **Valores configurables** (intervalos de scheduler, batch sizes, timeouts) → Externalizar a `application.yaml` e inyectar con `@Value` o `@ConfigurationProperties`
+4. **Nunca** usar literales numéricos o strings directamente en lógica de negocio
+
+#### Ejemplos
+
+```java
+// ✅ Constante en la entidad de dominio
+public record Stock(/* ... */) {
+    public static final int DEFAULT_DEPLETION_THRESHOLD = 10;
+}
+
+// ✅ Constante en la entidad de dominio
+public record StockReservation(/* ... */) {
+    public static final Duration DEFAULT_TTL = Duration.ofMinutes(15);
+}
+
+// ✅ Constante de infraestructura en el adapter
+public class KafkaOutboxRelay {
+    private static final String TOPIC = "inventory-events";
+}
+
+// ✅ Constante de UseCase
+public class OutboxRelayUseCase {
+    private static final int BATCH_SIZE = 100;
+}
+
+// ❌ NUNCA — magic numbers en lógica
+if (stock.availableQuantity() <= 10) { /* ... */ }  // ¿Qué es 10?
+Thread.sleep(5000);                                   // ¿Por qué 5000?
+return "STOCK_NOT_FOUND";                             // ¿Dónde más se usa?
+
+// ✅ SIEMPRE — constante con nombre descriptivo
+if (stock.isBelowThreshold()) { /* ... */ }           // Usa depletionThreshold interno
+```
+
+#### Valores configurables vs constantes
+
+| Tipo de valor               | Mecanismo                | Ejemplo                                                                                            |
+| --------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Umbral de negocio inmutable | `static final` en record | `DEFAULT_DEPLETION_THRESHOLD = 10`                                                                 |
+| Intervalo de scheduler      | `@Value` desde YAML      | `@Scheduled(fixedDelayString = "${scheduler.outbox.interval:5000}")`                               |
+| Batch size configurable     | `@Value` o constructor   | `OutboxRelayUseCase(OutboxEventRepository repo, @Value("${outbox.batch-size:100}") int batchSize)` |
+| Nombre de tópico Kafka      | `@Value` desde YAML      | `@Value("${kafka.topic.inventory:inventory-events}")`                                              |
+
+---
+
+### D.4 `Mono.defer()` vs `Mono.just()`: Evaluación Lazy vs Eager
+
+En cadenas reactivas, la diferencia entre `Mono.just()` y `Mono.defer()` es fundamental para evitar bugs sutiles.
+
+#### Diferencia clave
+
+| Operador                             | Evaluación | Cuándo se ejecuta el argumento                    |
+| ------------------------------------ | ---------- | ------------------------------------------------- |
+| `Mono.just(value)`                   | **Eager**  | Al momento de construir la cadena (assembly time) |
+| `Mono.defer(() -> Mono.just(value))` | **Lazy**   | Al momento de suscribirse (subscription time)     |
+
+#### Cuándo usar cada uno
+
+**`Mono.just()`** — Cuando el valor ya está disponible y es inmutable:
+
+```java
+// ✅ Valor constante o ya calculado
+return Mono.just(ReserveStockResult.builder().success(false).build());
+
+// ✅ Valor que no cambia entre suscripciones
+return Mono.just("inventory-events");
+```
+
+**`Mono.defer()`** — Cuando el valor debe calcularse en cada suscripción o depende de estado mutable:
+
+```java
+// ✅ Dentro de switchIfEmpty — evita evaluación eager del fallback
+return stockRepository.findBySku(sku)
+        .switchIfEmpty(Mono.defer(() -> createDefaultStock(sku)));
+// Sin defer, createDefaultStock() se ejecutaría SIEMPRE, incluso si findBySku retorna valor
+
+// ✅ Cuando el Mono depende de un valor que puede cambiar
+return Mono.defer(() -> outboxRelayUseCase.markAsPublished(event));
+// Garantiza que markAsPublished se ejecuta solo cuando se suscribe, no al construir la cadena
+
+// ✅ Para envolver lógica que produce side-effects
+return Mono.defer(() -> {
+    log.info("Processing event {}", eventId);
+    return processEvent(eventId);
+});
+```
+
+**`Mono.fromCallable()`** — Cuando se necesita envolver una operación síncrona que puede lanzar excepción:
+
+```java
+// ✅ Operación síncrona que puede fallar
+return Mono.fromCallable(() -> objectMapper.writeValueAsString(envelope));
+// Si writeValueAsString lanza excepción, se propaga como onError (no como excepción no capturada)
+```
+
+#### Error común: `switchIfEmpty` sin `defer`
+
+```java
+// ❌ BUG — createDefaultStock() se ejecuta SIEMPRE (eager)
+return repository.findBySku(sku)
+        .switchIfEmpty(createDefaultStock(sku));  // Se ejecuta aunque findBySku retorne valor
+
+// ✅ CORRECTO — createDefaultStock() solo se ejecuta si findBySku retorna vacío
+return repository.findBySku(sku)
+        .switchIfEmpty(Mono.defer(() -> createDefaultStock(sku)));
+```
+
+> **Regla práctica:** Si el argumento de `switchIfEmpty()` es un `Mono` que produce side-effects (escritura en BD, llamada a servicio externo, log), **siempre** envolverlo en `Mono.defer()`.
+
+---
+
+### D.5 Paginación: Offset vs Cursor — Decisión y Estándar
+
+#### Análisis comparativo
+
+| Criterio                                        | Offset (`LIMIT/OFFSET`)                                                          | Cursor (Keyset)                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Rendimiento con datasets grandes**            | Degrada linealmente — `OFFSET 100000` escanea 100K filas                         | Constante — usa índice para posicionarse directamente                      |
+| **Consistencia ante inserciones/eliminaciones** | Inestable — puede saltar o duplicar registros si los datos cambian entre páginas | Estable — el cursor apunta a una posición fija en el índice                |
+| **Complejidad de implementación**               | Baja — `page` y `size` como query params                                         | Media — requiere codificar/decodificar cursor, manejar dirección           |
+| **Compatibilidad con UI**                       | Natural — "Página 1, 2, 3..."                                                    | Requiere "Siguiente/Anterior" (no permite saltar a página N)               |
+| **Soporte en Spring Data R2DBC**                | Nativo — `OFFSET` y `LIMIT` en SQL                                               | Manual — `WHERE created_at < :cursor ORDER BY created_at DESC LIMIT :size` |
+
+#### Decisión para Arka
+
+**Offset para el MVP (Fase 1).** Cursor para endpoints de alto volumen en fases posteriores.
+
+**Justificación:**
+
+1. Los datasets de Fase 1 son pequeños (cientos a miles de registros por SKU en `stock_movements`, decenas de órdenes por cliente)
+2. Los endpoints paginados son administrativos (historial de stock, listado de órdenes) — no son de alta frecuencia
+3. La complejidad adicional de cursor pagination no se justifica para el volumen actual
+4. Spring Data R2DBC no tiene soporte nativo para cursor pagination — requiere SQL manual con `DatabaseClient`
+
+**Cuándo migrar a cursor:**
+
+- Cuando un endpoint supere **10,000 registros** frecuentemente consultados
+- Cuando se detecte degradación de latencia en páginas profundas (página > 100)
+- `ms-reporter` (Fase 3) debería usar cursor desde el inicio por el volumen de eventos
+
+#### Estándar de implementación — Offset (MVP)
+
+**Query params:** `page` (0-indexed, default 0) y `size` (default 20, max 100)
+
+```java
+// Entry-point — controlador
+@GetMapping("/{sku}/history")
+public Flux<StockMovementResponse> getHistory(
+        @PathVariable String sku,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size) {
+    int safeSize = Math.min(size, 100); // Cap máximo
+    return stockUseCase.getHistory(sku, page, safeSize)
+            .map(StockMovementMapper::toResponse);
+}
+
+// Driven adapter — SQL
+@Override
+public Flux<StockMovement> findBySkuOrderByCreatedAtDesc(String sku, int page, int size) {
+    return client.sql("SELECT * FROM stock_movements WHERE sku = :sku " +
+                      "ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
+            .bind("sku", sku)
+            .bind("limit", size)
+            .bind("offset", page * size)
+            .map(StockMovementRowMapper::map)
+            .all();
+}
+```
+
+#### Estándar de implementación — Cursor (futuro)
+
+Cuando se implemente cursor pagination, usar el campo `created_at` (o `id` si es UUID v7 con orden temporal) como cursor:
+
+```java
+// Query params: cursor (opaco, base64), size
+@GetMapping("/{sku}/history")
+public Mono<CursorPage<StockMovementResponse>> getHistory(
+        @PathVariable String sku,
+        @RequestParam(required = false) String cursor,
+        @RequestParam(defaultValue = "20") int size) {
+    // Decodificar cursor → Instant
+    // SQL: WHERE sku = :sku AND created_at < :cursor ORDER BY created_at DESC LIMIT :size+1
+    // Si retorna size+1 registros → hay más páginas, el último es el nextCursor
+}
+
+// Response wrapper
+public record CursorPage<T>(List<T> items, String nextCursor, boolean hasMore) {}
+```
+
+---
+
+### D.6 Schedulers: Estándar de Implementación y Externalización
+
+Los schedulers (`@Scheduled`) en Arka se usan para dos patrones: el Outbox Relay (publicación de eventos a Kafka) y la expiración de reservas. Deben seguir un estándar uniforme.
+
+#### Ubicación en Clean Architecture
+
+Los schedulers son **entry-points** — son puntos de entrada al sistema que disparan lógica de negocio. Viven en `infrastructure/entry-points/` o en `infrastructure/driven-adapters/` si están acoplados a infraestructura específica (como el Kafka producer).
+
+| Scheduler                     | Ubicación                                        | Justificación                                     |
+| ----------------------------- | ------------------------------------------------ | ------------------------------------------------- |
+| `ExpiredReservationScheduler` | `infrastructure/entry-points/scheduler/`         | Dispara lógica de dominio pura (expirar reservas) |
+| `KafkaOutboxRelay`            | `infrastructure/driven-adapters/kafka-producer/` | Acoplado a Kafka (publica eventos)                |
+
+#### Externalización de intervalos a `application.yaml`
+
+**Regla:** Nunca hardcodear intervalos de scheduler. La expresión (intervalo o cron) vive exclusivamente en `application.yaml`; el Java solo referencia la propiedad. Sin defaults inline en la anotación — si la propiedad no existe en YAML, Spring falla al startup, lo cual es preferible a ejecutar con un valor silenciosamente incorrecto.
+
+```java
+// ✅ Referencia pura a YAML — sin default inline
+@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")
+public void relay() { /* ... */ }
+
+@Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")
+public void expireReservations() { /* ... */ }
+```
+
+```yaml
+# application.yaml — fuente única de verdad para intervalos
+scheduler:
+  outbox-relay:
+    interval: 5000 # ms — polling del outbox cada 5s
+  expired-reservations:
+    interval: 60000 # ms — verificar reservas expiradas cada 60s
+```
+
+Para schedulers con expresión cron (futuros):
+
+```java
+// ✅ Cron externalizado — la expresión vive en YAML, no en Java
+@Scheduled(cron = "${scheduler.daily-report.cron}")
+public void generateDailyReport() { /* ... */ }
+```
+
+```yaml
+# application.yaml
+scheduler:
+  daily-report:
+    cron: "0 0 2 * * ?" # Cada día a las 2 AM
+```
+
+#### Patrón estándar de un Scheduler
+
+```java
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class ExpiredReservationScheduler {
+
+    private final StockReservationUseCase stockReservationUseCase;
+
+    @Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")
+    public void expireReservations() {
+        log.info("Starting expired reservations check cycle");
+        stockReservationUseCase.expireReservations()
+                .doOnComplete(() -> log.info("Expired reservations check cycle completed"))
+                .doOnError(ex -> log.error("Error during expired reservations check: {}", ex.getMessage()))
+                .onErrorComplete()  // No propagar error al scheduler — se reintenta en el siguiente ciclo
+                .subscribe();
+    }
+}
+```
+
+**Puntos clave:**
+
+- `@Slf4j` para logging
+- Log al inicio y fin de cada ciclo
+- `onErrorComplete()` para que errores no detengan el scheduler
+- El scheduler **delega** al UseCase — nunca contiene lógica de negocio
+- `subscribe()` al final porque `@Scheduled` espera `void`, no `Mono`
+
+#### Habilitación de Scheduling
+
+En la clase principal de cada microservicio que use schedulers:
+
+```java
+@SpringBootApplication
+@EnableScheduling
+@ConfigurationPropertiesScan
+public class MainApplication { /* ... */ }
+```
+
+---
+
+### D.7 Logging Estructurado para Observabilidad (CloudWatch / Grafana)
+
+El estándar de logging de §7 define SLF4J como librería obligatoria. Esta sección complementa con el formato de logs para facilitar la ingesta en sistemas de observabilidad (CloudWatch Logs, Grafana Loki, ELK).
+
+#### Formato JSON para producción
+
+En el perfil `docker` (producción/staging), los logs deben emitirse en formato JSON para facilitar el parsing automático:
+
+```yaml
+# application-docker.yaml
+logging:
+  pattern:
+    console: >
+      {"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","service":"${spring.application.name}","thread":"%thread","logger":"%logger{36}","message":"%msg","correlationId":"%X{correlationId}"}%n
+```
+
+Alternativa más limpia con Logback JSON encoder (si se agrega la dependencia `logstash-logback-encoder`):
+
+```xml
+<!-- logback-spring.xml — perfil docker -->
+<springProfile name="docker">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${spring.application.name}"}</customFields>
+        </encoder>
+    </appender>
+</springProfile>
+```
+
+#### Formato legible para desarrollo local
+
+En el perfil `local`, mantener el formato estándar de Spring Boot (legible por humanos):
+
+```yaml
+# application-local.yaml
+logging:
+  level:
+    com.arka: DEBUG
+    org.springframework.r2dbc: DEBUG
+```
+
+#### Propagación de `correlationId`
+
+Para trazabilidad distribuida, propagar el `correlationId` en el MDC de SLF4J:
+
+```java
+// En entry-points — extraer del header o generar uno nuevo
+public Mono<StockResponse> updateStock(@PathVariable String sku,
+                                       @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId) {
+    String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString();
+    return stockUseCase.updateStock(sku, newQuantity, reason)
+            .contextWrite(Context.of("correlationId", corrId));
+}
+```
+
+> **Nota:** La integración completa con Micrometer Tracing / OpenTelemetry para propagación automática de trace IDs se define en la fase de despliegue a AWS, no en el código de aplicación.
+
+---
+
+### D.8 Token de LocalStack en Docker Compose
+
+LocalStack requiere un `LOCALSTACK_AUTH_TOKEN` para activar funcionalidades del emulador. En desarrollo local, este token se configura como variable de entorno en el `.env` y se referencia en `compose.yaml`.
+
+#### Configuración
+
+1. Agregar en `.env`:
+
+```env
+# LocalStack — Auth Token (obtener en https://app.localstack.cloud/workspace/auth-token)
+LOCALSTACK_AUTH_TOKEN=ls-NuTUQOso-SUTO-9934-hUVo-2908GUhI9fa5
+```
+
+2. Referenciar en `compose.yaml` dentro del servicio `localstack`:
+
+```yaml
+localstack:
+  environment:
+    - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN- }
+```
+
+> **Nota de seguridad:** El token del `.env` es para desarrollo local. En CI/CD, usar un CI Auth Token configurado como secreto del pipeline. Nunca commitear tokens reales a Git — el `.env` ya está en `.gitignore`.
+
+Referencia: [LocalStack Auth Token docs](https://docs.localstack.cloud/aws/getting-started/auth-token/)
