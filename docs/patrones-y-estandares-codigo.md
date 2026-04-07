@@ -602,27 +602,28 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                   | Resolución                                                                                                                       | Justificación                                                                               |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                          | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                   |
-| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                 | Optional bloquea semánticamente la cadena reactiva                                          |
-| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                          | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                         |
-| Router Functions           | **No**                                                                                                                           | Complejidad sin beneficio; Spring maneja reactividad igual                                  |
-| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                   | Trazabilidad, simplicidad, compatibilidad reactiva                                          |
-| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                    | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos  |
-| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                              | Evitar interferir con el EventLoop                                                          |
-| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                       | Compile-time safety vs runtime extensibility                                                |
-| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                            | Centralizado, reactivo, sin try/catch en publishers                                         |
-| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                              | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                              |
-| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                             | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                        |
-| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                    | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas |
-| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                  | Interfaces no pueden extender clases; necesita `super(message)` compartido                  |
-| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                | Trazabilidad sin depender de campos auxiliares como `reason`                                |
-| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                           | Cohesión por agregado, menos clases, inyección de dependencias simplificada                 |
-| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                |
-| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente               |
-| Driven Adapters R2DBC      | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                       |
-| Spring Profiles            | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                  | Cambio automático entre BD local y contenedores sin tocar código                            |
+| Decisión                   | Resolución                                                                                                                       | Justificación                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                          | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                    |
+| Optional en reactivo       | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                 | Optional bloquea semánticamente la cadena reactiva                                           |
+| Controladores              | **`@RestController`** con `Mono`/`Flux`                                                                                          | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                          |
+| Router Functions           | **No**                                                                                                                           | Complejidad sin beneficio; Spring maneja reactividad igual                                   |
+| MapStruct                  | **No.** Mappers manuales con métodos estáticos                                                                                   | Trazabilidad, simplicidad, compatibilidad reactiva                                           |
+| Builder                    | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                    | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos   |
+| Estructuras concurrentes   | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                              | Evitar interferir con el EventLoop                                                           |
+| switch vs Strategy         | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                       | Compile-time safety vs runtime extensibility                                                 |
+| Manejo de errores          | **`@ControllerAdvice`** + operadores de error Reactor                                                                            | Centralizado, reactivo, sin try/catch en publishers                                          |
+| Null checks en records     | **`Objects.requireNonNull`** en compact constructor                                                                              | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                               |
+| Timestamps                 | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                             | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                         |
+| Reglas en records          | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                    | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas  |
+| DomainException            | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                  | Interfaces no pueden extender clases; necesita `super(message)` compartido                   |
+| Enums descriptivos         | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                | Trazabilidad sin depender de campos auxiliares como `reason`                                 |
+| Organización de UseCases   | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                           | Cohesión por agregado, menos clases, inyección de dependencias simplificada                  |
+| SQL ENUMs                  | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)  | Validación en BD, mejor rendimiento, documentación implícita                                 |
+| Generación de componentes  | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                 | Estructura consistente; modificar contenido, nunca crear carpetas manualmente                |
+| Driven Adapters R2DBC      | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9) | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                        |
+| Spring Profiles            | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                  | Cambio automático entre BD local y contenedores sin tocar código                             |
+| Driven Adapter Kafka       | **`reactor-kafka` directo** (`KafkaSender`), no `reactive-commons`. Módulo manual `kafka-producer` (ver §B.11)                   | Outbox Pattern requiere partition key, tópico y ack explícito que `DomainEventBus` no expone |
 
 ---
 
@@ -1375,6 +1376,131 @@ ms-inventory:
 1. Levantar solo la BD: `docker compose up postgres-inventory -d`
 2. Correr el micro desde IntelliJ (perfil `local` automático, apunta a `localhost:5433`)
 3. Para el ecosistema completo: `docker compose up -d` (perfil `docker` automático para todos)
+
+### B.11 Driven Adapter Kafka: `reactor-kafka` Directo (No `reactive-commons`)
+
+Para la publicación de eventos de dominio a Kafka, se usa `reactor-kafka` (`KafkaSender`) directamente en lugar de la abstracción `reactive-commons` (`DomainEventBus`) que genera el Scaffold con `--type=asynceventbus --tech=kafka`.
+
+#### Decisión y Justificación
+
+El Scaffold Bancolombia genera un módulo `async-event-bus` basado en `reactive-commons` (`async-kafka-starter`). Esta librería provee `DomainEventBus`, una abstracción de alto nivel para publicar eventos. Sin embargo, **no es adecuada para el Transactional Outbox Pattern** que Arka implementa en `ms-inventory`, `ms-order` y `ms-catalog`.
+
+| Criterio                                    | `reactive-commons` (`DomainEventBus`) | `reactor-kafka` (`KafkaSender`)        |
+| ------------------------------------------- | ------------------------------------- | -------------------------------------- |
+| Partition key por mensaje (SKU, orderId)    | ❌ No expuesto en la API              | ✅ `ProducerRecord(topic, key, value)` |
+| Tópico específico por evento                | ⚠️ Solo vía config global             | ✅ Controlado en cada `ProducerRecord` |
+| Ack explícito antes de marcar PUBLISHED     | ❌ Abstracto, no controlable          | ✅ `SenderResult` por evento           |
+| Patrón Outbox (leer BD → publicar → marcar) | ❌ Diseñado para publicación directa  | ✅ Diseñado para este flujo            |
+| Orden causal por agregado (partición)       | ❌ Sin garantía de partition key      | ✅ Garantizado por key = SKU           |
+
+**Razón principal:** El Outbox Pattern requiere un relay que lee eventos PENDING de la tabla `outbox_events`, los publica a Kafka con el SKU como partition key al tópico `inventory-events`, y solo marca como PUBLISHED tras recibir el ack de Kafka. `reactive-commons` abstrae el broker y no expone el control necesario para este flujo.
+
+#### Cuándo usar cada opción
+
+| Escenario                                       | Herramienta                                | Razón                                          |
+| ----------------------------------------------- | ------------------------------------------ | ---------------------------------------------- |
+| Transactional Outbox Pattern (relay BD → Kafka) | `reactor-kafka` (`KafkaSender`)            | Requiere partition key, tópico y ack explícito |
+| Publicación directa de eventos sin outbox       | `reactive-commons` (`DomainEventBus`)      | Abstracción suficiente, menos código           |
+| Consumidor Kafka (entry-point)                  | Scaffold `generateEntryPoint --type=kafka` | El scaffold genera el listener correctamente   |
+
+#### Estructura del Módulo
+
+El módulo se crea manualmente como `kafka-producer` en `infrastructure/driven-adapters/` (el Scaffold no tiene un tipo nativo para Kafka producer con control de routing). Se registra en `settings.gradle` y se agrega como dependencia en `app-service`.
+
+```text
+infrastructure/driven-adapters/kafka-producer/
+├── build.gradle
+└── src/main/java/com/arka/kafka/
+    ├── KafkaOutboxRelay.java       # Relay @Scheduled cada 5s
+    ├── KafkaProducerConfig.java    # Bean KafkaSender<String, String>
+    └── ExpiredReservationScheduler.java  # Job @Scheduled cada 60s (si aplica)
+```
+
+**`build.gradle`:**
+
+```groovy
+dependencies {
+    implementation project(':model')
+    implementation project(':usecase')
+    implementation 'org.springframework:spring-context'
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'io.projectreactor.kafka:reactor-kafka:1.3.23'
+    implementation 'tools.jackson.core:jackson-databind'
+}
+```
+
+#### Patrón de Implementación del Relay
+
+```java
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class KafkaOutboxRelay {
+
+    private static final String TOPIC = "inventory-events"; // 1 tópico por bounded context
+
+    private final OutboxRelayUseCase outboxRelayUseCase;
+    private final KafkaSender<String, String> kafkaSender;
+    private final ObjectMapper objectMapper;
+
+    @Scheduled(fixedDelay = 5000)
+    public void relay() {
+        outboxRelayUseCase.fetchPendingEvents()
+                .flatMap(this::publishAndMark)
+                .subscribe();
+    }
+
+    private Mono<Void> publishAndMark(OutboxEvent event) {
+        return Mono.fromCallable(() -> buildEnvelopeJson(event))
+                .flatMap(json -> send(event.partitionKey(), json, event))
+                .then(Mono.defer(() -> outboxRelayUseCase.markAsPublished(event)))
+                .doOnSuccess(v -> log.info("Published outbox event {} [{}]", event.id(), event.eventType()))
+                .onErrorResume(ex -> {
+                    log.warn("Failed to publish outbox event {} [{}]: {}",
+                            event.id(), event.eventType(), ex.getMessage());
+                    return Mono.empty(); // Mantener PENDING para reintento
+                });
+    }
+
+    private Mono<Void> send(String key, String value, OutboxEvent event) {
+        var record = new ProducerRecord<>(TOPIC, null, null, key, value);
+        var senderRecord = SenderRecord.create(record, event.id());
+        return kafkaSender.send(Mono.just(senderRecord)).next().then();
+    }
+}
+```
+
+**Puntos clave:**
+
+- `partitionKey` (SKU) como key del `ProducerRecord` → garantiza orden causal por SKU en la misma partición
+- `onErrorResume` mantiene el evento como PENDING para reintento en el siguiente ciclo
+- `markAsPublished` solo se ejecuta tras ack exitoso de Kafka
+- El sobre estándar (`DomainEventEnvelope`) se serializa como JSON con `ObjectMapper`
+
+#### Configuración del Producer
+
+```java
+@Configuration
+public class KafkaProducerConfig {
+
+    @Bean
+    public KafkaSender<String, String> kafkaSender(
+            @Value("${spring.kafka.bootstrap-servers:localhost:9092}") String bootstrapServers) {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.RETRIES_CONFIG, 3);
+        return KafkaSender.create(SenderOptions.create(props));
+    }
+}
+```
+
+#### Regla para Otros Microservicios
+
+Esta decisión aplica a **todo microservicio que implemente el Transactional Outbox Pattern**: `ms-inventory`, `ms-order`, y `ms-catalog` (adaptado a MongoDB). El módulo `kafka-producer` se replica en cada uno con el tópico correspondiente (`inventory-events`, `order-events`, `product-events`).
 
 ---
 

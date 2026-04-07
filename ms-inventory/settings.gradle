@@ -21,3 +21,7 @@ project(':model').projectDir = file('./domain/model')
 project(':usecase').projectDir = file('./domain/usecase')
 include ':r2dbc-postgresql'
 project(':r2dbc-postgresql').projectDir = file('./infrastructure/driven-adapters/r2dbc-postgresql')
+include ':kafka-producer'
+project(':kafka-producer').projectDir = file('./infrastructure/driven-adapters/kafka-producer')
+include ':scheduler'
+project(':scheduler').projectDir = file('./infrastructure/entry-points/scheduler')

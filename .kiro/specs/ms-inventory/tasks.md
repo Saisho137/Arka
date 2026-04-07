@@ -246,8 +246,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - `save`: `INSERT INTO processed_events (event_id, processed_at) VALUES (?, NOW())`
     - _Requisitos: 9.1, 9.3, 9.4_
 
-- [ ] 9. Implementar driven adapters — Kafka Outbox Relay y Scheduler de expiración
-  - [ ] 9.1 Implementar `KafkaOutboxRelay`
+- [x] 9. Implementar driven adapters — Kafka Outbox Relay y Scheduler de expiración
+  - [x] 9.1 Implementar `KafkaOutboxRelay`
     - Scheduled relay que ejecuta cada 5 segundos (`@Scheduled` o `Flux.interval`)
     - Consultar eventos PENDING vía `outboxEventRepository.findPending(100)`
     - Publicar cada evento a Kafka con `ReactiveKafkaProducer` al tópico `inventory-events` usando el `partitionKey` (SKU) como key
@@ -259,7 +259,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Propiedad 19: Transición de estado del relay outbox** — Generar eventos PENDING, simular publicación exitosa/fallida y verificar transición a PUBLISHED o permanencia en PENDING
     - **Valida: Requisitos 8.5, 8.6**
 
-  - [ ] 9.3 Implementar `ExpiredReservationScheduler`
+  - [x] 9.3 Implementar `ExpiredReservationScheduler`
     - Job periódico cada 60 segundos (`@Scheduled`)
     - Delegar a `StockReservationUseCase.expireReservations()`
     - Log INFO al iniciar y finalizar cada ciclo

@@ -5,3 +5,5 @@ spring:
     url: r2dbc:postgresql://localhost:5433/db_inventory
     username: postgres
     password: root
+  kafka:
+    bootstrap-servers: localhost:9092

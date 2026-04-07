@@ -1,7 +1,9 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+	implementation project(':scheduler')
 	implementation project(':r2dbc-postgresql')
+	implementation project(':kafka-producer')
     implementation project(':model')
     implementation project(':usecase')
     implementation 'org.springframework.boot:spring-boot-starter'

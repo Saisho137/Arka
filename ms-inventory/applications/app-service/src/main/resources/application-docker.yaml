@@ -5,3 +5,5 @@ spring:
     url: r2dbc:postgresql://arka-db-inventory:5432/db_inventory
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:29092

@@ -14,3 +14,5 @@ spring:
       enabled: true
       initial-size: 5
       max-size: 20
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
