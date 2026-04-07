@@ -265,6 +265,36 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Log INFO al iniciar y finalizar cada ciclo
     - _Requisitos: 5.1, 5.5_
 
+- [ ] 9A. Corrección crítica — Aplicar `@Transactional` en UseCases y externalizar schedulers
+  - [ ] 9A.1 Agregar `@Transactional` a métodos de `StockUseCase`
+    - Agregar `import org.springframework.transaction.annotation.Transactional` al UseCase
+    - `@Transactional` en `updateStock()` — garantiza atomicidad de: updateQuantity + save movement + save outbox event(s)
+    - `@Transactional` en `reserveStock()` — garantiza atomicidad de: findBySkuForUpdate + updateReservedQuantity + save reservation + save movement + save outbox event(s). El `SELECT ... FOR UPDATE` vive dentro de esta transacción
+    - `@Transactional` en `processProductCreated()` — garantiza atomicidad de: save stock + save movement + save processed_event
+    - `@Transactional(readOnly = true)` en `getBySku()` y `getHistory()` (opcional, documenta intención)
+    - Verificar que los tests existentes siguen pasando (el mock de los ports no se ve afectado por `@Transactional` en tests unitarios sin Spring context)
+    - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
+    - _Requisitos: 1.6, 4.7, 4.8, 4.9, 6.6, 8.1_
+
+  - [ ] 9A.2 Agregar `@Transactional` a métodos de `StockReservationUseCase`
+    - `@Transactional` en `processOrderCancelled()` — garantiza atomicidad de: updateStatus + updateReservedQuantity + save movement + save outbox + save processed_event
+    - Para `expireReservations()`: el método público NO lleva `@Transactional` (itera sobre múltiples reservas). Extraer la lógica de procesamiento de cada reserva individual a un método `@Transactional` privado o a un bean auxiliar para que cada reserva tenga su propia transacción (aislamiento de fallos según Requisito 5.5)
+    - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
+    - _Requisitos: 5.4, 5.5, 7.3_
+
+  - [ ] 9A.3 Agregar `@Transactional` a `OutboxRelayUseCase.markAsPublished()`
+    - `@Transactional` en `markAsPublished()` — operación individual de UPDATE
+    - `@Transactional(readOnly = true)` en `fetchPendingEvents()` (opcional)
+    - _Estándar: §D.1_
+    - _Requisitos: 8.5_
+
+  - [ ] 9A.4 Externalizar intervalos de schedulers a `application.yaml`
+    - En `KafkaOutboxRelay`: cambiar `@Scheduled(fixedDelay = 5000)` a `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")`
+    - En `ExpiredReservationScheduler`: cambiar `@Scheduled(fixedDelay = 60000)` a `@Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")`
+    - Sin defaults inline en la anotación — si la propiedad no existe en YAML, Spring falla al startup (fail-fast)
+    - _Estándar: §D.6 (Schedulers externalizados)_
+    - _Requisitos: 5.1, 8.4_
+
 - [ ] 10. Implementar entry points — DTOs, Mappers y Controlador REST
   - [ ] 10.1 Crear DTOs de request y response con Bean Validation
     - `UpdateStockRequest`: `@NotNull @PositiveOrZero Integer quantity`, `String reason`
@@ -283,9 +313,12 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
   - [ ] 10.3 Implementar `StockController`
     - `PUT /inventory/{sku}/stock` → `StockUseCase.updateStock()` → 200 OK con `StockResponse`
     - `GET /inventory/{sku}` → `StockUseCase.getBySku()` → 200 OK con `StockResponse`
-    - `GET /inventory/{sku}/history` → `StockUseCase.getHistory()` → 200 OK con `Flux<StockMovementResponse>` (paginado con query params page, size)
+    - `GET /inventory/{sku}/history` → `StockUseCase.getHistory()` → 200 OK con `Flux<StockMovementResponse>` (paginado con query params page, size con cap máximo 100)
     - Usar `@Valid` en requests, retornos `Mono`/`Flux`
+    - Anotar con `@Tag(name = "Inventory")` a nivel de clase
+    - Anotar cada endpoint con `@Operation(summary = "...")` y `@ApiResponses` para documentación OpenAPI
     - _Requisitos: 1.1, 2.1, 2.3, 3.1, 3.3_
+    - _Estándares: §D.2 (OpenAPI), §D.5 (Paginación Offset)_
 
   - [ ] 10.4 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
     - Manejar `WebExchangeBindException` (Bean Validation) → 400 con campos inválidos
@@ -333,21 +366,31 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Valida: Requisitos 8.2, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12**
 
 - [ ] 14. Configuración de Spring Boot y cableado de dependencias
-  - [ ] 14.1 Configurar `application.yml` en `app-service`
+  - [ ] 14.1 Configurar `application.yaml` en `app-service`
     - Configuración R2DBC: url `r2dbc:postgresql://localhost:5433/db_inventory`, username, password
     - Configuración Kafka: bootstrap-servers, producer config (serializers), consumer config (group-id, deserializers, tópicos)
     - Configuración gRPC: puerto del servidor
     - Configuración de scheduling: habilitar `@EnableScheduling`
+    - Intervalos de schedulers externalizados (sin defaults inline en `@Scheduled`):
+      - `scheduler.outbox-relay.interval: 5000`
+      - `scheduler.expired-reservations.interval: 60000`
+    - Configuración Springdoc/OpenAPI:
+      - `springdoc.api-docs.path: /api-docs`
+      - `springdoc.swagger-ui.path: /swagger-ui.html`
+      - `springdoc.swagger-ui.enabled: true`
     - Propiedad `stock.depletion.default-threshold` configurable (default: 10) — usado solo como fallback al crear stock desde ProductCreated si el evento no incluye threshold
     - Logging con SLF4J, `CommandLineRunner` para log de inicio
     - _Requisitos: 1.7, 8.3_
+    - _Estándares: §D.2 (OpenAPI), §D.6 (Schedulers), §D.7 (Logging)_
 
   - [ ] 14.2 Configurar beans de inyección de dependencias
     - Registrar use cases, adapters y ports en la configuración de Spring
     - Asegurar que los driven adapters implementan los ports correctos
-    - Configurar `TransactionalOperator` para transacciones R2DBC
-    - Agregar dependencias en `build.gradle`: jqwik, reactor-test, mockito, grpc-spring-boot-starter, r2dbc-postgresql
+    - Spring Boot auto-configura `R2dbcTransactionManager` — no se necesita bean manual. `@Transactional` en UseCases funciona automáticamente
+    - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`)
+    - Agregar dependencias en `build.gradle`: jqwik, reactor-test, mockito, grpc-spring-boot-starter, r2dbc-postgresql, `springdoc-openapi-starter-webflux-ui`
     - _Requisitos: 4.9, 8.1_
+    - _Estándares: §D.1 (Transacciones R2DBC), §D.2 (OpenAPI)_
 
 - [ ] 15. Checkpoint final — Verificar integración completa
   - Asegurar que todos los tests pasan (unitarios y de propiedades), ejecutar `./gradlew build` desde `ms-inventory/`, preguntar al usuario si surgen dudas.

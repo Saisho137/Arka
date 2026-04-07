@@ -218,7 +218,7 @@ Basado en la naturaleza de cada Bounded Context, se divide el stack:
 
 ### E. Resiliencia: Outbox Pattern e Idempotencia
 
-1. **Transactional Outbox Pattern:** Para prevenir el _Dual-Write problem_, servicios como `ms-inventory` y `ms-order` insertan su evento de dominio dentro de la misma transacción PostgreSQL 17 que altera el negocio. Un relay asíncrono lo empuja a Kafka, garantizando que nunca se pierdan eventos por caídas de red. En servicios con MongoDB (`ms-catalog`), se adapta el patrón usando una colección `outbox_events` con operaciones atómicas.
+1. **Transactional Outbox Pattern:** Para prevenir el _Dual-Write problem_, servicios como `ms-inventory` y `ms-order` insertan su evento de dominio dentro de la misma transacción R2DBC que altera el negocio, garantizada por `@Transactional` en los métodos del UseCase (ver §D.1 de `patrones-y-estandares-codigo.md`). Spring propaga la transacción vía Reactor Context mediante `R2dbcTransactionManager` (auto-configurado). Un relay asíncrono (`@Scheduled` con intervalo externalizado en YAML) lo empuja a Kafka, garantizando que nunca se pierdan eventos por caídas de red. En servicios con MongoDB (`ms-catalog`), se adapta el patrón usando una colección `outbox_events` con operaciones atómicas.
 2. **Idempotencia en Consumidores:** Debido a que Kafka garantiza entrega _At-least-once_, cada microservicio implementa una tabla/colección escudo (`processed_events` o _Unique Constraints_ combinados) para hacer _fail-fast_ frente a eventos duplicados, evitando descontar inventario dos veces o ejecutar cobros dobles.
 
 ### F. Estrategia de Tópicos Kafka: Un Tópico por Bounded Context (Servicio)
