@@ -16,3 +16,9 @@ spring:
       max-size: 20
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+scheduler:
+  outbox-relay:
+    interval: 5000
+  expired-reservations:
+    interval: 60000

@@ -13,7 +13,7 @@ public class ExpiredReservationScheduler {
 
     private final StockReservationUseCase stockReservationUseCase;
 
-    @Scheduled(fixedDelay = 60000)
+    @Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")
     public void expireReservations() {
         log.info("Starting expired reservations check cycle");
         stockReservationUseCase.expireReservations()

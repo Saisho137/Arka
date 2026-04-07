@@ -44,6 +44,7 @@ class StockReservationUseCaseTest {
     @Mock private OutboxEventRepository outboxEventRepository;
     @Mock private ProcessedEventRepository processedEventRepository;
     @Mock private JsonSerializer jsonSerializer;
+    @Mock private ReservationExpirationProcessor reservationExpirationProcessor;
 
     @InjectMocks
     private StockReservationUseCase useCase;
@@ -76,27 +77,16 @@ class StockReservationUseCaseTest {
                     .id(UUID.randomUUID()).sku(SKU).orderId(orderId).quantity(5)
                     .expiresAt(Instant.now().minusSeconds(60))
                     .build();
-            Stock stock = buildStock(100, 20);
 
             when(stockReservationRepository.findExpiredPending(any(Instant.class)))
                     .thenReturn(Flux.just(reservation));
-            when(stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.EXPIRED))
-                    .thenReturn(Mono.just(reservation.expire()));
-            when(stockRepository.findBySku(SKU)).thenReturn(Mono.just(stock));
-            when(stockRepository.updateReservedQuantity(eq(SKU), eq(15)))
-                    .thenReturn(Mono.just(stock.releaseReservation(5)));
-            when(stockMovementRepository.save(any(StockMovement.class)))
-                    .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-            when(outboxEventRepository.save(any(OutboxEvent.class)))
-                    .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+            when(reservationExpirationProcessor.expireSingleReservation(reservation))
+                    .thenReturn(Mono.empty());
 
             StepVerifier.create(useCase.expireReservations())
                     .verifyComplete();
 
-            verify(stockReservationRepository).updateStatus(reservation.id(), ReservationStatus.EXPIRED);
-            verify(stockRepository).updateReservedQuantity(SKU, 15);
-            verify(stockMovementRepository).save(any());
-            verify(outboxEventRepository).save(any());
+            verify(reservationExpirationProcessor).expireSingleReservation(reservation);
         }
 
         @Test
@@ -108,7 +98,7 @@ class StockReservationUseCaseTest {
             StepVerifier.create(useCase.expireReservations())
                     .verifyComplete();
 
-            verify(stockRepository, never()).updateReservedQuantity(anyString(), anyInt());
+            verify(reservationExpirationProcessor, never()).expireSingleReservation(any());
         }
     }
 

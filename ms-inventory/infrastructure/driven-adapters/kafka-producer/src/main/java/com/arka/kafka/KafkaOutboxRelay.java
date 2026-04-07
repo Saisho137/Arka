@@ -29,7 +29,7 @@ public class KafkaOutboxRelay {
     private final KafkaSender<String, String> kafkaSender;
     private final ObjectMapper objectMapper;
 
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")
     public void relay() {
         outboxRelayUseCase.fetchPendingEvents()
                 .flatMap(this::publishAndMark)

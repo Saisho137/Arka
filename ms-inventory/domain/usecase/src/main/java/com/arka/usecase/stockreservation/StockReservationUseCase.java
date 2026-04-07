@@ -13,6 +13,7 @@ import com.arka.model.stockreservation.StockReservation;
 import com.arka.model.stockreservation.gateways.StockReservationRepository;
 import com.arka.usecase.stock.JsonSerializer;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -27,46 +28,20 @@ public class StockReservationUseCase {
     private final OutboxEventRepository outboxEventRepository;
     private final ProcessedEventRepository processedEventRepository;
     private final JsonSerializer jsonSerializer;
+    private final ReservationExpirationProcessor reservationExpirationProcessor;
 
     // --- Expiración de reservas (job periódico cada 60s) ---
+    // NO @Transactional: itera sobre múltiples reservas, cada una en su propia transacción
 
     public Mono<Void> expireReservations() {
         return stockReservationRepository.findExpiredPending(Instant.now())
-                .flatMap(this::expireSingleReservation)
+                .flatMap(reservationExpirationProcessor::expireSingleReservation)
                 .then();
-    }
-
-    private Mono<Void> expireSingleReservation(StockReservation reservation) {
-        return stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.EXPIRED)
-                .then(stockRepository.findBySku(reservation.sku()))
-                .flatMap(stock -> {
-                    var released = stock.releaseReservation(reservation.quantity());
-                    return stockRepository.updateReservedQuantity(reservation.sku(), released.reservedQuantity())
-                            .thenReturn(released);
-                })
-                .flatMap(released -> {
-                    StockMovement movement = StockMovement.reservationRelease(
-                            reservation.sku(), reservation.quantity(),
-                            released.availableQuantity() - reservation.quantity(),
-                            reservation.orderId(), "RESERVATION_EXPIRED");
-
-                    OutboxEvent event = buildOutboxEvent(
-                            EventType.STOCK_RELEASED, reservation.sku(),
-                            StockReleasedPayload.builder()
-                                    .sku(reservation.sku())
-                                    .orderId(reservation.orderId())
-                                    .quantity(reservation.quantity())
-                                    .reason("RESERVATION_EXPIRED")
-                                    .build());
-
-                    return stockMovementRepository.save(movement)
-                            .then(outboxEventRepository.save(event))
-                            .then();
-                });
     }
 
     // --- Consumidor Kafka: OrderCancelled ---
 
+    @Transactional
     public Mono<Void> processOrderCancelled(UUID eventId, UUID orderId, String sku) {
         return processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {

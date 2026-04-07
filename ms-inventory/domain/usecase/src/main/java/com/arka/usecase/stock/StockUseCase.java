@@ -18,6 +18,7 @@ import com.arka.model.stockreservation.ReservationStatus;
 import com.arka.model.stockreservation.StockReservation;
 import com.arka.model.stockreservation.gateways.StockReservationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -35,17 +36,20 @@ public class StockUseCase {
 
     // --- Consultas ---
 
+    @Transactional(readOnly = true)
     public Mono<Stock> getBySku(String sku) {
         return stockRepository.findBySku(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)));
     }
 
+    @Transactional(readOnly = true)
     public Flux<StockMovement> getHistory(String sku, int page, int size) {
         return stockMovementRepository.findBySkuOrderByCreatedAtDesc(sku, page, size);
     }
 
     // --- Actualización manual (lock optimista) ---
 
+    @Transactional
     public Mono<Stock> updateStock(String sku, int newQuantity, String reason) {
         return stockRepository.findBySku(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
@@ -80,6 +84,7 @@ public class StockUseCase {
 
     // --- Reserva de stock (lock pesimista, camino crítico) ---
 
+    @Transactional
     public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) {
         return stockRepository.findBySkuForUpdate(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
@@ -145,6 +150,7 @@ public class StockUseCase {
 
     // --- Consumidor Kafka: ProductCreated ---
 
+    @Transactional
     public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId, int initialStock, int depletionThreshold) {
         return processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {

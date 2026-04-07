@@ -265,8 +265,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Log INFO al iniciar y finalizar cada ciclo
     - _Requisitos: 5.1, 5.5_
 
-- [ ] 9A. Corrección crítica — Aplicar `@Transactional` en UseCases y externalizar schedulers
-  - [ ] 9A.1 Agregar `@Transactional` a métodos de `StockUseCase`
+- [x] 9A. Corrección crítica — Aplicar `@Transactional` en UseCases y externalizar schedulers
+  - [x] 9A.1 Agregar `@Transactional` a métodos de `StockUseCase`
     - Agregar `import org.springframework.transaction.annotation.Transactional` al UseCase
     - `@Transactional` en `updateStock()` — garantiza atomicidad de: updateQuantity + save movement + save outbox event(s)
     - `@Transactional` en `reserveStock()` — garantiza atomicidad de: findBySkuForUpdate + updateReservedQuantity + save reservation + save movement + save outbox event(s). El `SELECT ... FOR UPDATE` vive dentro de esta transacción
@@ -276,19 +276,19 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
     - _Requisitos: 1.6, 4.7, 4.8, 4.9, 6.6, 8.1_
 
-  - [ ] 9A.2 Agregar `@Transactional` a métodos de `StockReservationUseCase`
+  - [x] 9A.2 Agregar `@Transactional` a métodos de `StockReservationUseCase`
     - `@Transactional` en `processOrderCancelled()` — garantiza atomicidad de: updateStatus + updateReservedQuantity + save movement + save outbox + save processed_event
     - Para `expireReservations()`: el método público NO lleva `@Transactional` (itera sobre múltiples reservas). Extraer la lógica de procesamiento de cada reserva individual a un método `@Transactional` privado o a un bean auxiliar para que cada reserva tenga su propia transacción (aislamiento de fallos según Requisito 5.5)
     - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
     - _Requisitos: 5.4, 5.5, 7.3_
 
-  - [ ] 9A.3 Agregar `@Transactional` a `OutboxRelayUseCase.markAsPublished()`
+  - [x] 9A.3 Agregar `@Transactional` a `OutboxRelayUseCase.markAsPublished()`
     - `@Transactional` en `markAsPublished()` — operación individual de UPDATE
     - `@Transactional(readOnly = true)` en `fetchPendingEvents()` (opcional)
     - _Estándar: §D.1_
     - _Requisitos: 8.5_
 
-  - [ ] 9A.4 Externalizar intervalos de schedulers a `application.yaml`
+  - [x] 9A.4 Externalizar intervalos de schedulers a `application.yaml`
     - En `KafkaOutboxRelay`: cambiar `@Scheduled(fixedDelay = 5000)` a `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")`
     - En `ExpiredReservationScheduler`: cambiar `@Scheduled(fixedDelay = 60000)` a `@Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")`
     - Sin defaults inline en la anotación — si la propiedad no existe en YAML, Spring falla al startup (fail-fast)
