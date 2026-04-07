@@ -272,6 +272,7 @@ services:
       - DEFAULT_REGION=us-east-1
       - CFN_IGNORE_UNSUPPORTED_RESOURCE_TYPES=1
       - LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT=1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN- }
     env_file:
       - .env
     volumes:
