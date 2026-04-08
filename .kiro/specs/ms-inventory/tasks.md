@@ -370,8 +370,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Para reservas fallidas por stock insuficiente: retornar response con `success = false` (no excepción)
     - _Requisitos: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 13. Implementar entry point — Consumidor Kafka
-  - [ ] 13.1 Implementar `KafkaEventConsumer`
+- [x] 13. Implementar entry point — Consumidor Kafka
+  - [x] 13.1 Implementar `KafkaEventConsumer`
     - Suscribirse a tópicos `product-events` y `order-events`
     - Deserializar sobre estándar (`DomainEventEnvelope`) y filtrar por `eventType`
     - `ProductCreated` → delegar a `StockUseCase.processProductCreated()`

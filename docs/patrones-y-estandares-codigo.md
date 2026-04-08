@@ -1627,6 +1627,131 @@ public class KafkaProducerConfig {
 
 Esta decisión aplica a **todo microservicio que implemente el Transactional Outbox Pattern**: `ms-inventory`, `ms-order`, y `ms-catalog` (adaptado a MongoDB). El módulo `kafka-producer` se replica en cada uno con el tópico correspondiente (`inventory-events`, `order-events`, `product-events`).
 
+### B.12 Consumidor Kafka: `KafkaReceiver` de `reactor-kafka` (Spring Boot 4.0.3)
+
+#### Contexto: Discontinuación de Reactor Kafka y Eliminación de `ReactiveKafkaConsumerTemplate`
+
+En mayo 2025, el equipo de Spring anunció la **discontinuación del proyecto Reactor Kafka** ([blog oficial](https://spring.io/blog/2025/05/20/reactor-kafka-discontinued)):
+
+- `reactor-kafka` 1.3 es la **última versión minor**. Solo recibirá fixes críticos hasta fin de soporte OSS.
+- `ReactiveKafkaConsumerTemplate` y `ReactiveKafkaProducerTemplate` de `spring-kafka` fueron **eliminados en spring-kafka 4.0 GA** (noviembre 2025, incluido en Spring Boot 4.0.3).
+- El paquete `org.springframework.kafka.core.reactive` **no existe en spring-kafka 4.0.3**.
+
+#### Decisión para Arka (Spring Boot 4.0.3)
+
+Dado que `ReactiveKafkaConsumerTemplate` fue eliminado, la única opción reactiva disponible hoy es usar `KafkaReceiver` de `reactor-kafka:1.3.23` directamente. Esta es la misma librería que usa el `KafkaSender` del productor (ver §B.11).
+
+| Opción                                    | Estado en Spring Boot 4.0.3 | Decisión Arka                                    |
+| ----------------------------------------- | --------------------------- | ------------------------------------------------ |
+| `ReactiveKafkaConsumerTemplate`           | ❌ Eliminado                | No usar — no existe en spring-kafka 4.0          |
+| `KafkaReceiver` (reactor-kafka 1.3.23)    | ✅ Disponible               | **Usar** — única opción reactiva disponible      |
+| `@KafkaListener` (spring-kafka, blocking) | ✅ Disponible               | No usar en servicios reactivos — bloquea threads |
+
+#### Estructura del Módulo Consumer
+
+El módulo se crea manualmente como `kafka-consumer` en `infrastructure/entry-points/`. Se registra en `settings.gradle` y se agrega como dependencia en `app-service`.
+
+```text
+infrastructure/entry-points/kafka-consumer/
+├── build.gradle
+└── src/main/java/com/arka/consumer/
+    ├── KafkaConsumerConfig.java    # Beans KafkaReceiver<String, String> por tópico
+    ├── KafkaEventConsumer.java     # Lógica de routing por eventType
+    └── KafkaConsumerLifecycle.java # Inicia consumo en ApplicationReadyEvent
+```
+
+**`build.gradle`:**
+
+```groovy
+dependencies {
+    implementation project(':model')
+    implementation project(':usecase')
+    implementation 'org.springframework:spring-context'
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'io.projectreactor.kafka:reactor-kafka:1.3.23'
+    implementation 'tools.jackson.core:jackson-databind'
+}
+```
+
+#### Patrón de Implementación del Consumer
+
+```java
+@Configuration
+public class KafkaConsumerConfig {
+
+    private final String bootstrapServers;
+    private final String groupId;
+
+    public KafkaConsumerConfig(
+            @Value("${spring.kafka.bootstrap-servers:localhost:9092}") String bootstrapServers,
+            @Value("${spring.kafka.consumer.group-id:ms-inventory}") String groupId) {
+        this.bootstrapServers = bootstrapServers;
+        this.groupId = groupId;
+    }
+
+    @Bean
+    public KafkaReceiver<String, String> productEventsReceiver() {
+        return KafkaReceiver.create(receiverOptions("product-events", groupId + "-product"));
+    }
+
+    @Bean
+    public KafkaReceiver<String, String> orderEventsReceiver() {
+        return KafkaReceiver.create(receiverOptions("order-events", groupId + "-order"));
+    }
+
+    private ReceiverOptions<String, String> receiverOptions(String topic, String consumerGroupId) {
+        Map<String, Object> props = Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ConsumerConfig.GROUP_ID_CONFIG, consumerGroupId,
+                ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
+                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false
+        );
+        return ReceiverOptions.<String, String>create(props)
+                .subscription(List.of(topic));
+    }
+}
+```
+
+```java
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class KafkaEventConsumer {
+
+    private final KafkaReceiver<String, String> productEventsReceiver;
+    private final KafkaReceiver<String, String> orderEventsReceiver;
+    // ... use cases y objectMapper
+
+    public void startConsuming() {
+        productEventsReceiver.receive()
+                .flatMap(msg -> handleProductEvent(msg.value())
+                        .doOnSuccess(v -> msg.receiverOffset().acknowledge())
+                        .onErrorResume(ex -> {
+                            log.error("Unrecoverable error offset={}: {}", msg.receiverOffset().offset(), ex.getMessage());
+                            msg.receiverOffset().acknowledge();
+                            return Mono.empty();
+                        }))
+                .subscribe();
+        // idem para orderEventsReceiver
+    }
+}
+```
+
+**Puntos clave:**
+
+- `msg.receiverOffset().acknowledge()` confirma el offset manualmente tras procesamiento exitoso
+- `onErrorResume` en el nivel del mensaje garantiza que un error no detenga el stream completo
+- El routing por `eventType` se hace dentro del `flatMap` deserializando el sobre estándar
+- Retry con backoff exponencial (`Retry.backoff`) para errores transitorios antes de propagar el error
+- `KafkaConsumerLifecycle` inicia el consumo en `ApplicationReadyEvent` para garantizar que todos los beans estén listos
+
+#### Nota sobre el Futuro
+
+Cuando Spring publique una alternativa oficial a `ReactiveKafkaConsumerTemplate` compatible con Spring Boot 4.x, esta sección debe actualizarse. Por ahora, `reactor-kafka:1.3.23` es la única opción reactiva viable y seguirá recibiendo fixes de seguridad hasta fin de soporte OSS.
+
 ---
 
 ## Apéndice C: Ejemplo Completo — Strategy + Factory con Supplier
