@@ -7,8 +7,7 @@ import org.springframework.context.annotation.FilterType;
 @Configuration
 @ComponentScan(basePackages = "com.arka.usecase",
         includeFilters = {
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "^.+UseCase$"),
-                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "^.+Processor$")
+                @ComponentScan.Filter(type = FilterType.REGEX, pattern = "^.+UseCase$")
         },
         useDefaultFilters = false)
 public class UseCasesConfig {

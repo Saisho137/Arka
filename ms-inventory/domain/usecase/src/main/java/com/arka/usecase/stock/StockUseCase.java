@@ -2,6 +2,7 @@ package com.arka.usecase.stock;
 
 import com.arka.model.commons.exception.OptimisticLockException;
 import com.arka.model.commons.exception.StockNotFoundException;
+import com.arka.model.commons.gateways.TransactionalGateway;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.StockDepletedPayload;
@@ -18,7 +19,6 @@ import com.arka.model.stockreservation.ReservationStatus;
 import com.arka.model.stockreservation.StockReservation;
 import com.arka.model.stockreservation.gateways.StockReservationRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -33,25 +33,23 @@ public class StockUseCase {
     private final StockReservationRepository stockReservationRepository;
     private final ProcessedEventRepository processedEventRepository;
     private final JsonSerializer jsonSerializer;
+    private final TransactionalGateway transactionalGateway;
 
-    // --- Consultas ---
+    // --- Consultas (Caso A: sin transacción explícita, lectura simple) ---
 
-    @Transactional(readOnly = true)
     public Mono<Stock> getBySku(String sku) {
         return stockRepository.findBySku(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)));
     }
 
-    @Transactional(readOnly = true)
     public Flux<StockMovement> getHistory(String sku, int page, int size) {
         return stockMovementRepository.findBySkuOrderByCreatedAtDesc(sku, page, size);
     }
 
-    // --- Actualización manual (lock optimista) ---
+    // --- Actualización manual (lock optimista, Caso B: TransactionalGateway) ---
 
-    @Transactional
     public Mono<Stock> updateStock(String sku, int newQuantity, String reason) {
-        return stockRepository.findBySku(sku)
+        Mono<Stock> pipeline = stockRepository.findBySku(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
                 .flatMap(stock -> {
                     Stock updated = stock.setQuantity(newQuantity);
@@ -80,13 +78,14 @@ public class StockUseCase {
                                 return saveMovementAndEvent.then(depletedEvent).thenReturn(saved);
                             });
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline);
     }
 
-    // --- Reserva de stock (lock pesimista, camino crítico) ---
+    // --- Reserva de stock (lock pesimista, Caso B: TransactionalGateway) ---
 
-    @Transactional
     public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) {
-        return stockRepository.findBySkuForUpdate(sku)
+        Mono<ReserveStockResult> pipeline = stockRepository.findBySkuForUpdate(sku)
                 .switchIfEmpty(Mono.error(new StockNotFoundException(sku)))
                 .flatMap(stock -> stockReservationRepository
                         .findBySkuAndOrderIdAndStatus(sku, orderId, ReservationStatus.PENDING)
@@ -96,6 +95,8 @@ public class StockUseCase {
                                 .availableQuantity(stock.availableQuantity())
                                 .build()))
                         .switchIfEmpty(Mono.defer(() -> executeReservation(stock, sku, orderId, quantity))));
+
+        return transactionalGateway.executeInTransaction(pipeline);
     }
 
     private Mono<ReserveStockResult> executeReservation(Stock stock, String sku, UUID orderId, int quantity) {
@@ -148,11 +149,10 @@ public class StockUseCase {
         return outboxEventRepository.save(failedEvent).then();
     }
 
-    // --- Consumidor Kafka: ProductCreated ---
+    // --- Consumidor Kafka: ProductCreated (Caso B: TransactionalGateway) ---
 
-    @Transactional
     public Mono<Void> processProductCreated(UUID eventId, String sku, UUID productId, int initialStock, int depletionThreshold) {
-        return processedEventRepository.exists(eventId)
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return Mono.empty();
@@ -172,6 +172,8 @@ public class StockUseCase {
                             .then(stockMovementRepository.save(movement))
                             .then(processedEventRepository.save(eventId));
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline);
     }
 
     // --- Helpers privados ---

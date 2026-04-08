@@ -1,5 +1,6 @@
 package com.arka.usecase.stockreservation;
 
+import com.arka.model.commons.gateways.TransactionalGateway;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.StockReleasedPayload;
@@ -13,7 +14,6 @@ import com.arka.model.stockreservation.StockReservation;
 import com.arka.model.stockreservation.gateways.StockReservationRepository;
 import com.arka.usecase.stock.JsonSerializer;
 import lombok.RequiredArgsConstructor;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -28,22 +28,52 @@ public class StockReservationUseCase {
     private final OutboxEventRepository outboxEventRepository;
     private final ProcessedEventRepository processedEventRepository;
     private final JsonSerializer jsonSerializer;
-    private final ReservationExpirationProcessor reservationExpirationProcessor;
+    private final TransactionalGateway transactionalGateway;
 
     // --- Expiración de reservas (job periódico cada 60s) ---
-    // NO @Transactional: itera sobre múltiples reservas, cada una en su propia transacción
+    // Cada reserva se procesa en su propia transacción para aislamiento de fallos
 
     public Mono<Void> expireReservations() {
         return stockReservationRepository.findExpiredPending(Instant.now())
-                .flatMap(reservationExpirationProcessor::expireSingleReservation)
+                .flatMap(this::expireSingleReservation)
                 .then();
     }
 
-    // --- Consumidor Kafka: OrderCancelled ---
+    private Mono<Void> expireSingleReservation(StockReservation reservation) {
+        Mono<Void> pipeline = stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.EXPIRED)
+                .then(stockRepository.findBySku(reservation.sku()))
+                .flatMap(stock -> {
+                    var released = stock.releaseReservation(reservation.quantity());
+                    return stockRepository.updateReservedQuantity(reservation.sku(), released.reservedQuantity())
+                            .thenReturn(released);
+                })
+                .flatMap(released -> {
+                    StockMovement movement = StockMovement.reservationRelease(
+                            reservation.sku(), reservation.quantity(),
+                            released.availableQuantity() - reservation.quantity(),
+                            reservation.orderId(), "RESERVATION_EXPIRED");
 
-    @Transactional
+                    OutboxEvent event = buildOutboxEvent(
+                            EventType.STOCK_RELEASED, reservation.sku(),
+                            StockReleasedPayload.builder()
+                                    .sku(reservation.sku())
+                                    .orderId(reservation.orderId())
+                                    .quantity(reservation.quantity())
+                                    .reason("RESERVATION_EXPIRED")
+                                    .build());
+
+                    return stockMovementRepository.save(movement)
+                            .then(outboxEventRepository.save(event))
+                            .then();
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
+    // --- Consumidor Kafka: OrderCancelled (Caso B: TransactionalGateway) ---
+
     public Mono<Void> processOrderCancelled(UUID eventId, UUID orderId, String sku) {
-        return processedEventRepository.exists(eventId)
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return Mono.empty();
@@ -53,6 +83,8 @@ public class StockReservationUseCase {
                             .flatMap(reservation -> releaseReservation(reservation, "ORDER_CANCELLED"))
                             .then(processedEventRepository.save(eventId));
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline);
     }
 
     private Mono<Void> releaseReservation(StockReservation reservation, String reason) {

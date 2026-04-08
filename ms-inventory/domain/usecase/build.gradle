@@ -1,4 +1,3 @@
 dependencies {
     implementation project(':model')
-    compileOnly 'org.springframework:spring-tx'
 }

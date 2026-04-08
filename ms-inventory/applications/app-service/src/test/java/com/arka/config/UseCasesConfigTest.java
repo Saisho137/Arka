@@ -1,5 +1,6 @@
 package com.arka.config;
 
+import com.arka.model.commons.gateways.TransactionalGateway;
 import com.arka.model.outboxevent.gateways.OutboxEventRepository;
 import com.arka.model.processedevent.gateways.ProcessedEventRepository;
 import com.arka.model.stock.gateways.StockRepository;
@@ -66,6 +67,11 @@ class UseCasesConfigTest {
         @Bean
         public JsonSerializer jsonSerializer() {
             return mock(JsonSerializer.class);
+        }
+
+        @Bean
+        public TransactionalGateway transactionalGateway() {
+            return mock(TransactionalGateway.class);
         }
     }
 }

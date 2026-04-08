@@ -3,6 +3,7 @@ package com.arka.usecase.stock;
 import com.arka.model.commons.exception.InvalidStockQuantityException;
 import com.arka.model.commons.exception.OptimisticLockException;
 import com.arka.model.commons.exception.StockNotFoundException;
+import com.arka.model.commons.gateways.TransactionalGateway;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.gateways.OutboxEventRepository;
 import com.arka.model.processedevent.gateways.ProcessedEventRepository;
@@ -49,6 +50,7 @@ class StockUseCaseTest {
     @Mock private StockReservationRepository stockReservationRepository;
     @Mock private ProcessedEventRepository processedEventRepository;
     @Mock private JsonSerializer jsonSerializer;
+    @Mock private TransactionalGateway transactionalGateway;
 
     @InjectMocks
     private StockUseCase useCase;
@@ -59,6 +61,9 @@ class StockUseCaseTest {
     @BeforeEach
     void setUp() {
         lenient().when(jsonSerializer.serialize(any())).thenReturn("{}");
+        // Passthrough: ejecuta el pipeline sin transacción real en tests unitarios
+        lenient().when(transactionalGateway.executeInTransaction(any()))
+                .thenAnswer(inv -> inv.getArgument(0));
     }
 
     private Stock buildStock(int quantity, int reserved) {

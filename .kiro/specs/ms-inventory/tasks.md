@@ -265,30 +265,49 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Log INFO al iniciar y finalizar cada ciclo
     - _Requisitos: 5.1, 5.5_
 
-- [x] 9A. Corrección crítica — Aplicar `@Transactional` en UseCases y externalizar schedulers
-  - [x] 9A.1 Agregar `@Transactional` a métodos de `StockUseCase`
-    - Agregar `import org.springframework.transaction.annotation.Transactional` al UseCase
-    - `@Transactional` en `updateStock()` — garantiza atomicidad de: updateQuantity + save movement + save outbox event(s)
-    - `@Transactional` en `reserveStock()` — garantiza atomicidad de: findBySkuForUpdate + updateReservedQuantity + save reservation + save movement + save outbox event(s). El `SELECT ... FOR UPDATE` vive dentro de esta transacción
-    - `@Transactional` en `processProductCreated()` — garantiza atomicidad de: save stock + save movement + save processed_event
-    - `@Transactional(readOnly = true)` en `getBySku()` y `getHistory()` (opcional, documenta intención)
-    - Verificar que los tests existentes siguen pasando (el mock de los ports no se ve afectado por `@Transactional` en tests unitarios sin Spring context)
-    - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
+- [x] 9A. Corrección crítica — Desacoplar transacciones del dominio con `TransactionalGateway`
+  - [x] 9A.1 Crear interfaz `TransactionalGateway` en `domain/model`
+    - Crear `TransactionalGateway` en `com.arka.model.commons.gateways` con método `<T> Mono<T> executeInTransaction(Mono<T> pipeline)`
+    - Port de dominio puro — sin dependencias de Spring
+    - _Estándar: §D.1 (Transacciones R2DBC — Caso B)_
+
+  - [x] 9A.2 Crear `R2dbcTransactionalAdapter` en `infrastructure/driven-adapters`
+    - Implementa `TransactionalGateway` usando `TransactionalOperator` de Spring
+    - Registrar `TransactionalOperator` como bean en `R2dbcTransactionConfig`
+    - Paquete: `com.arka.r2dbc.transaction`
+    - _Estándar: §D.1_
+
+  - [x] 9A.3 Refactorizar `StockUseCase` — reemplazar `@Transactional` por `TransactionalGateway`
+    - Eliminar `import org.springframework.transaction.annotation.Transactional`
+    - Inyectar `TransactionalGateway` como dependencia
+    - `updateStock()`: armar pipeline y delegar a `transactionalGateway.executeInTransaction(pipeline)`
+    - `reserveStock()`: armar pipeline y delegar a `transactionalGateway.executeInTransaction(pipeline)`
+    - `processProductCreated()`: armar pipeline y delegar a `transactionalGateway.executeInTransaction(pipeline)`
+    - `getBySku()` y `getHistory()`: sin transacción (Caso A — lectura simple)
+    - _Estándar: §D.1 (Caso B)_
     - _Requisitos: 1.6, 4.7, 4.8, 4.9, 6.6, 8.1_
 
-  - [x] 9A.2 Agregar `@Transactional` a métodos de `StockReservationUseCase`
-    - `@Transactional` en `processOrderCancelled()` — garantiza atomicidad de: updateStatus + updateReservedQuantity + save movement + save outbox + save processed_event
-    - Para `expireReservations()`: el método público NO lleva `@Transactional` (itera sobre múltiples reservas). Extraer la lógica de procesamiento de cada reserva individual a un método `@Transactional` privado o a un bean auxiliar para que cada reserva tenga su propia transacción (aislamiento de fallos según Requisito 5.5)
-    - _Estándar: §D.1 (Transacciones R2DBC y Outbox Pattern)_
+  - [x] 9A.4 Refactorizar `StockReservationUseCase` — reemplazar `@Transactional` por `TransactionalGateway`
+    - Eliminar `ReservationExpirationProcessor` (ya no necesario — `TransactionalGateway` maneja transacciones por reserva)
+    - Inyectar `TransactionalGateway` como dependencia
+    - `processOrderCancelled()`: armar pipeline y delegar a `transactionalGateway.executeInTransaction(pipeline)`
+    - `expireSingleReservation()`: cada reserva en su propia transacción vía `transactionalGateway.executeInTransaction(pipeline)` (aislamiento de fallos)
+    - `expireReservations()`: sin transacción global (itera sobre múltiples reservas)
+    - _Estándar: §D.1 (Caso B)_
     - _Requisitos: 5.4, 5.5, 7.3_
 
-  - [x] 9A.3 Agregar `@Transactional` a `OutboxRelayUseCase.markAsPublished()`
-    - `@Transactional` en `markAsPublished()` — operación individual de UPDATE
-    - `@Transactional(readOnly = true)` en `fetchPendingEvents()` (opcional)
-    - _Estándar: §D.1_
+  - [x] 9A.5 Refactorizar `OutboxRelayUseCase` — eliminar `@Transactional` (Caso A)
+    - `markAsPublished()` y `fetchPendingEvents()`: operaciones de un solo port, sin lógica intermedia
+    - La transaccionalidad es detalle de implementación del Driven Adapter (auto-commit SQL)
+    - _Estándar: §D.1 (Caso A)_
     - _Requisitos: 8.5_
 
-  - [x] 9A.4 Externalizar intervalos de schedulers a `application.yaml`
+  - [x] 9A.6 Eliminar `spring-tx` del módulo `usecase`
+    - Remover `compileOnly 'org.springframework:spring-tx'` de `domain/usecase/build.gradle`
+    - El dominio no importa ninguna dependencia de Spring
+    - Revertir `UseCasesConfig` — eliminar filtro `Processor` (ya no existe `ReservationExpirationProcessor`)
+
+  - [x] 9A.7 Externalizar intervalos de schedulers a `application.yaml`
     - En `KafkaOutboxRelay`: cambiar `@Scheduled(fixedDelay = 5000)` a `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")`
     - En `ExpiredReservationScheduler`: cambiar `@Scheduled(fixedDelay = 60000)` a `@Scheduled(fixedDelayString = "${scheduler.expired-reservations.interval}")`
     - Sin defaults inline en la anotación — si la propiedad no existe en YAML, Spring falla al startup (fail-fast)
@@ -386,7 +405,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
   - [ ] 14.2 Configurar beans de inyección de dependencias
     - Registrar use cases, adapters y ports en la configuración de Spring
     - Asegurar que los driven adapters implementan los ports correctos
-    - Spring Boot auto-configura `R2dbcTransactionManager` — no se necesita bean manual. `@Transactional` en UseCases funciona automáticamente
+    - Spring Boot auto-configura `R2dbcTransactionManager`. Registrar `TransactionalOperator` como bean en `R2dbcTransactionConfig`. `TransactionalGateway` se implementa con `R2dbcTransactionalAdapter`
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`)
     - Agregar dependencias en `build.gradle`: jqwik, reactor-test, mockito, grpc-spring-boot-starter, r2dbc-postgresql, `springdoc-openapi-starter-webflux-ui`
     - _Requisitos: 4.9, 8.1_
