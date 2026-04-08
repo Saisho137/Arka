@@ -314,8 +314,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Estándar: §D.6 (Schedulers externalizados)_
     - _Requisitos: 5.1, 8.4_
 
-- [ ] 10. Implementar entry points — DTOs, Mappers y Controlador REST
-  - [ ] 10.1 Crear DTOs de request y response con Bean Validation
+- [x] 10. Implementar entry points — DTOs, Mappers y Controlador REST
+  - [x] 10.1 Crear DTOs de request y response con Bean Validation
     - `UpdateStockRequest`: `@NotNull @PositiveOrZero Integer quantity`, `String reason`
     - `StockResponse`: id, sku, productId, quantity, reservedQuantity, availableQuantity, version, updatedAt
     - `StockMovementResponse`: id, sku, movementType, quantityChange, previousQuantity, newQuantity, referenceId, reason, createdAt
@@ -324,12 +324,12 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - Paquete: entry-points
     - _Requisitos: 1.2, 2.1, 3.4, 11.6_
 
-  - [ ] 10.2 Crear mappers estáticos: `StockMapper`, `StockMovementMapper`
+  - [x] 10.2 Crear mappers estáticos: `StockMapper`, `StockMovementMapper`
     - Métodos estáticos para convertir request→comando y dominio→response
     - Usar `@Builder` al construir objetos destino
     - _Requisitos: 1.1, 2.1, 3.1_
 
-  - [ ] 10.3 Implementar `StockController`
+  - [x] 10.3 Implementar `StockController`
     - `PUT /inventory/{sku}/stock` → `StockUseCase.updateStock()` → 200 OK con `StockResponse`
     - `GET /inventory/{sku}` → `StockUseCase.getBySku()` → 200 OK con `StockResponse`
     - `GET /inventory/{sku}/history` → `StockUseCase.getHistory()` → 200 OK con `Flux<StockMovementResponse>` (paginado con query params page, size con cap máximo 100)
@@ -339,7 +339,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Requisitos: 1.1, 2.1, 2.3, 3.1, 3.3_
     - _Estándares: §D.2 (OpenAPI), §D.5 (Paginación Offset)_
 
-  - [ ] 10.4 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
+  - [x] 10.4 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
     - Manejar `WebExchangeBindException` (Bean Validation) → 400 con campos inválidos
     - Manejar `DomainException` subclases → HTTP status y código según subclase
     - Manejar `DataIntegrityViolationException` (CHECK constraint PostgreSQL) → 409, STOCK_CONSTRAINT_VIOLATION

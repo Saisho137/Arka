@@ -430,10 +430,126 @@ return switch (status) {
 
 **Convención:** Crear clases `*Mapper` con métodos estáticos en cada capa que necesite transformar. Usar **siempre el Builder** (`@Builder` de Lombok) al construir objetos destino — es más legible, tolerante a cambios de orden de campos y evita errores silenciosos por reordenamiento de parámetros.
 
+#### 4.1 Mappers como Clases Utilitarias Separadas (No Métodos en Records)
+
+**Decisión: Los mappers son clases `final` con `@NoArgsConstructor(access = AccessLevel.PRIVATE)` y métodos estáticos.** No se colocan como métodos del propio record DTO ni de la entidad de dominio.
+
+**Justificación:**
+
+1. **Dirección de dependencia** — Un mapper en entry-points conoce tanto el DTO como la entidad de dominio. Si el método `toResponse()` viviera en el record DTO, el DTO importaría la entidad de dominio, acoplando la capa de infraestructura al modelo. Si viviera en la entidad de dominio, el modelo importaría el DTO — violación directa de Clean Architecture.
+2. **Responsabilidad única** — El record DTO es un contenedor de datos para serialización. El record de dominio encapsula reglas de negocio. Ninguno debería saber cómo transformarse al otro.
+3. **Trazabilidad** — Un archivo `StockMapper.java` dedicado hace explícito dónde ocurre la transformación. En code reviews, los cambios de mapeo son visibles en un solo lugar.
+4. **Consistencia con driven adapters** — Los driven adapters ya usan `*DTOMapper` y `*RowMapper` como clases separadas (ver §B.9). Mantener el mismo patrón en entry-points unifica el estilo del monorepo.
+
+**Convención Lombok:** Usar `@NoArgsConstructor(access = AccessLevel.PRIVATE)` en lugar de constructor privado manual. Es el idioma Lombok para clases utilitarias y mantiene consistencia con el resto del repo donde Lombok gestiona constructores.
+
+```java
+// ✅ Mapper como clase utilitaria separada — entry-points
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class StockMapper {
+
+    public static StockResponse toResponse(Stock stock) {
+        return StockResponse.builder()
+                .id(stock.id())
+                .sku(stock.sku())
+                .quantity(stock.quantity())
+                .build();
+    }
+}
+
+// ❌ NUNCA — método en el DTO (acopla DTO al dominio)
+public record StockResponse(UUID id, String sku, int quantity) {
+    public static StockResponse from(Stock stock) { /* DTO importa Stock → violación */ }
+}
+
+// ❌ NUNCA — método en la entidad de dominio (acopla dominio al DTO)
+public record Stock(UUID id, String sku, int quantity) {
+    public StockResponse toResponse() { /* Dominio importa StockResponse → violación */ }
+}
+```
+
+#### 4.2 Patrón Controller → Handler → UseCase
+
+Los controladores REST (`@RestController`) deben ser **thin** — solo anotaciones HTTP, validación (`@Valid`), extracción de parámetros y delegación a un `Handler`. El `Handler` es un `@Component` que orquesta la llamada al UseCase, el mapeo de respuesta y el wrapping en `ResponseEntity`.
+
+**Justificación:**
+
+1. **Separación de concerns** — El controller se ocupa del contrato HTTP (rutas, validación, OpenAPI). El handler se ocupa de la lógica de orquestación (llamar UseCase, mapear, wrappear).
+2. **Testabilidad** — El handler se testea como un POJO con mocks del UseCase, sin necesidad de `WebTestClient` ni contexto Spring.
+3. **Consistencia de `ResponseEntity`** — El handler siempre retorna `ResponseEntity<T>`, garantizando un contrato uniforme en todos los endpoints.
+
+```java
+// Controller — thin, solo HTTP concerns
+@RestController
+@RequestMapping("/inventory")
+@RequiredArgsConstructor
+@Tag(name = "Inventory")
+public class StockController {
+
+    private final StockHandler stockHandler;
+
+    @GetMapping("/{sku}")
+    @Operation(summary = "Get stock availability for a SKU")
+    public Mono<ResponseEntity<StockResponse>> getStock(@PathVariable String sku) {
+        return stockHandler.getStock(sku);
+    }
+}
+
+// Handler — orquestación, mapeo, ResponseEntity
+@Component
+@RequiredArgsConstructor
+public class StockHandler {
+
+    private final StockUseCase stockUseCase;
+
+    public Mono<ResponseEntity<StockResponse>> getStock(String sku) {
+        return stockUseCase.getBySku(sku)
+                .map(StockMapper::toResponse)
+                .map(ResponseEntity::ok);
+    }
+
+    // Colecciones: retornar Flux directamente (sin ResponseEntity)
+    public Flux<StockMovementResponse> getHistory(String sku, int page, int size) {
+        return stockUseCase.getHistory(sku, page, size)
+                .map(StockMovementMapper::toResponse);
+    }
+}
+```
+
+**Regla para colecciones (`Flux`):** Los endpoints que retornan colecciones deben devolver `Flux<T>` directamente, **nunca** `Mono<ResponseEntity<List<T>>>`. Razones:
+
+1. `Flux<T>` habilita **streaming reactivo** — Spring WebFlux serializa cada elemento a medida que llega, usando chunked transfer encoding. El servidor no acumula toda la colección en memoria.
+2. `.collectList()` **rompe el streaming** — acumula todos los elementos en una `List<T>` en memoria antes de enviar la respuesta. Esto anula la ventaja reactiva y aumenta la latencia del primer byte.
+3. El HTTP status 200 es implícito para `Flux<T>` — no se necesita `ResponseEntity` para indicarlo.
+4. Los errores se manejan igualmente por `@ControllerAdvice` — si el `Flux` emite un `onError`, el `GlobalExceptionHandler` lo captura.
+
+```java
+// ✅ Streaming reactivo — elementos se envían a medida que llegan
+public Flux<StockMovementResponse> getHistory(String sku, int page, int size) {
+    return stockUseCase.getHistory(sku, page, size)
+            .map(StockMovementMapper::toResponse);
+}
+
+// ❌ NUNCA — collectList() acumula todo en memoria, rompe streaming
+public Mono<ResponseEntity<List<StockMovementResponse>>> getHistory(String sku, int page, int size) {
+    return stockUseCase.getHistory(sku, page, size)
+            .map(StockMovementMapper::toResponse)
+            .collectList()
+            .map(ResponseEntity::ok);
+}
+```
+
+**Resumen del patrón por tipo de retorno:**
+
+| Tipo de respuesta | Controller retorna        | Handler retorna           | `ResponseEntity`   |
+| ----------------- | ------------------------- | ------------------------- | ------------------ |
+| Elemento único    | `Mono<ResponseEntity<T>>` | `Mono<ResponseEntity<T>>` | Sí                 |
+| Colección         | `Flux<T>`                 | `Flux<T>`                 | No (200 implícito) |
+
 ```java
 // infrastructure/entry-points — mapper del API REST
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ProductMapper {
-    private ProductMapper() {}
 
     public static CreateProductCommand toCommand(CreateProductRequest req) {
         return CreateProductCommand.builder()
@@ -602,35 +718,37 @@ void shouldCreateOrder_whenStockAvailable() {
 
 ## 9. Resumen de Decisiones
 
-| Decisión                    | Resolución                                                                                                                             | Justificación                                                                                |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Record vs Clase en dominio  | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                                | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                    |
-| Optional en reactivo        | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                       | Optional bloquea semánticamente la cadena reactiva                                           |
-| Controladores               | **`@RestController`** con `Mono`/`Flux`                                                                                                | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                          |
-| Router Functions            | **No**                                                                                                                                 | Complejidad sin beneficio; Spring maneja reactividad igual                                   |
-| MapStruct                   | **No.** Mappers manuales con métodos estáticos                                                                                         | Trazabilidad, simplicidad, compatibilidad reactiva                                           |
-| Builder                     | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                          | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos   |
-| Estructuras concurrentes    | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                                    | Evitar interferir con el EventLoop                                                           |
-| switch vs Strategy          | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                             | Compile-time safety vs runtime extensibility                                                 |
-| Manejo de errores           | **`@ControllerAdvice`** + operadores de error Reactor                                                                                  | Centralizado, reactivo, sin try/catch en publishers                                          |
-| Null checks en records      | **`Objects.requireNonNull`** en compact constructor                                                                                    | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                               |
-| Timestamps                  | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                                   | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                         |
-| Reglas en records           | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                          | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas  |
-| DomainException             | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                        | Interfaces no pueden extender clases; necesita `super(message)` compartido                   |
-| Enums descriptivos          | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                      | Trazabilidad sin depender de campos auxiliares como `reason`                                 |
-| Organización de UseCases    | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                                 | Cohesión por agregado, menos clases, inyección de dependencias simplificada                  |
-| SQL ENUMs                   | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)        | Validación en BD, mejor rendimiento, documentación implícita                                 |
-| Generación de componentes   | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                       | Estructura consistente; modificar contenido, nunca crear carpetas manualmente                |
-| Driven Adapters R2DBC       | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9)       | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                        |
-| Spring Profiles             | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                        | Cambio automático entre BD local y contenedores sin tocar código                             |
-| Driven Adapter Kafka        | **`reactor-kafka` directo** (`KafkaSender`), no `reactive-commons`. Módulo manual `kafka-producer` (ver §B.11)                         | Outbox Pattern requiere partition key, tópico y ack explícito que `DomainEventBus` no expone |
-| Transacciones R2DBC         | **`TransactionalGateway`** port en dominio + `TransactionalOperator` en infraestructura. NUNCA `@Transactional` en UseCases (ver §D.1) | Desacopla dominio de Spring; Caso A (infra pura) y Caso B (gateway) según complejidad        |
-| Documentación API           | **Springdoc OpenAPI** (`springdoc-openapi-starter-webflux-ui`). Swagger UI en `/swagger-ui.html` (ver §D.2)                            | Generación automática desde `@RestController`; anotaciones `@Operation` opcionales           |
-| Constantes                  | **`static final`** con nombre descriptivo; valores configurables en YAML con `@Value` (ver §D.3)                                       | Elimina magic numbers/strings; facilita cambios sin recompilar                               |
-| `Mono.defer` vs `Mono.just` | **`Mono.defer()`** cuando el argumento produce side-effects o depende de estado mutable (ver §D.4)                                     | Evita evaluación eager en `switchIfEmpty` y otros operadores                                 |
-| Paginación                  | **Offset (`LIMIT/OFFSET`)** para MVP; **Cursor (keyset)** para endpoints de alto volumen en fases posteriores (ver §D.5)               | Simplicidad para datasets pequeños; cursor cuando supere 10K registros frecuentes            |
-| Schedulers                  | **Intervalos externalizados** a `application.yaml` sin defaults inline; schedulers en entry-points (ver §D.6)                          | Fallo rápido si falta propiedad; configuración sin recompilar                                |
-| Logging producción          | **JSON estructurado** en perfil `docker`; formato legible en perfil `local` (ver §D.7)                                                 | Facilita ingesta en CloudWatch/Grafana/Loki sin parsing adicional                            |
+| Decisión                    | Resolución                                                                                                                             | Justificación                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Record vs Clase en dominio  | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                                | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                                      |
+| Optional en reactivo        | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                       | Optional bloquea semánticamente la cadena reactiva                                                             |
+| Controladores               | **`@RestController`** con `Mono`/`Flux`                                                                                                | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                                            |
+| Router Functions            | **No**                                                                                                                                 | Complejidad sin beneficio; Spring maneja reactividad igual                                                     |
+| MapStruct                   | **No.** Mappers manuales con métodos estáticos                                                                                         | Trazabilidad, simplicidad, compatibilidad reactiva                                                             |
+| Mapper location             | **Clases `final` separadas** con `@NoArgsConstructor(access = PRIVATE)` y métodos estáticos. Nunca en el record DTO ni en la entidad   | Dirección de dependencia correcta; DTO no importa dominio ni viceversa (ver §4.1)                              |
+| Controller → Handler        | Controller thin (HTTP concerns) → Handler `@Component` (orquestación + `ResponseEntity`/`Flux`)                                        | Separación de concerns, testabilidad, `ResponseEntity` para `Mono`, `Flux` directo para colecciones (ver §4.2) |
+| Builder                     | `@Builder` (Lombok) en records Y clases. Records también usan `with*()` para copias parciales                                          | Lombok 1.18.42 soporta `@Builder` completo en records; sin distinción por número de campos                     |
+| Estructuras concurrentes    | **Reactor maneja.** `ConcurrentHashMap` solo para mapas mutables de infraestructura                                                    | Evitar interferir con el EventLoop                                                                             |
+| switch vs Strategy          | **switch pattern matching** para dominios sealed; **Strategy+Factory** para extensiones en infraestructura                             | Compile-time safety vs runtime extensibility                                                                   |
+| Manejo de errores           | **`@ControllerAdvice`** + operadores de error Reactor                                                                                  | Centralizado, reactivo, sin try/catch en publishers                                                            |
+| Null checks en records      | **`Objects.requireNonNull`** en compact constructor                                                                                    | Idiomático JDK, conciso, lanza NPE (contrato estándar de Java)                                                 |
+| Timestamps                  | **`Instant`** para persistencia; `LocalDateTime` solo si zona horaria es irrelevante                                                   | `Instant` = UTC absoluto, compatible con `TIMESTAMPTZ` de PostgreSQL                                           |
+| Reglas en records           | **Sí.** Invariantes, campos calculados, métodos de consulta, mutaciones encapsuladas y `with*()` en el record                          | La entidad controla su propia consistencia; mutaciones lanzan `DomainException` específicas                    |
+| DomainException             | **Abstract class** que extiende `RuntimeException`, no interfaz                                                                        | Interfaces no pueden extender clases; necesita `super(message)` compartido                                     |
+| Enums descriptivos          | Valores autoexplicativos (e.g. `RESTOCK`, `SHRINKAGE`); evitar genéricos como `MANUAL_ADJUSTMENT`                                      | Trazabilidad sin depender de campos auxiliares como `reason`                                                   |
+| Organización de UseCases    | **1 UseCase por entidad de dominio** con múltiples métodos; no 1 UseCase por operación con `execute()`                                 | Cohesión por agregado, menos clases, inyección de dependencias simplificada                                    |
+| SQL ENUMs                   | **`CREATE TYPE ... AS ENUM`** sincronizado con Java; no `VARCHAR` para campos finitos. Requiere `EnumCodec` en R2DBC (ver §B.6)        | Validación en BD, mejor rendimiento, documentación implícita                                                   |
+| Generación de componentes   | **Siempre usar Scaffold Bancolombia** (`generateModel`, `generateUseCase`, etc.)                                                       | Estructura consistente; modificar contenido, nunca crear carpetas manualmente                                  |
+| Driven Adapters R2DBC       | **Enfoque híbrido:** `ReactiveCrudRepository` + DTOs para CRUD simple; `DatabaseClient` + RowMapper para SQL complejo (ver §B.9)       | Simplicidad para CRUD, control total para FOR UPDATE y lock optimista                                          |
+| Spring Profiles             | **`local`** (default en IntelliJ) y **`docker`** (inyectado por Compose). 3 archivos YAML por micro (ver §B.10)                        | Cambio automático entre BD local y contenedores sin tocar código                                               |
+| Driven Adapter Kafka        | **`reactor-kafka` directo** (`KafkaSender`), no `reactive-commons`. Módulo manual `kafka-producer` (ver §B.11)                         | Outbox Pattern requiere partition key, tópico y ack explícito que `DomainEventBus` no expone                   |
+| Transacciones R2DBC         | **`TransactionalGateway`** port en dominio + `TransactionalOperator` en infraestructura. NUNCA `@Transactional` en UseCases (ver §D.1) | Desacopla dominio de Spring; Caso A (infra pura) y Caso B (gateway) según complejidad                          |
+| Documentación API           | **Springdoc OpenAPI** (`springdoc-openapi-starter-webflux-ui`). Swagger UI en `/swagger-ui.html` (ver §D.2)                            | Generación automática desde `@RestController`; anotaciones `@Operation` opcionales                             |
+| Constantes                  | **`static final`** con nombre descriptivo; valores configurables en YAML con `@Value` (ver §D.3)                                       | Elimina magic numbers/strings; facilita cambios sin recompilar                                                 |
+| `Mono.defer` vs `Mono.just` | **`Mono.defer()`** cuando el argumento produce side-effects o depende de estado mutable (ver §D.4)                                     | Evita evaluación eager en `switchIfEmpty` y otros operadores                                                   |
+| Paginación                  | **Offset (`LIMIT/OFFSET`)** para MVP; **Cursor (keyset)** para endpoints de alto volumen en fases posteriores (ver §D.5)               | Simplicidad para datasets pequeños; cursor cuando supere 10K registros frecuentes                              |
+| Schedulers                  | **Intervalos externalizados** a `application.yaml` sin defaults inline; schedulers en entry-points (ver §D.6)                          | Fallo rápido si falta propiedad; configuración sin recompilar                                                  |
+| Logging producción          | **JSON estructurado** en perfil `docker`; formato legible en perfil `local` (ver §D.7)                                                 | Facilita ingesta en CloudWatch/Grafana/Loki sin parsing adicional                                              |
 
 ---
 

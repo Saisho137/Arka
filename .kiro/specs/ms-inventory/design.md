@@ -352,12 +352,15 @@ public record ReserveStockResult(
 public record ErrorResponse(String code, String message) {}
 ```
 
-#### Controlador REST
+#### Controlador REST y Handler
 
-| Controlador              | Endpoints                                                                            | Retorno                                              |
-| ------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `StockController`        | `PUT /inventory/{sku}/stock`, `GET /inventory/{sku}`, `GET /inventory/{sku}/history` | `Mono<StockResponse>`, `Flux<StockMovementResponse>` |
-| `GlobalExceptionHandler` | `@ControllerAdvice` — mapea excepciones a `ErrorResponse`                            | `Mono<ResponseEntity<ErrorResponse>>`                |
+> **Patrón Controller → Handler → UseCase (ver §4.2 de patrones-y-estandares-codigo.md):** El `StockController` es thin — solo anotaciones HTTP, validación y delegación al `StockHandler`. El `StockHandler` (`@Component`) orquesta la llamada al UseCase, el mapeo vía `StockMapper`/`StockMovementMapper` y el wrapping en `ResponseEntity`. Los endpoints de recurso único retornan `Mono<ResponseEntity<T>>`; los endpoints de colección retornan `Flux<T>` directamente para streaming reactivo (sin `collectList()`).
+
+| Componente               | Responsabilidad                                                                      | Retorno                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `StockController`        | `PUT /inventory/{sku}/stock`, `GET /inventory/{sku}`, `GET /inventory/{sku}/history` | Delega a `StockHandler`                                              |
+| `StockHandler`           | Orquestación: UseCase → Mapper → `ResponseEntity` / `Flux`                          | `Mono<ResponseEntity<StockResponse>>`, `Flux<StockMovementResponse>` |
+| `GlobalExceptionHandler` | `@ControllerAdvice` — mapea excepciones a `ErrorResponse`                            | `Mono<ResponseEntity<ErrorResponse>>`                                |
 
 #### Servicio gRPC
 

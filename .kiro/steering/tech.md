@@ -42,7 +42,7 @@
 ./gradlew validateStructure              # Validate Clean Architecture layers
 ```
 
-## Scaffold Code Generation (from `ms-<name>/`)
+## CRITICAL: Scaffold Code Generation (from `ms-<name>/`)
 
 ```bash
 ./gradlew generateModel --name=X         # (gm)  Entity + Gateway interface

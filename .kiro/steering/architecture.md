@@ -15,6 +15,7 @@ When creating or modifying specs, implementations, or any code in this monorepo,
 
 ## Key Rules
 
+- Use Scaffold Skill to generate properly modules with plugin commands
 - All specs must align with the architecture defined in the design document
 - All implementations must follow the patterns and conventions in patrones-y-estandares-codigo.md
 - Business context and integration agreements in contexto-negocio-arka-extra.md define the boundaries of each microservice
