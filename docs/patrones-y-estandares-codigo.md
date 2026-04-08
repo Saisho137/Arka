@@ -2301,3 +2301,151 @@ localstack:
 > **Nota de seguridad:** El token del `.env` es para desarrollo local. En CI/CD, usar un CI Auth Token configurado como secreto del pipeline. Nunca commitear tokens reales a Git — el `.env` ya está en `.gitignore`.
 
 Referencia: [LocalStack Auth Token docs](https://docs.localstack.cloud/aws/getting-started/auth-token/)
+
+---
+
+### B.12 Entry Point gRPC: Configuración del Módulo con Protobuf
+
+Los microservicios que exponen un servidor gRPC (e.g., `ms-inventory` para reservas síncronas desde `ms-order`) usan un módulo dedicado `grpc-<nombre>` en `infrastructure/entry-points/`. El módulo se crea manualmente (el Scaffold no tiene un tipo nativo para gRPC server) y se registra en `settings.gradle`.
+
+#### Estructura del módulo
+
+```text
+infrastructure/entry-points/grpc-inventory/
+├── build.gradle
+└── src/main/
+    ├── java/com/arka/grpc/
+    │   └── InventoryGrpcService.java   # Implementa el stub generado
+    └── proto/
+        └── inventory.proto             # Definición del servicio gRPC
+```
+
+#### `build.gradle` del módulo gRPC
+
+```groovy
+plugins {
+    id 'com.google.protobuf' version '0.9.4'
+}
+
+dependencies {
+    implementation project(':usecase')
+    implementation project(':model')
+
+    implementation 'net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE'
+    implementation 'io.grpc:grpc-stub'
+    implementation 'io.grpc:grpc-protobuf'
+    implementation 'javax.annotation:javax.annotation-api:1.3.2'
+}
+
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.25.3'
+    }
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.63.0'
+        }
+    }
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
+}
+```
+
+**Puntos clave:**
+
+- El plugin `com.google.protobuf` genera los stubs Java a partir del `.proto` en `build/generated/source/proto/`
+- `grpc-server-spring-boot-starter` de `net.devh` integra el servidor gRPC con Spring Boot (auto-configura el puerto, health checks, etc.)
+- `javax.annotation-api` es requerido por el código generado por `protoc-gen-grpc-java` (anotaciones `@Generated`)
+- Los `srcDirs` en `sourceSets` exponen el código generado al compilador Java
+
+#### Versiones de dependencias gRPC
+
+| Artefacto                                  | Versión         | Rol                            |
+| ------------------------------------------ | --------------- | ------------------------------ |
+| `com.google.protobuf:protoc`               | `3.25.3`        | Compilador Protobuf            |
+| `io.grpc:protoc-gen-grpc-java`             | `1.63.0`        | Plugin para generar stubs Java |
+| `io.grpc:grpc-stub`                        | BOM de Spring   | Runtime de stubs gRPC          |
+| `io.grpc:grpc-protobuf`                    | BOM de Spring   | Serialización Protobuf en gRPC |
+| `net.devh:grpc-server-spring-boot-starter` | `3.1.0.RELEASE` | Integración gRPC ↔ Spring Boot |
+
+> Las versiones de `grpc-stub` y `grpc-protobuf` las gestiona el BOM de Spring Boot — no especificar versión explícita para evitar conflictos.
+
+#### Definición del servicio (`.proto`)
+
+El archivo `.proto` se ubica en `src/main/proto/` del módulo. Convención de nombrado: `<dominio>.proto`.
+
+```protobuf
+syntax = "proto3";
+
+option java_package = "com.arka.grpc.inventory";
+option java_outer_classname = "InventoryProto";
+option java_multiple_files = true;
+
+service InventoryService {
+    rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+}
+
+message ReserveStockRequest {
+    string sku = 1;
+    string order_id = 2;
+    int32 quantity = 3;
+}
+
+message ReserveStockResponse {
+    bool success = 1;
+    string reservation_id = 2;
+    int32 available_quantity = 3;
+    string reason = 4;
+}
+```
+
+#### Implementación del servicio gRPC
+
+```java
+@GrpcService
+@RequiredArgsConstructor
+public class InventoryGrpcService extends InventoryServiceGrpc.InventoryServiceImplBase {
+
+    private final StockUseCase stockUseCase;
+
+    @Override
+    public void reserveStock(ReserveStockRequest request, StreamObserver<ReserveStockResponse> responseObserver) {
+        stockUseCase.reserveStock(request.getSku(), UUID.fromString(request.getOrderId()), request.getQuantity())
+                .map(result -> ReserveStockResponse.newBuilder()
+                        .setSuccess(result.success())
+                        .setReservationId(result.reservationId() != null ? result.reservationId().toString() : "")
+                        .setAvailableQuantity(result.availableQuantity())
+                        .setReason(result.reason() != null ? result.reason() : "")
+                        .build())
+                .subscribe(
+                        response -> {
+                            responseObserver.onNext(response);
+                            responseObserver.onCompleted();
+                        },
+                        responseObserver::onError
+                );
+    }
+}
+```
+
+#### Configuración del puerto gRPC en `application.yaml`
+
+```yaml
+grpc:
+  server:
+    port: ${GRPC_PORT:9090}
+```
+
+> **Regla:** El puerto gRPC se externaliza a YAML igual que el puerto HTTP. El valor por defecto `9090` aplica en perfil `local`; en `docker` se inyecta desde `.env`.

@@ -351,18 +351,18 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Propiedad 20: Respuestas de error tienen estructura y HTTP status correctos** — Generar excepciones de distintos tipos (validación, dominio, inesperada) y verificar que la respuesta contiene ErrorResponse con code y message no vacíos, HTTP status correcto (400, 404, 409, 500), y que las respuestas 500 no exponen detalles internos
     - **Valida: Requisitos 11.2, 11.3, 11.4, 11.5, 11.6**
 
-- [ ] 11. Checkpoint — Verificar REST y driven adapters
+- [x] 11. Checkpoint — Verificar REST y driven adapters
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 12. Implementar entry point — Servidor gRPC
-  - [ ] 12.1 Crear archivo `.proto` para el servicio de inventario
+- [x] 12. Implementar entry point — Servidor gRPC
+  - [x] 12.1 Crear archivo `.proto` para el servicio de inventario
     - Definir `InventoryService` con RPC `ReserveStock(ReserveStockRequest) returns (ReserveStockResponse)`
     - `ReserveStockRequest`: sku (string), order_id (string), quantity (int32)
     - `ReserveStockResponse`: success (bool), reservation_id (string), available_quantity (int32), reason (string)
     - Ubicar en `infrastructure/entry-points/` y configurar generación de código protobuf en `build.gradle`
     - _Requisitos: 4.1, 4.3, 4.4_
 
-  - [ ] 12.2 Implementar `GrpcStockService` que extiende la clase generada
+  - [x] 12.2 Implementar `GrpcStockService` que extiende la clase generada
     - Mapear `ReserveStockRequest` a parámetros de dominio
     - Delegar a `StockUseCase.reserveStock(sku, orderId, quantity)`
     - Mapear `ReserveStockResult` a `ReserveStockResponse`

@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package com.arka.inventory;
+
+option java_package = "com.arka.grpc";
+option java_outer_classname = "InventoryProto";
+option java_multiple_files = true;
+
+service InventoryService {
+  rpc ReserveStock (ReserveStockRequest) returns (ReserveStockResponse);
+}
+
+message ReserveStockRequest {
+  string sku = 1;
+  string order_id = 2;
+  int32 quantity = 3;
+}
+
+message ReserveStockResponse {
+  bool success = 1;
+  string reservation_id = 2;
+  int32 available_quantity = 3;
+  string reason = 4;
+}
