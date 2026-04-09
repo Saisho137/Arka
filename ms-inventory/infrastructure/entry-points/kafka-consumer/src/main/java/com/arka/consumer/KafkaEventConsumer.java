@@ -52,7 +52,10 @@ public class KafkaEventConsumer {
                             msg.receiverOffset().acknowledge();
                             return Mono.empty();
                         }))
-                .subscribe();
+                .subscribe(
+                        null,
+                        ex -> log.error("Product events consumer terminated unexpectedly — stream closed", ex)
+                );
     }
 
     private void consumeOrderEvents() {
@@ -65,7 +68,10 @@ public class KafkaEventConsumer {
                             msg.receiverOffset().acknowledge();
                             return Mono.empty();
                         }))
-                .subscribe();
+                .subscribe(
+                        null,
+                        ex -> log.error("Order events consumer terminated unexpectedly — stream closed", ex)
+                );
     }
 
     // Package-private for testing

@@ -6,6 +6,7 @@ services:
   postgres-orders:
     image: postgres:17-alpine
     container_name: arka-db-orders
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -27,6 +28,7 @@ services:
   postgres-inventory:
     image: postgres:17-alpine
     container_name: arka-db-inventory
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -51,6 +53,7 @@ services:
   postgres-payment:
     image: postgres:17-alpine
     container_name: arka-db-payment
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -75,6 +78,7 @@ services:
   postgres-reporter:
     image: postgres:17-alpine
     container_name: arka-db-reporter
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -99,6 +103,7 @@ services:
   postgres-shipping:
     image: postgres:17-alpine
     container_name: arka-db-shipping
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -123,6 +128,7 @@ services:
   postgres-provider:
     image: postgres:17-alpine
     container_name: arka-db-provider
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -150,6 +156,7 @@ services:
   mongodb:
     image: mongo:7-jammy
     container_name: arka-mongodb
+    restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -171,6 +178,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: arka-redis
+    restart: unless-stopped
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
@@ -189,6 +197,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:8.0.4
     container_name: arka-kafka
+    restart: unless-stopped
     ports:
       - "${KAFKA_PORT}:${KAFKA_PORT}"
     environment:
@@ -223,6 +232,7 @@ services:
   kafka-init:
     image: confluentinc/cp-kafka:8.0.4
     container_name: arka-kafka-init
+    restart: on-failure
     depends_on:
       kafka:
         condition: service_healthy
@@ -262,6 +272,7 @@ services:
   localstack:
     image: localstack/localstack:latest
     container_name: arka-localstack
+    restart: unless-stopped
     ports:
       - "4566:4566"
       - "4510-4559:4510-4559"
