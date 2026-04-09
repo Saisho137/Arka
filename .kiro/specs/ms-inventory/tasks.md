@@ -384,8 +384,8 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - **Propiedad 18: Completitud del sobre y payload de eventos** — Generar eventos de todos los tipos (StockReserved, StockReserveFailed, StockReleased, StockUpdated, StockDepleted) y verificar que el sobre contiene eventId (UUID), eventType, timestamp, source = "ms-inventory", correlationId, payload con todos los campos requeridos por tipo
     - **Valida: Requisitos 8.2, 8.7, 8.8, 8.9, 8.10, 8.11, 8.12**
 
-- [ ] 14. Configuración de Spring Boot y cableado de dependencias
-  - [ ] 14.1 Configurar `application.yaml` en `app-service`
+- [x] 14. Configuración de Spring Boot y cableado de dependencias
+  - [x] 14.1 Configurar `application.yaml` en `app-service`
     - Configuración R2DBC: url `r2dbc:postgresql://localhost:5433/db_inventory`, username, password
     - Configuración Kafka: bootstrap-servers, producer config (serializers), consumer config (group-id, deserializers, tópicos)
     - Configuración gRPC: puerto del servidor
@@ -402,7 +402,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Requisitos: 1.7, 8.3_
     - _Estándares: §D.2 (OpenAPI), §D.6 (Schedulers), §D.7 (Logging)_
 
-  - [ ] 14.2 Configurar beans de inyección de dependencias
+  - [x] 14.2 Configurar beans de inyección de dependencias
     - Registrar use cases, adapters y ports en la configuración de Spring
     - Asegurar que los driven adapters implementan los ports correctos
     - Spring Boot auto-configura `R2dbcTransactionManager`. Registrar `TransactionalOperator` como bean en `R2dbcTransactionConfig`. `TransactionalGateway` se implementa con `R2dbcTransactionalAdapter`
