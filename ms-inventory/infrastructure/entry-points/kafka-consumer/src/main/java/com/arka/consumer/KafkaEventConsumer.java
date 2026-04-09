@@ -2,8 +2,8 @@ package com.arka.consumer;
 
 import com.arka.usecase.stock.StockUseCase;
 import com.arka.usecase.stockreservation.StockReservationUseCase;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.kafka.receiver.KafkaReceiver;
@@ -24,7 +24,6 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class KafkaEventConsumer {
 
     static final int MAX_RETRY_ATTEMPTS = 3;
@@ -36,6 +35,19 @@ public class KafkaEventConsumer {
     private final KafkaReceiver<String, String> productEventsReceiver;
     private final KafkaReceiver<String, String> orderEventsReceiver;
     private final ObjectMapper objectMapper;
+
+    public KafkaEventConsumer(
+            StockUseCase stockUseCase,
+            StockReservationUseCase stockReservationUseCase,
+            @Qualifier("productEventsReceiver") KafkaReceiver<String, String> productEventsReceiver,
+            @Qualifier("orderEventsReceiver") KafkaReceiver<String, String> orderEventsReceiver,
+            ObjectMapper objectMapper) {
+        this.stockUseCase = stockUseCase;
+        this.stockReservationUseCase = stockReservationUseCase;
+        this.productEventsReceiver = productEventsReceiver;
+        this.orderEventsReceiver = orderEventsReceiver;
+        this.objectMapper = objectMapper;
+    }
 
     public void startConsuming() {
         consumeProductEvents();

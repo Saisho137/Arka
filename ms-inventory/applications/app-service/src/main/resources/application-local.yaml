@@ -1,9 +1,11 @@
 # Perfil LOCAL — desarrollo desde IntelliJ sin Docker
 # Solo sobreescribe los campos que difieren del application.yaml base.
-# PostgreSQL corriendo en localhost (instalación local o solo el contenedor de DB).
+# PostgreSQL 17 instalado localmente, puerto estándar 5432.
+# Usar 127.0.0.1 en lugar de localhost para forzar IPv4 y evitar
+# problemas de resolución con IPv6 en la JVM (localhost → ::1).
 spring:
   r2dbc:
-    url: r2dbc:postgresql://localhost:5433/db_inventory
+    url: r2dbc:postgresql://127.0.0.1:5432/db_inventory
     username: postgres
     password: root
   kafka:

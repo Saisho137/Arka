@@ -411,7 +411,7 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
     - _Requisitos: 4.9, 8.1_
     - _Estándares: §D.1 (Transacciones R2DBC), §D.2 (OpenAPI)_
 
-- [ ] 15. Checkpoint final — Verificar integración completa
+- [x] 15. Checkpoint final — Verificar integración completa
   - Asegurar que todos los tests pasan (unitarios y de propiedades), ejecutar `./gradlew build` desde `ms-inventory/`, preguntar al usuario si surgen dudas.
 
 ## Notas
