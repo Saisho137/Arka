@@ -1,6 +1,7 @@
 package com.arka.r2dbc.outbox;
 
 import com.arka.model.outboxevent.OutboxEvent;
+import io.r2dbc.postgresql.codec.Json;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
@@ -11,7 +12,7 @@ final class OutboxEventDTOMapper {
         return OutboxEvent.builder()
                 .id(data.id())
                 .eventType(data.eventType())
-                .payload(data.payload())
+                .payload(data.payload() != null ? data.payload().asString() : null)
                 .partitionKey(data.partitionKey())
                 .status(data.status())
                 .createdAt(data.createdAt())
@@ -22,7 +23,7 @@ final class OutboxEventDTOMapper {
         return OutboxEventDTO.builder()
                 .id(domain.id())
                 .eventType(domain.eventType())
-                .payload(domain.payload())
+                .payload(domain.payload() != null ? Json.of(domain.payload()) : null)
                 .partitionKey(domain.partitionKey())
                 .status(domain.status())
                 .createdAt(domain.createdAt())

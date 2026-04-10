@@ -40,7 +40,7 @@ public class StockController {
             @ApiResponse(responseCode = "409", description = "Conflict — quantity below reserved or concurrent modification")
     })
     public Mono<ResponseEntity<StockResponse>> updateStock(
-            @PathVariable String sku,
+            @PathVariable("sku") String sku,
             @Valid @RequestBody UpdateStockRequest request) {
         return stockHandler.updateStock(sku, request.quantity(), request.reason());
     }
@@ -51,7 +51,7 @@ public class StockController {
             @ApiResponse(responseCode = "200", description = "Stock found"),
             @ApiResponse(responseCode = "404", description = "SKU not found")
     })
-    public Mono<ResponseEntity<StockResponse>> getStock(@PathVariable String sku) {
+    public Mono<ResponseEntity<StockResponse>> getStock(@PathVariable("sku") String sku) {
         return stockHandler.getStock(sku);
     }
 
@@ -62,7 +62,7 @@ public class StockController {
             @ApiResponse(responseCode = "404", description = "SKU not found")
     })
     public Flux<StockMovementResponse> getHistory(
-            @PathVariable String sku,
+            @PathVariable("sku") String sku,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return stockHandler.getHistory(sku, page, Math.min(size, MAX_PAGE_SIZE));

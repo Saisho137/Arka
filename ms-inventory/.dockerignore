@@ -1,0 +1,19 @@
+# Build outputs
+build/
+build-cache/
+**/build/
+
+# Gradle cache
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Docs
+README.md

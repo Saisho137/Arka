@@ -2,6 +2,7 @@ package com.arka.r2dbc.outbox;
 
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxStatus;
+import io.r2dbc.postgresql.codec.Json;
 import lombok.Builder;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
@@ -15,7 +16,7 @@ import java.util.UUID;
 public record OutboxEventDTO(
         @Id UUID id,
         @Column("event_type") EventType eventType,
-        String payload,
+        Json payload,
         @Column("partition_key") String partitionKey,
         OutboxStatus status,
         @Column("created_at") Instant createdAt

@@ -12,14 +12,27 @@ public class SecurityHeadersConfig implements WebFilter {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        String path = exchange.getRequest().getPath().value();
         HttpHeaders headers = exchange.getResponse().getHeaders();
-        headers.set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'self'; form-action 'self'");
+
+        // Swagger UI and API docs need relaxed CSP to load scripts/styles
+        boolean isSwaggerPath = path.startsWith("/swagger-ui")
+                || path.startsWith("/webjars/")
+                || path.startsWith("/api-docs");
+
+        if (isSwaggerPath) {
+            headers.set("Content-Security-Policy",
+                    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;");
+        } else {
+            headers.set("Content-Security-Policy",
+                    "default-src 'self'; frame-ancestors 'self'; form-action 'self'");
+        }
+
         headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
         headers.set("X-Content-Type-Options", "nosniff");
         headers.set("Server", "");
-        headers.set("Cache-Control", "no-store");
-        headers.set("Pragma", "no-cache");
         headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+
         return chain.filter(exchange);
     }
 }
