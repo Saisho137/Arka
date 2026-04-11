@@ -214,7 +214,11 @@ class StockUseCaseTest {
             when(stockReservationRepository.findBySkuAndOrderIdAndStatus(eq(SKU), eq(orderId), eq(ReservationStatus.PENDING)))
                     .thenReturn(Mono.empty());
             when(stockRepository.updateReservedQuantity(eq(SKU), eq(10))).thenReturn(Mono.just(stock.reserve(10)));
-            when(stockReservationRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+            when(stockReservationRepository.save(any())).thenAnswer(inv -> {
+                StockReservation reservation = inv.getArgument(0);
+                // Simulate DB generating UUID
+                return Mono.just(reservation.toBuilder().id(UUID.randomUUID()).build());
+            });
             when(stockMovementRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
             when(outboxEventRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 

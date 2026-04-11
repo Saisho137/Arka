@@ -19,7 +19,7 @@ public record OutboxEvent(
         Objects.requireNonNull(eventType, "eventType is required");
         Objects.requireNonNull(payload, "payload is required");
         Objects.requireNonNull(partitionKey, "partitionKey is required");
-        id = id != null ? id : UUID.randomUUID();
+        // id is nullable — DB generates UUID via DEFAULT gen_random_uuid()
         status = status != null ? status : OutboxStatus.PENDING;
         createdAt = createdAt != null ? createdAt : Instant.now();
     }

@@ -29,6 +29,7 @@ public record StockMovement(
                             + ") + quantityChange(" + quantityChange
                             + ") != newQuantity(" + newQuantity + ")");
         }
+        // id is nullable — DB generates UUID via DEFAULT gen_random_uuid()
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 

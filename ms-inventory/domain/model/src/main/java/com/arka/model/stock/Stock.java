@@ -31,6 +31,7 @@ public record Stock(
         if (reservedQuantity > quantity)
             throw new IllegalArgumentException("reservedQuantity cannot exceed quantity");
         if (depletionThreshold < 0) throw new IllegalArgumentException("depletionThreshold must be >= 0");
+        // id is nullable — DB generates UUID via DEFAULT gen_random_uuid()
         availableQuantity = quantity - reservedQuantity;
         depletionThreshold = depletionThreshold > 0 ? depletionThreshold : DEFAULT_DEPLETION_THRESHOLD;
         version = version > 0 ? version : 1;

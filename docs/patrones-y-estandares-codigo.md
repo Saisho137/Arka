@@ -165,7 +165,128 @@ public class LegacyExportRequest extends BaseExportConfig { // herencia → reco
 }
 ```
 
-### 2.2 Patrón Builder para Construcción de Objetos
+### 2.2 Generación de UUIDs: Delegación a PostgreSQL
+
+**Decisión: Los campos `id` de tipo `UUID` en entidades de dominio deben ser nullable.** La generación del UUID se delega a PostgreSQL mediante `DEFAULT gen_random_uuid()` en la definición de la tabla.
+
+#### Justificación
+
+1. **Evita bugs silenciosos con `repository.save()`**: Spring Data R2DBC interpreta un `@Id` no nulo como registro existente, ejecutando `UPDATE` en lugar de `INSERT`. Si el registro no existe, el UPDATE afecta 0 filas y falla silenciosamente sin lanzar error.
+
+2. **Reduce carga del microservicio**: La generación de UUIDs se offloadea a PostgreSQL, que es más eficiente para esta operación (usa `gen_random_uuid()` nativo).
+
+3. **Atomicidad transaccional**: El UUID generado por la DB es parte de la misma transacción que el INSERT, garantizando consistencia.
+
+#### Implementación
+
+**Paso 1 — Schema SQL con `DEFAULT gen_random_uuid()`:**
+
+```sql
+CREATE TABLE stock (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sku VARCHAR(50) NOT NULL UNIQUE,
+    quantity INTEGER NOT NULL,
+    -- ...
+);
+```
+
+**Paso 2 — Record de dominio con `id` nullable (sin generación en Java):**
+
+```java
+@Builder(toBuilder = true)
+public record Stock(
+        UUID id,  // Nullable — la DB lo genera
+        String sku,
+        UUID productId,
+        int quantity,
+        // ...
+) {
+    public Stock {
+        Objects.requireNonNull(sku, "sku is required");
+        Objects.requireNonNull(productId, "productId is required");
+        // id es nullable — DB genera UUID via DEFAULT gen_random_uuid()
+        if (quantity < 0) throw new IllegalArgumentException("quantity must be >= 0");
+        // ...
+    }
+}
+```
+
+**Paso 3 — DTO de infraestructura implementa `Persistable<UUID>`:**
+
+Spring Data R2DBC necesita saber cuándo hacer INSERT vs UPDATE. Implementar `Persistable<UUID>` con `isNew()` basado en `id == null`:
+
+```java
+@Table("stock")
+@Builder(toBuilder = true)
+public record StockDTO(
+        @Id UUID id,
+        String sku,
+        @Column("product_id") UUID productId,
+        int quantity,
+        // ...
+) {}
+```
+
+**Paso 4 — UseCase NO genera UUID al construir entidades nuevas:**
+
+```java
+// ✅ Correcto — id es null, la DB lo genera
+Stock newStock = Stock.builder()
+        .sku(sku)
+        .productId(productId)
+        .quantity(initialStock)
+        .build();
+
+return stockRepository.save(newStock); // DB genera el UUID en el INSERT
+
+// ❌ NUNCA — generar UUID en Java
+Stock newStock = Stock.builder()
+        .id(UUID.randomUUID())  // ← Esto causa UPDATE en lugar de INSERT
+        .sku(sku)
+        .build();
+```
+
+**Paso 5 — Capturar el ID generado cuando se necesita:**
+
+Si el UseCase necesita el UUID generado (e.g., para incluirlo en un evento), usar `.flatMap()` para capturar el resultado del `save()`:
+
+```java
+return stockReservationRepository.save(reservation)
+        .flatMap(savedReservation -> {
+            OutboxEvent event = buildOutboxEvent(
+                    EventType.STOCK_RESERVED, sku,
+                    StockReservedPayload.builder()
+                            .reservationId(savedReservation.id())  // ← UUID generado por DB
+                            .build());
+            return outboxEventRepository.save(event)
+                    .thenReturn(ReserveStockResult.builder()
+                            .reservationId(savedReservation.id())
+                            .build());
+        });
+```
+
+#### Tablas afectadas
+
+Este patrón aplica a **todas las tablas con `DEFAULT gen_random_uuid()`**:
+
+- `stock`
+- `stock_reservations`
+- `stock_movements`
+- `outbox_events`
+
+**Excepción:** Tablas donde el UUID viene de una fuente externa (e.g., `processed_events` recibe `event_id` de Kafka) — en esos casos el UUID sí se pasa desde Java.
+
+#### Beneficios
+
+| Beneficio                         | Descripción                                                                |
+| --------------------------------- | -------------------------------------------------------------------------- |
+| Evita bugs silenciosos            | Spring Data identifica correctamente nuevas entidades                      |
+| Reduce carga del microservicio    | PostgreSQL genera UUIDs más eficientemente que Java                        |
+| Atomicidad transaccional          | El UUID generado es parte de la misma transacción que el INSERT            |
+| Consistencia con schema           | El código Java refleja exactamente lo que hace la DB (`DEFAULT` en el DDL) |
+| Simplifica lógica de construcción | No hay que recordar generar UUIDs manualmente en cada builder              |
+
+### 2.3 Patrón Builder para Construcción de Objetos
 
 Lombok `@Builder` se aplica tanto en records como en clases. La elección del tipo (record vs clase) se rige por §2.1 — no por la necesidad de Builder.
 
@@ -202,7 +323,7 @@ Order confirmed = order.toBuilder()
     .build();
 ```
 
-### 2.3 Sealed Interfaces para Máquinas de Estado y Resultados de Decisión
+### 2.4 Sealed Interfaces para Máquinas de Estado y Resultados de Decisión
 
 Sealed interfaces + records modelan **dominios cerrados** con exhaustividad verificada en compile-time. Uso principal: máquinas de estado, resultados polimórficos, eventos de dominio.
 
@@ -721,6 +842,7 @@ void shouldCreateOrder_whenStockAvailable() {
 | Decisión                    | Resolución                                                                                                                             | Justificación                                                                                                  |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Record vs Clase en dominio  | **Record** por defecto; clase solo cuando herencia o mutabilidad de framework lo exigen                                                | Inmutabilidad nativa; `@Builder` funciona en records desde Lombok 1.18.20                                      |
+| Generación de UUIDs         | **IDs nullable en dominio**, delegación a PostgreSQL con `DEFAULT gen_random_uuid()`. (ver §2.2)                                       | Evita bugs silenciosos con `repository.save()`; reduce carga del microservicio; atomicidad transaccional       |
 | Optional en reactivo        | **No.** Usar `Mono.justOrEmpty`, `switchIfEmpty`                                                                                       | Optional bloquea semánticamente la cadena reactiva                                                             |
 | Controladores               | **`@RestController`** con `Mono`/`Flux`                                                                                                | `@Valid`, `@ControllerAdvice`, sintaxis declarativa                                                            |
 | Router Functions            | **No**                                                                                                                                 | Complejidad sin beneficio; Spring maneja reactividad igual                                                     |

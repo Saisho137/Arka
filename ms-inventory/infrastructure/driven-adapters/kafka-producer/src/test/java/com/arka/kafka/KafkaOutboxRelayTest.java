@@ -79,9 +79,12 @@ class KafkaOutboxRelayTest {
     @SuppressWarnings("unchecked")
     void relay_shouldKeepEventPendingOnKafkaFailure() {
         OutboxEvent event = OutboxEvent.builder()
+                .id(UUID.randomUUID())
                 .eventType(EventType.STOCK_UPDATED)
                 .payload("{\"sku\":\"SKU-002\"}")
                 .partitionKey("SKU-002")
+                .status(OutboxStatus.PENDING)
+                .createdAt(Instant.now())
                 .build();
 
         when(outboxRelayUseCase.fetchPendingEvents()).thenReturn(Flux.just(event));
@@ -98,9 +101,12 @@ class KafkaOutboxRelayTest {
     @SuppressWarnings("unchecked")
     void relay_shouldSendToKafkaWithSkuAsKey() {
         OutboxEvent event = OutboxEvent.builder()
+                .id(UUID.randomUUID())
                 .eventType(EventType.STOCK_RELEASED)
                 .payload("{\"sku\":\"SKU-003\"}")
                 .partitionKey("SKU-003")
+                .status(OutboxStatus.PENDING)
+                .createdAt(Instant.now())
                 .build();
 
         when(outboxRelayUseCase.fetchPendingEvents()).thenReturn(Flux.just(event));
@@ -127,15 +133,21 @@ class KafkaOutboxRelayTest {
     @SuppressWarnings("unchecked")
     void relay_shouldProcessMultipleEventsIndependently() {
         OutboxEvent event1 = OutboxEvent.builder()
+                .id(UUID.randomUUID())
                 .eventType(EventType.STOCK_RESERVED)
                 .payload("{\"sku\":\"SKU-A\"}")
                 .partitionKey("SKU-A")
+                .status(OutboxStatus.PENDING)
+                .createdAt(Instant.now())
                 .build();
 
         OutboxEvent event2 = OutboxEvent.builder()
+                .id(UUID.randomUUID())
                 .eventType(EventType.STOCK_UPDATED)
                 .payload("{\"sku\":\"SKU-B\"}")
                 .partitionKey("SKU-B")
+                .status(OutboxStatus.PENDING)
+                .createdAt(Instant.now())
                 .build();
 
         when(outboxRelayUseCase.fetchPendingEvents()).thenReturn(Flux.just(event1, event2));

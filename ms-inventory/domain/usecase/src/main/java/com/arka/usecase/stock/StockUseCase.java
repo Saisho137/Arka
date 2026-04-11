@@ -112,7 +112,6 @@ public class StockUseCase {
 
         Stock reserved = stock.reserve(quantity);
         StockReservation reservation = StockReservation.builder()
-                .id(UUID.randomUUID())
                 .sku(sku)
                 .orderId(orderId)
                 .quantity(quantity)
@@ -120,22 +119,24 @@ public class StockUseCase {
 
         StockMovement movement = StockMovement.orderReserve(sku, quantity, stock.availableQuantity(), orderId);
 
-        OutboxEvent reservedEvent = buildOutboxEvent(
-                EventType.STOCK_RESERVED, sku,
-                StockReservedPayload.builder()
-                        .sku(sku).orderId(orderId).quantity(quantity).reservationId(reservation.id())
-                        .build());
-
         return stockRepository.updateReservedQuantity(sku, reserved.reservedQuantity())
                 .then(stockReservationRepository.save(reservation))
-                .then(stockMovementRepository.save(movement))
-                .then(outboxEventRepository.save(reservedEvent))
-                .then(emitStockDepletedIfNeeded(reserved))
-                .thenReturn(ReserveStockResult.builder()
-                        .success(true)
-                        .reservationId(reservation.id())
-                        .availableQuantity(reserved.availableQuantity())
-                        .build());
+                .flatMap(savedReservation -> {
+                    OutboxEvent reservedEvent = buildOutboxEvent(
+                            EventType.STOCK_RESERVED, sku,
+                            StockReservedPayload.builder()
+                                    .sku(sku).orderId(orderId).quantity(quantity).reservationId(savedReservation.id())
+                                    .build());
+
+                    return stockMovementRepository.save(movement)
+                            .then(outboxEventRepository.save(reservedEvent))
+                            .then(emitStockDepletedIfNeeded(reserved))
+                            .thenReturn(ReserveStockResult.builder()
+                                    .success(true)
+                                    .reservationId(savedReservation.id())
+                                    .availableQuantity(reserved.availableQuantity())
+                                    .build());
+                });
     }
 
     private Mono<Void> emitReserveFailedEvent(String sku, UUID orderId, int requested, int available) {
@@ -158,7 +159,6 @@ public class StockUseCase {
                         return Mono.empty();
                     }
                     Stock newStock = Stock.builder()
-                            .id(UUID.randomUUID())
                             .sku(sku)
                             .productId(productId)
                             .quantity(initialStock)

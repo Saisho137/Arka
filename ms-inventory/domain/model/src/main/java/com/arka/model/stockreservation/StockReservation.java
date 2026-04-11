@@ -23,6 +23,7 @@ public record StockReservation(
         Objects.requireNonNull(sku, "sku is required");
         Objects.requireNonNull(orderId, "orderId is required");
         if (quantity <= 0) throw new IllegalArgumentException("quantity must be > 0");
+        // id is nullable — DB generates UUID via DEFAULT gen_random_uuid()
         status = status != null ? status : ReservationStatus.PENDING;
         createdAt = createdAt != null ? createdAt : Instant.now();
         expiresAt = expiresAt != null ? expiresAt : Instant.now().plus(DEFAULT_TTL);
