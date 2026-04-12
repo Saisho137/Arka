@@ -274,7 +274,41 @@ Este patrón aplica a **todas las tablas con `DEFAULT gen_random_uuid()`**:
 - `stock_movements`
 - `outbox_events`
 
-**Excepción:** Tablas donde el UUID viene de una fuente externa (e.g., `processed_events` recibe `event_id` de Kafka) — en esos casos el UUID sí se pasa desde Java.
+#### Excepción: UUIDs de Fuentes Externas
+
+**Tablas donde el UUID viene de una fuente externa** (e.g., `processed_events` recibe `event_id` de Kafka) requieren un enfoque diferente:
+
+1. **El UUID sí se pasa desde Java** — no se genera en la BD
+2. **La tabla NO tiene `DEFAULT gen_random_uuid()`** — el campo es `NOT NULL` sin default
+3. **Se usa `DatabaseClient` con INSERT explícito** en lugar de `repository.save()`
+
+**Razón:** Spring Data R2DBC interpreta un `@Id` no nulo como UPDATE. Si usamos `repository.save(dto)` con un `event_id` que viene de Kafka (siempre no nulo), Spring ejecuta UPDATE en lugar de INSERT. Como el registro no existe, el UPDATE afecta 0 filas y falla silenciosamente sin lanzar error.
+
+**Solución:** Usar `DatabaseClient` con SQL explícito para forzar INSERT:
+
+```java
+@Override
+public Mono<Void> save(UUID eventId) {
+    return databaseClient.sql("INSERT INTO processed_events (event_id, processed_at) VALUES (:eventId, NOW())")
+            .bind("eventId", eventId)
+            .fetch()
+            .rowsUpdated()
+            .then();
+}
+```
+
+**Schema SQL para esta excepción:**
+
+```sql
+CREATE TABLE processed_events (
+    event_id UUID PRIMARY KEY,  -- Sin DEFAULT — viene de Kafka
+    processed_at TIMESTAMPTZ NOT NULL
+);
+```
+
+**Tablas que siguen esta excepción:**
+
+- `processed_events` (ms-inventory, ms-order, ms-catalog) — `event_id` viene de Kafka
 
 #### Beneficios
 

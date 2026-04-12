@@ -11,4 +11,6 @@ spring:
 
 logging:
   level:
-    com.arka: INFO
+    com.arka: DEBUG
+    org.springframework.transaction: DEBUG
+    org.springframework.data.r2dbc: DEBUG
