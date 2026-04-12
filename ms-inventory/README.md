@@ -85,6 +85,23 @@ Base path: `/inventory` — Puerto HTTP: `8082`
 **Documentación interactiva:** `http://localhost:8082/swagger-ui.html`  
 **Especificación OpenAPI:** `http://localhost:8082/api-docs`
 
+### Ejemplos cURL
+
+Ver Swagger UI para ejemplos completos. Endpoints principales:
+
+```bash
+# Consultar stock
+curl http://localhost:8082/inventory/ACC-KB-001
+
+# Actualizar stock (requiere auth ADMIN)
+curl -X PUT http://localhost:8082/inventory/ACC-KB-001/stock \
+  -H "Content-Type: application/json" \
+  -d '{"quantity": 100, "reason": "Restock from supplier"}'
+
+# Historial de movimientos
+curl "http://localhost:8082/inventory/ACC-KB-001/history?page=0&size=20"
+```
+
 ---
 
 ## Puerto gRPC
@@ -98,6 +115,39 @@ service InventoryService {
 ```
 
 Consumido exclusivamente por `ms-order` para reservar stock de forma síncrona antes de confirmar una orden. Usa lock pesimista (`SELECT ... FOR UPDATE`) dentro de una transacción R2DBC ultra-corta.
+
+### Ejemplo grpcurl
+
+```bash
+# Reservar 5 unidades del SKU ACC-KB-001 para la orden especificada
+grpcurl -plaintext -d '{
+  "sku": "ACC-KB-001",
+  "order_id": "550e8400-e29b-41d4-a716-446655440000",
+  "quantity": 5
+}' localhost:9090 com.arka.inventory.InventoryService/ReserveStock
+```
+
+**Respuesta exitosa:**
+
+```json
+{
+  "success": true,
+  "reservation_id": "r1s2t3u4-v5w6-7890-xyz1-234567890abc",
+  "available_quantity": 95,
+  "reason": ""
+}
+```
+
+**Respuesta fallida (stock insuficiente):**
+
+```json
+{
+  "success": false,
+  "reservation_id": "",
+  "available_quantity": 3,
+  "reason": "Insufficient stock available"
+}
+```
 
 ---
 
@@ -121,6 +171,47 @@ Consumido exclusivamente por `ms-order` para reservar stock de forma síncrona a
 | `order-events`   | `OrderCancelled` | Libera la reserva PENDING asociada a la orden    |
 
 Todos los consumidores son **idempotentes** via tabla `processed_events` (PK = `event_id`).
+
+### Eventos de Entrada (JSON para testing manual)
+
+#### ProductCreated (tópico: `product-events`, key: `productId`)
+
+```json
+{
+  "eventId": "990e8400-e29b-41d4-a716-446655440099",
+  "eventType": "ProductCreated",
+  "timestamp": "2026-04-11T23:00:00Z",
+  "source": "ms-catalog",
+  "correlationId": "corr-debug-001",
+  "payload": {
+    "sku": "DEBUG-TEST-SKU-001",
+    "productId": "991e8400-e29b-41d4-a716-446655440099",
+    "initialStock": 999,
+    "depletionThreshold": 50
+  }
+}
+```
+
+#### OrderCancelled (tópico: `order-events`, key: `orderId`)
+
+```json
+{
+  "eventId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "eventType": "OrderCancelled",
+  "timestamp": "2026-04-11T15:45:00Z",
+  "source": "ms-order",
+  "correlationId": "c7f8a9b2-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+  "payload": {
+    "orderId": "550e8400-e29b-41d4-a716-446655440000",
+    "sku": "ACC-KB-001",
+    "quantity": 5,
+    "reason": "Customer cancelled order"
+  }
+}
+```
+
+**Envío manual vía Kafka UI:** `http://localhost:8080` → Topics → Produce Message  
+**Nota:** Los mensajes NO desaparecen del tópico tras ser consumidos. Kafka los retiene según política (default 7 días). El ACK del consumidor solo confirma procesamiento.
 
 ---
 
@@ -148,28 +239,33 @@ Todos los consumidores son **idempotentes** via tabla `processed_events` (PK = `
 
 ## Cómo Levantar el Servicio
 
-### Prerrequisitos
-
-Levantar la infraestructura compartida desde la raíz del monorepo:
+### Opción 1: Local (IntelliJ / terminal)
 
 ```bash
-docker compose up -d arka-db-inventory kafka
-```
+# 1. Levantar infraestructura (desde raíz del monorepo)
+docker compose up -d localstack kafka kafka-ui
 
-PostgreSQL de inventario corre en el **puerto 5433** del host (mapeado al 5432 interno del contenedor `arka-db-inventory`).
+# 2. Ya se debe tener instalado Postgres y la DB creada
 
-### Perfil `local` (IntelliJ / terminal)
-
-Conecta a PostgreSQL en `127.0.0.1:5432` con usuario `postgres` / contraseña `root` y a Kafka en `localhost:9092`.
-
-```bash
+# 3. Ejecutar el servicio
 cd ms-inventory
 ./gradlew bootRun
 ```
 
-### Perfil `docker` (Docker Compose)
+**Perfil activo:** `local` (default)  
+**Conexiones:** PostgreSQL `localhost:5433`, Kafka `localhost:9092`  
+**Puertos servicio:** HTTP `8082`, gRPC `9090`
 
-El perfil se inyecta automáticamente por Compose. Conecta al hostname `arka-db-inventory:5432` y a `kafka:29092`.
+### Opción 2: Docker Compose
+
+```bash
+# Desde raíz del monorepo
+docker compose up -d localstack kafka kafka-ui
+docker compose up ms-inventory postgres-inventory
+```
+
+**Perfil activo:** `docker` (inyectado por Compose)  
+**Conexiones:** PostgreSQL `postgres-inventory:5432`, Kafka `kafka:29092`
 
 ### Variables de Entorno Relevantes
 
