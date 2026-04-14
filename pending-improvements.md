@@ -7,3 +7,4 @@
 - Revisar error de Save (Insert/Update) por problema con @Id
 - Auth en Endpoints con Spring Security que verifique rol (Authentication manejado por ApiGW)
 - rate-limit con Decorator AOP
+- Config Spring-Security Headers, CORS...

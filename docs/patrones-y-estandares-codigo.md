@@ -848,6 +848,33 @@ public class MainApplication {
 - Nivel `WARN` para eventos ignorados de Kafka (tolerancia a evolución)
 - Nivel `ERROR` solo para fallos no recuperables
 
+### 7.3 Logging en Capa de Dominio
+
+**Problema:** El Scaffold Bancolombia no permite agregar dependencias en los módulos `domain/usecase` — no se puede importar `org.slf4j.Logger` directamente.
+
+**Solución:** Crear un gateway de logging en `domain/model/commons/gateways` y su implementación en el módulo `infrastructure/helpers`.
+
+```java
+// domain/model — port de logging
+public interface LoggerGateway {
+    void info(String message, Object... args);
+    void warn(String message, Object... args);
+    void error(String message, Throwable ex);
+}
+
+// infrastructure/helpers — implementación
+@Component
+public class Slf4jLoggerAdapter implements LoggerGateway {
+    private static final Logger log = LoggerFactory.getLogger(Slf4jLoggerAdapter.class);
+    
+    @Override public void info(String message, Object... args) { log.info(message, args); }
+    @Override public void warn(String message, Object... args) { log.warn(message, args); }
+    @Override public void error(String message, Throwable ex) { log.error(message, ex); }
+}
+```
+
+Los UseCases inyectan `LoggerGateway` como cualquier otro port. Esto mantiene el dominio desacoplado de SLF4J y respeta las restricciones del Scaffold.
+
 ---
 
 ## 8. Testing
@@ -904,6 +931,7 @@ void shouldCreateOrder_whenStockAvailable() {
 | `Mono.defer` vs `Mono.just` | **`Mono.defer()`** cuando el argumento produce side-effects o depende de estado mutable (ver §D.4)                                     | Evita evaluación eager en `switchIfEmpty` y otros operadores                                                   |
 | Paginación                  | **Offset (`LIMIT/OFFSET`)** para MVP; **Cursor (keyset)** para endpoints de alto volumen en fases posteriores (ver §D.5)               | Simplicidad para datasets pequeños; cursor cuando supere 10K registros frecuentes                              |
 | Schedulers                  | **Intervalos externalizados** a `application.yaml` sin defaults inline; schedulers en entry-points (ver §D.6)                          | Fallo rápido si falta propiedad; configuración sin recompilar                                                  |
+| Logging en dominio          | **`LoggerGateway`** port en dominio + implementación en `helpers` (ver §7.3)                                                           | Scaffold no permite deps en `usecase`; desacopla dominio de SLF4J                                              |
 | Logging producción          | **JSON estructurado** en perfil `docker`; formato legible en perfil `local` (ver §D.7)                                                 | Facilita ingesta en CloudWatch/Grafana/Loki sin parsing adicional                                              |
 
 ---
