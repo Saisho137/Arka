@@ -31,6 +31,66 @@ ms-<name>/
 ├── build.gradle / main.gradle / settings.gradle / gradle.properties
 ```
 
+## CRITICAL: Module Generation with Bancolombia Scaffold Plugin
+
+**MANDATORY RULE:** All new modules (Model, UseCase, Driven Adapter, Entry Point, Helper) MUST be generated using the Bancolombia Scaffold Plugin Gradle tasks. Manual creation of module structure is FORBIDDEN.
+
+### Why Use Scaffold Plugin
+
+1. **Consistency**: Ensures all microservices follow the exact same Clean Architecture structure
+2. **Automatic Registration**: Updates `settings.gradle` automatically with new modules
+3. **Correct Dependencies**: Sets up proper module dependencies and package structure
+4. **Validation**: Provides `validateStructure` task to verify architectural compliance
+
+### Scaffold Plugin Commands (from ms-<name>/ root)
+
+```bash
+# Generate Model (Entity + Gateway interface in domain/model)
+./gradlew generateModel --name=<ModelName>
+# Alias: ./gradlew gm --name=<ModelName>
+
+# Generate UseCase (in domain/usecase)
+./gradlew generateUseCase --name=<UseCaseName>
+# Alias: ./gradlew guc --name=<UseCaseName>
+
+# Generate Driven Adapter (in infrastructure/driven-adapters)
+./gradlew generateDrivenAdapter --type=<type>
+# Alias: ./gradlew gda --type=<type>
+# Types: r2dbc, mongodb, redis, kafka, restconsumer, secrets, generic
+
+# Generate Entry Point (in infrastructure/entry-points)
+./gradlew generateEntryPoint --type=<type>
+# Alias: ./gradlew gep --type=<type>
+# Types: webflux, kafka, graphql, restmvc, generic
+
+# Generate Helper (in infrastructure/helpers)
+./gradlew generateHelper --name=<HelperName>
+# Alias: ./gradlew gh --name=<HelperName>
+
+# Validate Clean Architecture structure
+./gradlew validateStructure
+```
+
+### Workflow for Creating New Modules
+
+1. **Navigate** to microservice root: `cd ms-<name>`
+2. **Execute** appropriate Scaffold task (see commands above)
+3. **Verify** `settings.gradle` was updated automatically
+4. **Validate** structure: `./gradlew validateStructure`
+5. **Implement** business logic in generated files
+
+### Special Cases
+
+- **Kafka Producer with reactor-kafka**: Use `--type=generic --name=kafka-producer` and manually add reactor-kafka dependencies (see reusability.md for ms-inventory reference)
+- **MongoDB adapters**: Use `--type=mongodb` for reactive MongoDB repositories
+- **Redis adapters**: Use `--type=redis --mode=template` for ReactiveRedisTemplate
+
+### Reference
+
+Full Scaffold documentation: https://bancolombia.github.io/scaffold-clean-architecture/docs/category/tasks
+
+See `.agents/skills/scaffold-tasks/SKILL.md` for detailed command reference.
+
 ## Module Dependencies
 
 ```text

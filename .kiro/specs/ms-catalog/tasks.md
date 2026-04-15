@@ -4,26 +4,51 @@
 
 Implementación incremental del microservicio de Catálogo Maestro de Productos para la plataforma B2B Arka. Se sigue la Clean Architecture del Scaffold Bancolombia 4.2.0 con Java 21, Spring WebFlux reactivo, MongoDB, Redis (Cache-Aside) y Kafka (Outbox Pattern). Cada tarea construye sobre las anteriores, integrando tests de propiedades (jqwik) y unitarios (JUnit 5 + StepVerifier) como subtareas cercanas a la implementación.
 
+**REGLA CRÍTICA DE IMPLEMENTACIÓN:** Todos los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold. La creación manual de estructura de módulos está PROHIBIDA. Ejecutar siempre desde la raíz de `ms-catalog/`:
+
+```bash
+# Generar Model + Gateway interface
+./gradlew generateModel --name=<Name>  # o ./gradlew gm --name=<Name>
+
+# Generar UseCase
+./gradlew generateUseCase --name=<Name>  # o ./gradlew guc --name=<Name>
+
+# Generar Driven Adapter
+./gradlew generateDrivenAdapter --type=<type>  # o ./gradlew gda --type=<type>
+
+# Generar Entry Point
+./gradlew generateEntryPoint --type=<type>  # o ./gradlew gep --type=<type>
+
+# Validar estructura
+./gradlew validateStructure
+```
+
+Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos y tipos disponibles.
+
 ## Tareas
 
 - [ ] 1. Definir entidades de dominio, Value Objects y excepciones
   - [ ] 1.1 Crear los records `Product`, `CategoryRef`, `Review` en `domain/model`
-    - Crear `Product` record con compact constructor (validación de SKU, nombre, precio > 0, lista inmutable de reviews)
-    - Crear `CategoryRef` record (Value Object embebido) con validación de id y name no nulos
-    - Crear `Review` record con validación de userId, rating 1-5, comment no nulo, createdAt con default `Instant.now()`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=Product`
+    - Esto crea automáticamente la estructura en `domain/model/src/main/java/com/arka/model/product/` y registra el módulo en `settings.gradle`
+    - Reemplazar la clase generada por `Product` record con compact constructor (validación de SKU, nombre, precio > 0, lista inmutable de reviews)
+    - Crear `CategoryRef` record (Value Object embebido) con validación de id y name no nulos en el mismo paquete
+    - Crear `Review` record con validación de userId, rating 1-5, comment no nulo, createdAt con default `Instant.now()` en el mismo paquete
     - Usar `@Builder(toBuilder = true)` en todos los records
     - Paquete: `com.arka.model.product`
     - _Requisitos: 1.1, 1.2, 6.1, 6.2_
 
   - [ ] 1.2 Crear el record `Category` en `domain/model`
-    - Crear `Category` record con compact constructor (validación de nombre no nulo)
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=Category`
+    - Reemplazar la clase generada por `Category` record con compact constructor (validación de nombre no nulo)
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.category`
     - _Requisitos: 5.1, 5.3_
 
   - [ ] 1.3 Crear el record `OutboxEvent` y enum `OutboxStatus` en `domain/model`
-    - Crear `OutboxEvent` record con defaults en compact constructor (eventId UUID, status PENDING, createdAt, topic "product-events")
-    - Crear enum `OutboxStatus` con valores `PENDING`, `PUBLISHED`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=OutboxEvent`
+    - Reemplazar la clase generada por `OutboxEvent` record con defaults en compact constructor (eventId UUID, status PENDING, createdAt, topic "product-events")
+    - Crear enum `OutboxStatus` con valores `PENDING`, `PUBLISHED` en el mismo paquete
     - Paquete: `com.arka.model.outbox`
     - _Requisitos: 7.1, 7.2_
 
@@ -67,7 +92,8 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 3. Implementar `CategoryUseCase` — Gestión de categorías
   - [ ] 3.1 Generar `CategoryUseCase` con Scaffold e implementar métodos
-    - Generar con `./gradlew generateUseCase --name=Category`
+    - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=Category`
+    - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/category/CategoryUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `create(cmd)`: validar nombre único vía `categoryRepository.findByName()`, si existe lanzar `DuplicateCategoryException`, persistir con `categoryRepository.save()`
     - Implementar `listAll()`: retornar `categoryRepository.findAll()`
     - Inyectar dependencia: `CategoryRepository`
@@ -85,7 +111,8 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 4. Implementar `ProductUseCase` — CRUD completo + Outbox + Cache
   - [ ] 4.1 Generar `ProductUseCase` con Scaffold e implementar métodos
-    - Generar con `./gradlew generateUseCase --name=Product`
+    - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=Product`
+    - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/product/ProductUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `create(cmd)`: validar SKU único vía `productRepository.findBySku()`, verificar categoría vía `categoryRepository.findById()`, persistir + insertar `OutboxEvent` (ProductCreated) atómicamente, invalidar caché de lista vía `productCachePort.evictProductListCache()`
     - Implementar `getById(id)`: Cache-Aside (consultar `productCachePort.get(key)`, en miss consultar `productRepository.findById()` y almacenar en caché con `productCachePort.put(key, product)`, si no existe lanzar `ProductNotFoundException`)
     - Implementar `listActive(page, size)`: Cache-Aside paginado (consultar caché, en miss consultar `productRepository.findAllActive(page, size)` y almacenar, retornar solo productos activos)
@@ -114,7 +141,8 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 5. Implementar `OutboxRelayUseCase` — Lógica de relay
   - [ ] 5.1 Generar `OutboxRelayUseCase` con Scaffold e implementar métodos
-    - Generar con `./gradlew generateUseCase --name=OutboxRelay`
+    - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=OutboxRelay`
+    - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/outboxrelay/OutboxRelayUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `fetchPendingEvents()`: consultar eventos PENDING vía `outboxEventRepository.findPending()`
     - Implementar `markAsPublished(event)`: actualizar status a PUBLISHED vía `outboxEventRepository.markAsPublished()`
     - Inyectar dependencia: `OutboxEventRepository`
@@ -144,6 +172,9 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 8. Implementar driven adapters — MongoDB
   - [ ] 8.1 Implementar `MongoProductAdapter` que implementa `ProductRepository`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=mongodb`
+    - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/mongo-repository/` y registra el módulo en `settings.gradle`
+    - Renombrar el adapter generado a `MongoProductAdapter` y configurar para implementar `ProductRepository`
     - Usar `ReactiveMongoTemplate` para todas las operaciones
     - Implementar `addReview` con operación `$push` atómica en el array de reviews
     - Implementar `deactivate` con `$set` de `active = false`
@@ -153,12 +184,16 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
     - _Requisitos: 1.1, 2.1, 2.2, 3.1, 4.1, 6.1_
 
   - [ ] 8.2 Implementar `MongoCategoryAdapter` que implementa `CategoryRepository`
+    - **NOTA**: Reutilizar el mismo módulo `mongo-repository` generado en 8.1
+    - Crear `MongoCategoryAdapter` en el mismo módulo para implementar `CategoryRepository`
     - Usar `ReactiveMongoTemplate`
     - Crear documento MongoDB y mapper estático
     - Configurar índice: `{ name: 1 }` (unique)
     - _Requisitos: 5.1, 5.4_
 
   - [ ] 8.3 Implementar `MongoOutboxAdapter` que implementa `OutboxEventRepository`
+    - **NOTA**: Reutilizar el mismo módulo `mongo-repository` generado en 8.1
+    - Crear `MongoOutboxAdapter` en el mismo módulo para implementar `OutboxEventRepository`
     - Usar `ReactiveMongoTemplate`
     - `findPending`: consultar por `status = PENDING` ordenado por `createdAt`
     - `markAsPublished`: actualizar `status` a `PUBLISHED`
@@ -167,6 +202,9 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 9. Implementar driven adapter — Redis (Cache-Aside)
   - [ ] 9.1 Implementar `RedisCacheAdapter` que implementa `ProductCachePort`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=redis --mode=template`
+    - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/redis/` con `ReactiveRedisTemplate` y registra el módulo en `settings.gradle`
+    - Renombrar el adapter generado a `RedisCacheAdapter` y configurar para implementar `ProductCachePort`
     - Usar `ReactiveRedisTemplate` con serialización JSON
     - `get(key)`: consultar Redis, retornar `Mono.empty()` en cache miss
     - `put(key, product)`: almacenar con TTL de 1 hora
@@ -181,22 +219,28 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 10. Implementar driven adapter — Kafka Outbox Relay con `reactor-kafka`
   - [ ] 10.1 Crear módulo manual `kafka-producer` en `infrastructure/driven-adapters/`
-    - Registrar en `settings.gradle`
-    - Agregar dependencias: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer`
+    - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/kafka-producer/` y registra el módulo en `settings.gradle`
+    - Agregar dependencias manualmente en el `build.gradle` del módulo: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind`
+    - **IMPORTANTE**: Reutilizar la implementación de referencia de `ms-inventory/infrastructure/driven-adapters/kafka-producer/` (ver reusability.md)
     - _Estándar: §B.11 (Kafka con reactor-kafka directo)_
 
   - [ ] 10.2 Implementar `KafkaOutboxRelay`
+    - Crear en el módulo `kafka-producer` generado en 10.1
     - `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")` — sin default inline
     - Consultar eventos PENDING vía `OutboxRelayUseCase.fetchPendingEvents()`
     - Publicar con `KafkaSender` al tópico `product-events` usando `productId` como partition key
     - Marcar como PUBLISHED tras ack exitoso vía `OutboxRelayUseCase.markAsPublished()`
     - `onErrorResume` mantiene PENDING para reintento
+    - **IMPORTANTE**: Reutilizar la implementación de `ms-inventory/infrastructure/driven-adapters/kafka-producer/KafkaOutboxRelay.java` adaptando tópico y partition key
     - _Requisitos: 7.3, 7.4, 7.5, 7.7_
     - _Estándar: §B.11, §D.6 (Schedulers externalizados)_
 
   - [ ] 10.3 Implementar `KafkaProducerConfig`
+    - Crear en el módulo `kafka-producer` generado en 10.1
     - Bean `KafkaSender<String, String>` con configuración de producer
     - `ACKS_CONFIG = "all"`, `RETRIES_CONFIG = 3`, `ENABLE_IDEMPOTENCE_CONFIG = true`
+    - **IMPORTANTE**: Reutilizar la implementación de `ms-inventory/infrastructure/driven-adapters/kafka-producer/KafkaProducerConfig.java`
     - _Estándar: §B.11_
 
   - [ ]\* 10.4 Escribir test de propiedad para transición de estado del relay
@@ -208,6 +252,9 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 - [ ] 12. Implementar entry points — DTOs, Mappers y Controladores REST
   - [ ] 12.1 Crear DTOs de request y response con Bean Validation
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateEntryPoint --type=webflux --router=false`
+    - Esto crea automáticamente la estructura en `infrastructure/entry-points/reactive-web/` con controladores REST y registra el módulo en `settings.gradle`
+    - Crear DTOs en el paquete de DTOs del módulo generado:
     - `CreateProductRequest`: `@NotBlank` sku, name; `@NotNull @Positive` price; `@NotBlank` categoryId
     - `UpdateProductRequest`: `@NotBlank` name; `@NotNull @Positive` price; `@NotBlank` categoryId
     - `CreateCategoryRequest`: `@NotBlank` name; description opcional
@@ -217,11 +264,13 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
     - _Requisitos: 1.2, 1.3, 3.3, 5.3, 6.2, 6.3, 9.5_
 
   - [ ] 12.2 Crear mappers estáticos: `ProductMapper`, `CategoryMapper`, `ReviewMapper`
+    - Crear en el paquete de mappers del módulo `reactive-web` generado en 12.1
     - Métodos estáticos para convertir request→comando/dominio y dominio→response
     - Usar `@Builder` al construir objetos destino
     - _Requisitos: 1.1, 2.1, 2.2_
 
   - [ ] 12.3 Implementar `ProductController`
+    - Crear en el módulo `reactive-web` generado en 12.1, reemplazando el controlador de ejemplo
     - `POST /products` → `ProductHandler.create()` → 201 Created
     - `GET /products` → `ProductHandler.listActive()` → 200 OK (paginado con query params page, size)
     - `GET /products/{id}` → `ProductHandler.getById()` → 200 OK
@@ -233,6 +282,7 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
     - _Estándar: §4.2 (Controller → Handler), §D.2 (OpenAPI)_
 
   - [ ] 12.4 Implementar `CategoryController`
+    - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /categories` → `CategoryHandler.create()` → 201 Created
     - `GET /categories` → `CategoryHandler.listAll()` → 200 OK
     - Anotaciones Springdoc: `@Tag`, `@Operation`, `@ApiResponse`
@@ -240,12 +290,14 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
     - _Estándar: §4.2, §D.2_
 
   - [ ] 12.5 Implementar `ReviewController`
+    - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /products/{id}/reviews` → `ProductHandler.addReview()` → 200 OK
     - Anotaciones Springdoc: `@Tag`, `@Operation`, `@ApiResponse`
     - _Requisitos: 6.1, 6.4_
     - _Estándar: §4.2, §D.2_
 
   - [ ] 12.6 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
+    - Crear en el módulo `reactive-web` generado en 12.1
     - Manejar `WebExchangeBindException` → 400 con campos inválidos
     - Manejar `DomainException` subclases → HTTP status y código según subclase
     - Manejar `Exception` genérica → 500, log ERROR, mensaje genérico sin detalles internos
@@ -286,9 +338,12 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 ## Notas
 
+- **CRÍTICO**: Todos los módulos DEBEN generarse con el plugin Scaffold de Bancolombia. La creación manual está PROHIBIDA.
+- Después de cada generación con Scaffold, ejecutar `./gradlew validateStructure` para verificar la arquitectura.
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido
 - Cada tarea referencia requisitos específicos para trazabilidad
 - Los checkpoints aseguran validación incremental
 - Los tests de propiedades validan correctitud universal con jqwik (mínimo 100 iteraciones)
 - Los tests unitarios validan ejemplos específicos y edge cases con JUnit 5 + Mockito + StepVerifier
 - Todas las entidades usan `record` con `@Builder(toBuilder = true)` según estándares de Arka
+- Para patrones transversales (Kafka, Redis, Springdoc), reutilizar implementaciones de `ms-inventory` (ver reusability.md)
