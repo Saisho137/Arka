@@ -2,23 +2,26 @@
 
 ## Introducción
 
-El microservicio `ms-catalog` es el dueño del dominio de Catálogo Maestro de Productos dentro de la plataforma B2B Arka. Su responsabilidad principal es gestionar el ciclo de vida de productos y categorías, almacenar reseñas como subdocumentos anidados en MongoDB, publicar eventos de dominio a Kafka mediante el Outbox Pattern, y optimizar lecturas masivas con el patrón Cache-Aside usando Redis. Este servicio cubre la HU1 (Registrar productos en el sistema) de la Fase 1 (MVP).
+El microservicio `ms-catalog` es el dueño del Bounded Context **Catálogo Maestro de Productos** dentro de la plataforma B2B Arka. Su responsabilidad principal es gestionar el ciclo de vida completo de productos y categorías, almacenar reseñas como subdocumentos anidados en MongoDB, publicar eventos de dominio al tópico `product-events` de Kafka mediante el Outbox Pattern con operaciones atómicas de MongoDB, y optimizar lecturas con el patrón Cache-Aside usando Redis (TTL 1h). Este servicio cubre la HU1 (Registrar productos en el sistema) de la Fase 1 (MVP).
+
+El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB como almacenamiento primario con drivers reactivos, expone endpoints REST para administración y consulta, y sigue estrictamente la Clean Architecture del Scaffold Bancolombia 4.2.0.
 
 ## Glosario
 
 - **Catálogo**: Conjunto maestro de productos y categorías gestionados por ms-catalog
-- **Producto**: Entidad principal del catálogo con atributos descriptivos (SKU, nombre, descripción, precio, categoría) y reseñas anidadas
+- **Producto**: Entidad principal del catálogo con atributos descriptivos (SKU, nombre, descripción, precio, categoría) y reseñas anidadas como subdocumentos en MongoDB
 - **Categoría**: Entidad maestra que agrupa productos por tipo (ej. GPUs, Procesadores, Memorias RAM)
-- **SKU**: Stock Keeping Unit, identificador único alfanumérico asignado a cada producto
-- **Reseña**: Subdocumento anidado dentro del documento de producto en MongoDB, con userId, rating, comentario y fecha
+- **SKU**: Stock Keeping Unit — identificador único alfanumérico asignado a cada producto que vincula el catálogo con el inventario
+- **Reseña**: Subdocumento anidado dentro del documento de producto en MongoDB, con userId, rating (1-5), comentario y fecha de creación
 - **Administrador**: Personal interno de Arka con rol ADMIN que gestiona catálogo e inventario
 - **Cliente_B2B**: Almacén o tienda en Colombia/LATAM que compra accesorios para PC al por mayor, con rol CUSTOMER
 - **API_Gateway**: Punto de entrada único que valida JWT, inyecta X-User-Email y enruta tráfico a la VPC privada
-- **Outbox_Events**: Colección MongoDB donde se insertan eventos de dominio atómicamente junto con la operación de negocio
-- **Cache_Redis**: Caché en memoria que implementa el patrón Cache-Aside con TTL de 1 hora para lecturas de productos
-
-- **Soft_Delete**: Desactivación lógica de un producto marcando el campo active como false
-- **Controlador_REST**: Entry-point RestController con retornos Mono/Flux que expone los endpoints HTTP del servicio
+- **Outbox_Events**: Colección MongoDB donde se insertan eventos de dominio atómicamente junto con la operación de negocio mediante operaciones atómicas de MongoDB (no transacciones multi-documento)
+- **Cache_Redis**: Caché en memoria que implementa el patrón Cache-Aside con TTL de 1 hora para lecturas de productos individuales y listas paginadas
+- **Soft_Delete**: Desactivación lógica de un producto marcando el campo active como false sin eliminar el documento de MongoDB
+- **Controlador_REST**: Entry-point `@RestController` con retornos `Mono`/`Flux` que expone los endpoints HTTP del servicio
+- **Relay_Outbox**: Proceso asíncrono que consulta la colección `outbox_events` cada 5 segundos y publica los eventos pendientes a Kafka usando `reactor-kafka` directo
+- **Evento_De_Dominio**: Mensaje publicado al tópico `product-events` de Kafka con sobre estándar (eventId, eventType, timestamp, source, correlationId, payload)
 
 ## Requisitos
 
@@ -34,7 +37,7 @@ El microservicio `ms-catalog` es el dueño del dominio de Catálogo Maestro de P
 4. WHEN el Administrador envía un SKU que ya existe en el catálogo, THE Catálogo SHALL rechazar la solicitud con código HTTP 409 (Conflict) y un mensaje indicando que el SKU ya está registrado
 5. WHEN un Producto se crea exitosamente, THE Catálogo SHALL insertar un Evento_De_Dominio de tipo ProductCreated en la colección Outbox_Events dentro de la misma operación atómica en MongoDB
 6. THE Evento_De_Dominio ProductCreated SHALL contener en su payload: productId, sku, name, price, categoryId e initialStock
-7. WHEN un Producto se crea exitosamente, THE Cache_Redis SHALL invalidar las entradas de caché relacionadas con la lista de productos
+7. WHEN un Producto se crea exitosamente, THE Cache_Redis SHALL invalidar las entradas de caché relacionadas con la lista de productos paginada
 
 ### Requisito 2: Consultar productos del catálogo
 
@@ -98,18 +101,19 @@ El microservicio `ms-catalog` es el dueño del dominio de Catálogo Maestro de P
 4. WHEN un Cliente_B2B intenta agregar una Reseña a un Producto que no existe, THE Controlador_REST SHALL retornar código HTTP 404 con un mensaje descriptivo
 5. WHEN se agrega una Reseña exitosamente, THE Catálogo SHALL registrar la fecha de creación (createdAt) automáticamente en la Reseña
 
-### Requisito 7: Publicación de eventos mediante Outbox Pattern
+### Requisito 7: Publicación de eventos mediante Outbox Pattern con MongoDB
 
 **Historia de Usuario:** Como sistema distribuido, quiero garantizar la publicación confiable de eventos de dominio a Kafka para que otros microservicios reaccionen a cambios en el catálogo sin pérdida de datos.
 
 #### Criterios de Aceptación
 
-1. THE Catálogo SHALL insertar cada Evento_De_Dominio en la colección Outbox_Events de MongoDB dentro de la misma operación atómica que la escritura de negocio
-2. THE Evento_De_Dominio SHALL seguir el sobre estándar con los campos: eventId (UUID), eventType, timestamp, source (ms-catalog), correlationId y payload
-3. THE Catálogo SHALL publicar eventos al tópico product-events de Kafka usando productId como partition key
-4. WHEN un Evento_De_Dominio se publica exitosamente a Kafka, THE Catálogo SHALL actualizar el campo status del evento en Outbox_Events de PENDING a PUBLISHED
+1. THE Catálogo SHALL insertar cada Evento_De_Dominio en la colección Outbox_Events de MongoDB dentro de la misma operación atómica que la escritura de negocio mediante operaciones atómicas de MongoDB (no transacciones multi-documento)
+2. THE Evento_De_Dominio SHALL seguir el sobre estándar con los campos: eventId (UUID), eventType, timestamp, source ("ms-catalog"), correlationId y payload
+3. THE Catálogo SHALL publicar eventos al tópico product-events de Kafka usando productId como partition key mediante `reactor-kafka` directo (`KafkaSender`)
+4. WHEN un Evento_De_Dominio se publica exitosamente a Kafka, THE Relay_Outbox SHALL actualizar el campo status del evento en Outbox_Events de PENDING a PUBLISHED
 5. IF el relay de publicación falla al enviar un evento a Kafka, THEN THE Catálogo SHALL mantener el evento con status PENDING para reintento en el siguiente ciclo del relay
 6. THE Catálogo SHALL soportar tres tipos de eventos: ProductCreated, ProductUpdated y PriceChanged
+7. THE Relay_Outbox SHALL ejecutar cada 5 segundos con intervalo externalizado en `application.yaml` (`scheduler.outbox-relay.interval`) sin default inline en la anotación `@Scheduled`
 
 ### Requisito 8: Caché con patrón Cache-Aside y Redis
 
