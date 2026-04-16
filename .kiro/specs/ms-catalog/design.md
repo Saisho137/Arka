@@ -225,7 +225,9 @@ public record CreateProductRequest(
     @NotBlank String sku,
     @NotBlank String name,
     String description,
+    @NotNull @Positive BigDecimal cost,
     @NotNull @Positive BigDecimal price,
+    @NotBlank String currency,
     @NotBlank String categoryId
 ) {}
 
@@ -234,7 +236,9 @@ public record CreateProductRequest(
 public record UpdateProductRequest(
     @NotBlank String name,
     String description,
+    @NotNull @Positive BigDecimal cost,
     @NotNull @Positive BigDecimal price,
+    @NotBlank String currency,
     @NotBlank String categoryId
 ) {}
 
@@ -264,8 +268,11 @@ public record ProductResponse(
     String sku,
     String name,
     String description,
+    BigDecimal cost,
     BigDecimal price,
-    CategoryResponse category,
+    String currency,
+    String categoryId,
+    String categoryName,
     boolean active,
     List<ReviewResponse> reviews,
     Instant createdAt,
@@ -284,6 +291,7 @@ public record CategoryResponse(
 // ReviewResponse
 @Builder(toBuilder = true)
 public record ReviewResponse(
+    String reviewId,
     String userId,
     int rating,
     String comment,
@@ -550,6 +558,58 @@ public class KafkaProducerConfig {
 
 ## Modelos de Datos
 
+### Value Objects
+
+```java
+// com.arka.valueobjects.SKU — Identificador único del producto
+@Builder(toBuilder = true)
+public record SKU(String value) {
+    public SKU {
+        Objects.requireNonNull(value, "SKU cannot be null");
+        if (value.isBlank()) throw new IllegalArgumentException("SKU cannot be blank");
+    }
+}
+
+// com.arka.valueobjects.CategoryId — Referencia a categoría maestra
+@Builder(toBuilder = true)
+public record CategoryId(String value) {
+    public CategoryId {
+        Objects.requireNonNull(value, "CategoryId cannot be null");
+        if (value.isBlank()) throw new IllegalArgumentException("CategoryId cannot be blank");
+    }
+}
+
+// com.arka.valueobjects.Money — Manejo de dinero con soporte multi-moneda
+@Builder(toBuilder = true)
+public record Money(BigDecimal amount, String currency) {
+    public Money {
+        Objects.requireNonNull(amount, "Amount cannot be null");
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Amount cannot be negative");
+        }
+        Objects.requireNonNull(currency, "Currency is required");
+        if (currency.isBlank()) throw new IllegalArgumentException("Currency cannot be blank");
+        // Validar monedas soportadas: COP, USD, PEN, CLP
+        if (!List.of("COP", "USD", "PEN", "CLP").contains(currency)) {
+            throw new IllegalArgumentException("Unsupported currency: " + currency);
+        }
+    }
+
+    // Lógica de dominio: Comparar si un monto es mayor que otro
+    public boolean isGreaterThan(Money other) {
+        if (!this.currency.equals(other.currency)) {
+            throw new IllegalArgumentException("Cannot compare different currencies");
+        }
+        return this.amount.compareTo(other.amount) > 0;
+    }
+
+    // Validar que el monto sea mayor a cero
+    public boolean isPositive() {
+        return this.amount.compareTo(BigDecimal.ZERO) > 0;
+    }
+}
+```
+
 ### Entidades de Dominio (Records)
 
 ```java
@@ -557,11 +617,12 @@ public class KafkaProducerConfig {
 @Builder(toBuilder = true)
 public record Product(
     String id,
-    String sku,
+    SKU sku,
     String name,
     String description,
-    BigDecimal price,
-    CategoryRef category,
+    Money cost,
+    Money price,
+    CategoryId categoryId,
     boolean active,
     List<Review> reviews,
     Instant createdAt,
@@ -570,36 +631,50 @@ public record Product(
     public Product {
         Objects.requireNonNull(sku, "sku is required");
         Objects.requireNonNull(name, "name is required");
+        if (name.isBlank()) throw new IllegalArgumentException("name cannot be blank");
+        Objects.requireNonNull(categoryId, "categoryId is required");
         Objects.requireNonNull(price, "price is required");
-        if (price.compareTo(BigDecimal.ZERO) <= 0)
-            throw new IllegalArgumentException("Price must be positive");
+
+        // Reglas de negocio: precio debe ser positivo y mayor al costo
+        if (!price.isPositive()) {
+            throw new IllegalArgumentException("Price must be greater than zero");
+        }
+        if (cost != null && !price.isGreaterThan(cost)) {
+            throw new IllegalArgumentException("Price must be strictly greater than cost");
+        }
+
+        // Garantizar que la lista de reviews nunca sea null y sea inmutable
         reviews = reviews != null ? List.copyOf(reviews) : List.of();
         active = true; // default en compact constructor solo para creación
     }
-}
 
-// com.arka.model.product.CategoryRef (Value Object embebido en Product)
-@Builder(toBuilder = true)
-public record CategoryRef(String id, String name) {
-    public CategoryRef {
-        Objects.requireNonNull(id, "category id is required");
-        Objects.requireNonNull(name, "category name is required");
+    // Lógica de Dominio: Agregar una reseña (Retorna una nueva instancia inmutable)
+    public Product addReview(Review newReview) {
+        List<Review> updatedReviews = new ArrayList<>(this.reviews);
+        updatedReviews.add(newReview);
+        return this.toBuilder()
+                   .reviews(List.copyOf(updatedReviews))
+                   .build();
     }
 }
 
 // com.arka.model.product.Review (Value Object embebido en Product)
 @Builder(toBuilder = true)
 public record Review(
+    String reviewId,
     String userId,
     int rating,
     String comment,
     Instant createdAt
 ) {
     public Review {
+        reviewId = reviewId != null ? reviewId : UUID.randomUUID().toString();
         Objects.requireNonNull(userId, "userId is required");
+        if (userId.isBlank()) throw new IllegalArgumentException("userId cannot be blank");
         if (rating < 1 || rating > 5)
             throw new IllegalArgumentException("Rating must be between 1 and 5");
         Objects.requireNonNull(comment, "comment is required");
+        if (comment.isBlank()) throw new IllegalArgumentException("comment cannot be blank");
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
 }
@@ -662,19 +737,21 @@ public record DomainEventEnvelope(
 @Builder(toBuilder = true)
 public record ProductCreatedPayload(
     String productId, String sku, String name,
-    BigDecimal price, String categoryId, int initialStock
+    BigDecimal cost, BigDecimal price, String currency,
+    String categoryId, int initialStock
 ) {}
 
 @Builder(toBuilder = true)
 public record ProductUpdatedPayload(
     String productId, String sku, String name,
-    BigDecimal price, String categoryId, boolean active
+    BigDecimal cost, BigDecimal price, String currency,
+    String categoryId, boolean active
 ) {}
 
 @Builder(toBuilder = true)
 public record PriceChangedPayload(
     String productId, String sku,
-    BigDecimal oldPrice, BigDecimal newPrice
+    BigDecimal oldPrice, BigDecimal newPrice, String currency
 ) {}
 ```
 
@@ -688,11 +765,14 @@ public record PriceChangedPayload(
   "sku": "GPU-RTX4090-001",
   "name": "NVIDIA RTX 4090",
   "description": "GPU de alto rendimiento",
+  "cost": { "$numberDecimal": "7500000.00" },
   "price": { "$numberDecimal": "8500000.00" },
-  "category": { "id": "cat-001", "name": "GPUs" },
+  "currency": "COP",
+  "categoryId": "cat-001",
   "active": true,
   "reviews": [
     {
+      "reviewId": "uuid-v4",
       "userId": "user-123",
       "rating": 5,
       "comment": "Excelente producto",
@@ -704,7 +784,7 @@ public record PriceChangedPayload(
 }
 ```
 
-Índices: `{ sku: 1 }` (unique), `{ "category.id": 1 }`, `{ active: 1 }`
+Índices: `{ sku: 1 }` (unique), `{ categoryId: 1 }`, `{ active: 1 }`
 
 #### Colección: `categories`
 
@@ -910,15 +990,15 @@ _Una propiedad es una característica o comportamiento que debe mantenerse verda
 
 ### Propiedad 1: Round trip de creación de producto
 
-_Para cualquier_ datos válidos de producto (SKU único, nombre no vacío, precio positivo, categoría existente), crear el producto y luego consultarlo por ID debe retornar un producto con los mismos valores de SKU, nombre, precio y categoría.
+_Para cualquier_ datos válidos de producto (SKU único, nombre no vacío, costo y precio positivos con precio > costo, moneda válida, categoría existente), crear el producto y luego consultarlo por ID debe retornar un producto con los mismos valores de SKU, nombre, costo, precio, moneda y categoría.
 
-**Valida: Requisitos 1.1, 2.2**
+**Valida: Requisitos 1.1, 1.2, 1.3, 1.4, 1.5, 2.2**
 
 ### Propiedad 2: Validación rechaza entrada inválida
 
-_Para cualquier_ solicitud de creación o actualización de producto donde falte al menos uno de los campos obligatorios (nombre, precio, SKU, categoría) o donde el precio sea menor o igual a cero, el sistema debe rechazar la solicitud sin modificar el estado del catálogo.
+_Para cualquier_ solicitud de creación o actualización de producto donde falte al menos uno de los campos obligatorios (nombre, precio, costo, moneda, SKU, categoría), donde el precio sea menor o igual a cero, donde el precio sea menor o igual al costo, o donde la moneda no sea una de las soportadas (COP, USD, PEN, CLP), el sistema debe rechazar la solicitud sin modificar el estado del catálogo.
 
-**Valida: Requisitos 1.2, 1.3, 3.3**
+**Valida: Requisitos 1.2, 1.3, 1.4, 1.5, 3.3**
 
 ### Propiedad 3: Unicidad de SKU
 
@@ -934,9 +1014,9 @@ _Para cualquier_ operación de escritura exitosa (crear, actualizar o desactivar
 
 ### Propiedad 5: Completitud del sobre y payload de eventos
 
-_Para cualquier_ evento de dominio generado por el catálogo, el sobre debe contener todos los campos requeridos (eventId como UUID, eventType, timestamp, source = "ms-catalog", correlationId, payload), el topic debe ser "product-events", la partition key debe ser el productId, y el eventType debe ser uno de: ProductCreated, ProductUpdated o PriceChanged. Además, el payload debe contener todos los campos requeridos para su tipo específico.
+_Para cualquier_ evento de dominio generado por el catálogo, el sobre debe contener todos los campos requeridos (eventId como UUID, eventType, timestamp, source = "ms-catalog", correlationId, payload), el topic debe ser "product-events", la partition key debe ser el productId, y el eventType debe ser uno de: ProductCreated, ProductUpdated o PriceChanged. Además, el payload debe contener todos los campos requeridos para su tipo específico, incluyendo cost, price y currency para eventos relacionados con productos.
 
-**Valida: Requisitos 1.6, 7.2, 7.3, 7.6**
+**Valida: Requisitos 1.6, 1.8, 7.2, 7.3, 7.6**
 
 ### Propiedad 6: Escrituras invalidan caché
 
@@ -964,7 +1044,7 @@ _Para cualquier_ producto existente y datos de actualización válidos, la actua
 
 ### Propiedad 10: Cambio de precio emite evento PriceChanged adicional
 
-_Para cualquier_ actualización de producto donde el nuevo precio difiera del precio actual, el sistema debe insertar un evento adicional de tipo PriceChanged en `outbox_events` que contenga el precio anterior y el nuevo precio, además del evento ProductUpdated estándar.
+_Para cualquier_ actualización de producto donde el nuevo precio difiera del precio actual, el sistema debe insertar un evento adicional de tipo PriceChanged en `outbox_events` que contenga el precio anterior, el nuevo precio y la moneda, además del evento ProductUpdated estándar.
 
 **Valida: Requisitos 3.5**
 
@@ -986,9 +1066,9 @@ _Para cualquier_ solicitud de creación de producto que referencia un `categoryI
 
 **Valida: Requisitos 5.5**
 
-### Propiedad 14: Agregar reseña incrementa lista y asigna createdAt
+### Propiedad 14: Agregar reseña incrementa lista y asigna reviewId y createdAt
 
-_Para cualquier_ producto existente y reseña válida (userId, rating 1-5, comment), agregar la reseña debe incrementar la lista de reseñas del producto en exactamente uno, y la reseña agregada debe tener un `createdAt` no nulo asignado automáticamente.
+_Para cualquier_ producto existente y reseña válida (userId, rating 1-5, comment), agregar la reseña debe incrementar la lista de reseñas del producto en exactamente uno, y la reseña agregada debe tener un `reviewId` único (UUID) y un `createdAt` no nulo asignados automáticamente.
 
 **Valida: Requisitos 6.1, 6.5**
 

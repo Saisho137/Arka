@@ -1,4 +1,4 @@
-package com.arka.model.outboxevent;
+package com.arka.model.outbox;
 
 import lombok.Builder;
 
@@ -14,13 +14,13 @@ public record DomainEventEnvelope(
         String correlationId,
         Object payload
 ) {
-    public static final String MS_SOURCE = "ms-inventory";
+    public static final String MS_SOURCE = "ms-catalog";
 
     public DomainEventEnvelope {
         Objects.requireNonNull(eventId, "eventId is required");
         Objects.requireNonNull(eventType, "eventType is required");
         Objects.requireNonNull(payload, "payload is required");
         timestamp = timestamp != null ? timestamp : Instant.now();
-        source = source != null ? source : SOURCE;
+        source = source != null ? source : MS_SOURCE;
     }
 }

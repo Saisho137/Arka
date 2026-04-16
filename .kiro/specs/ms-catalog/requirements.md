@@ -31,13 +31,15 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 
 #### Criterios de Aceptación
 
-1. WHEN el Administrador envía una solicitud POST /products con datos válidos, THE Controlador_REST SHALL crear el Producto en MongoDB y retornar el Producto creado con código HTTP 201
-2. THE Controlador_REST SHALL validar que los campos nombre, precio, SKU y categoría estén presentes en la solicitud mediante Bean Validation
+1. WHEN el Administrador envía una solicitud POST /products con datos válidos (incluyendo costo y precio), THE Controlador_REST SHALL crear el Producto en MongoDB y retornar el Producto creado con código HTTP 201
+2. THE Controlador_REST SHALL validar que los campos nombre, precio, costo, moneda (currency), SKU y categoría estén presentes en la solicitud mediante Bean Validation
 3. WHEN el Administrador envía un precio menor o igual a cero, THE Controlador_REST SHALL rechazar la solicitud con código HTTP 400 y un mensaje descriptivo del error
-4. WHEN el Administrador envía un SKU que ya existe en el catálogo, THE Catálogo SHALL rechazar la solicitud con código HTTP 409 (Conflict) y un mensaje indicando que el SKU ya está registrado
-5. WHEN un Producto se crea exitosamente, THE Catálogo SHALL insertar un Evento_De_Dominio de tipo ProductCreated en la colección Outbox_Events dentro de la misma operación atómica en MongoDB
-6. THE Evento_De_Dominio ProductCreated SHALL contener en su payload: productId, sku, name, price, categoryId e initialStock
-7. WHEN un Producto se crea exitosamente, THE Cache_Redis SHALL invalidar las entradas de caché relacionadas con la lista de productos paginada
+4. WHEN el Administrador envía un precio menor o igual al costo, THE Controlador_REST SHALL rechazar la solicitud con código HTTP 400 y un mensaje indicando que el precio debe ser mayor al costo
+5. WHEN el Administrador envía una moneda no soportada (diferente de COP, USD, PEN, CLP), THE Controlador_REST SHALL rechazar la solicitud con código HTTP 400 y un mensaje indicando las monedas válidas
+6. WHEN el Administrador envía un SKU que ya existe en el catálogo, THE Catálogo SHALL rechazar la solicitud con código HTTP 409 (Conflict) y un mensaje indicando que el SKU ya está registrado
+7. WHEN un Producto se crea exitosamente, THE Catálogo SHALL insertar un Evento_De_Dominio de tipo ProductCreated en la colección Outbox_Events dentro de la misma operación atómica en MongoDB
+8. THE Evento_De_Dominio ProductCreated SHALL contener en su payload: productId, sku, name, cost, price, currency, categoryId e initialStock
+9. WHEN un Producto se crea exitosamente, THE Cache_Redis SHALL invalidar las entradas de caché relacionadas con la lista de productos paginada
 
 ### Requisito 2: Consultar productos del catálogo
 
@@ -58,11 +60,11 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 
 #### Criterios de Aceptación
 
-1. WHEN el Administrador envía una solicitud PUT /products/{id} con datos válidos, THE Controlador_REST SHALL actualizar el Producto en MongoDB y retornar el Producto actualizado con código HTTP 200
+1. WHEN el Administrador envía una solicitud PUT /products/{id} con datos válidos (incluyendo costo y precio), THE Controlador_REST SHALL actualizar el Producto en MongoDB y retornar el Producto actualizado con código HTTP 200
 2. WHEN el Administrador intenta actualizar un Producto que no existe, THE Controlador_REST SHALL retornar código HTTP 404 con un mensaje descriptivo
-3. THE Controlador_REST SHALL aplicar las mismas validaciones de campos obligatorios y precio positivo que en la creación del Producto
+3. THE Controlador_REST SHALL aplicar las mismas validaciones de campos obligatorios, precio positivo, precio mayor al costo y moneda válida que en la creación del Producto
 4. WHEN un Producto se actualiza exitosamente, THE Catálogo SHALL insertar un Evento_De_Dominio de tipo ProductUpdated en la colección Outbox_Events dentro de la misma operación atómica en MongoDB
-5. WHEN el precio de un Producto cambia durante la actualización, THE Catálogo SHALL insertar un Evento_De_Dominio adicional de tipo PriceChanged en la colección Outbox_Events
+5. WHEN el precio de un Producto cambia durante la actualización, THE Catálogo SHALL insertar un Evento_De_Dominio adicional de tipo PriceChanged en la colección Outbox_Events con oldPrice, newPrice y currency
 6. WHEN un Producto se actualiza exitosamente, THE Cache_Redis SHALL invalidar la entrada de caché del Producto actualizado y las entradas de lista relacionadas
 
 ### Requisito 4: Desactivar un producto (Soft Delete)
@@ -99,7 +101,7 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 2. THE Controlador_REST SHALL validar que la Reseña contenga userId, rating (entre 1 y 5) y comment
 3. WHEN un Cliente_B2B envía un rating fuera del rango 1-5, THE Controlador_REST SHALL rechazar la solicitud con código HTTP 400 y un mensaje descriptivo
 4. WHEN un Cliente_B2B intenta agregar una Reseña a un Producto que no existe, THE Controlador_REST SHALL retornar código HTTP 404 con un mensaje descriptivo
-5. WHEN se agrega una Reseña exitosamente, THE Catálogo SHALL registrar la fecha de creación (createdAt) automáticamente en la Reseña
+5. WHEN se agrega una Reseña exitosamente, THE Catálogo SHALL registrar la fecha de creación (createdAt) y asignar un identificador único (reviewId) automáticamente en la Reseña
 
 ### Requisito 7: Publicación de eventos mediante Outbox Pattern con MongoDB
 

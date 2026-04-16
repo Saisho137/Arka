@@ -2,7 +2,7 @@
 
 ## Visión General
 
-Implementación incremental del microservicio de Catálogo Maestro de Productos para la plataforma B2B Arka. Se sigue la Clean Architecture del Scaffold Bancolombia 4.2.0 con Java 21, Spring WebFlux reactivo, MongoDB, Redis (Cache-Aside) y Kafka (Outbox Pattern). Cada tarea construye sobre las anteriores, integrando tests de propiedades (jqwik) y unitarios (JUnit 5 + StepVerifier) como subtareas cercanas a la implementación.
+Implementación incremental del microservicio de Catálogo Maestro de Productos para la plataforma B2B Arka. Se sigue la Clean Architecture del Scaffold Bancolombia 4.2.0 con Java 21, Spring WebFlux reactivo, MongoDB, Redis (Cache-Aside) y Kafka (Outbox Pattern). Cada tarea construye sobre las anteriores.
 
 **REGLA CRÍTICA DE IMPLEMENTACIÓN:** Todos los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold. La creación manual de estructura de módulos está PROHIBIDA. Ejecutar siempre desde la raíz de `ms-catalog/`:
 
@@ -27,50 +27,61 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 ## Tareas
 
-- [ ] 1. Definir entidades de dominio, Value Objects y excepciones
-  - [ ] 1.1 Crear los records `Product`, `CategoryRef`, `Review` en `domain/model`
+- [x] 1. Definir entidades de dominio, Value Objects y excepciones
+  - [x] 1.1 Crear Value Objects: `SKU`, `CategoryId`, `Money` en `domain/model`
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=ValueObjects`
+    - Esto crea automáticamente la estructura en `domain/model/src/main/java/com/arka/valueobjects/` y registra el módulo en `settings.gradle`
+    - Crear `SKU` record con validación de valor no nulo y no vacío
+    - Crear `CategoryId` record con validación de valor no nulo y no vacío
+    - Crear `Money` record con validación de amount >= 0, currency no nulo/vacío, y monedas soportadas (COP, USD, PEN, CLP)
+    - Implementar método `isGreaterThan(Money other)` en `Money` para comparar montos de la misma moneda
+    - Implementar método `isPositive()` en `Money` para validar que amount > 0
+    - Usar `@Builder(toBuilder = true)` en todos los records
+    - Paquete: `com.arka.valueobjects`
+    - _Requisitos: 1.2, 1.3, 1.4, 1.5_
+
+  - [x] 1.2 Crear los records `Product` y `Review` en `domain/model`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=Product`
     - Esto crea automáticamente la estructura en `domain/model/src/main/java/com/arka/model/product/` y registra el módulo en `settings.gradle`
-    - Reemplazar la clase generada por `Product` record con compact constructor (validación de SKU, nombre, precio > 0, lista inmutable de reviews)
-    - Crear `CategoryRef` record (Value Object embebido) con validación de id y name no nulos en el mismo paquete
-    - Crear `Review` record con validación de userId, rating 1-5, comment no nulo, createdAt con default `Instant.now()` en el mismo paquete
-    - Usar `@Builder(toBuilder = true)` en todos los records
+    - Reemplazar la clase generada por `Product` record con compact constructor
+    - Validaciones en compact constructor:
+      - SKU, nombre, categoryId, price no nulos
+      - Nombre no vacío
+      - Price debe ser positivo (`price.isPositive()`)
+      - Si cost no es nulo, price debe ser mayor a cost (`price.isGreaterThan(cost)`)
+      - Lista de reviews inmutable (copiar si no es nula, o `List.of()`)
+    - Implementar método `addReview(Review newReview)` que retorna nueva instancia con review agregada usando `toBuilder()`
+    - Crear `Review` record con validación de userId no nulo/vacío, rating 1-5, comment no nulo/vacío
+    - Review debe asignar `reviewId` (UUID) y `createdAt` (Instant.now()) automáticamente si son nulos
+    - Usar `@Builder(toBuilder = true)` en ambos records
     - Paquete: `com.arka.model.product`
-    - _Requisitos: 1.1, 1.2, 6.1, 6.2_
+    - _Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 6.1, 6.2, 6.5_
 
-  - [ ] 1.2 Crear el record `Category` en `domain/model`
+  - [x] 1.3 Crear el record `Category` en `domain/model`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=Category`
     - Reemplazar la clase generada por `Category` record con compact constructor (validación de nombre no nulo)
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.category`
     - _Requisitos: 5.1, 5.3_
 
-  - [ ] 1.3 Crear el record `OutboxEvent` y enum `OutboxStatus` en `domain/model`
+  - [x] 1.4 Crear el record `OutboxEvent` y enum `OutboxStatus` en `domain/model`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=OutboxEvent`
     - Reemplazar la clase generada por `OutboxEvent` record con defaults en compact constructor (eventId UUID, status PENDING, createdAt, topic "product-events")
     - Crear enum `OutboxStatus` con valores `PENDING`, `PUBLISHED` en el mismo paquete
     - Paquete: `com.arka.model.outbox`
     - _Requisitos: 7.1, 7.2_
 
-  - [ ] 1.4 Crear records de eventos de dominio: `DomainEventEnvelope`, `ProductCreatedPayload`, `ProductUpdatedPayload`, `PriceChangedPayload`
+  - [x] 1.5 Crear records de eventos de dominio: `DomainEventEnvelope`, `ProductCreatedPayload`, `ProductUpdatedPayload`, `PriceChangedPayload`
     - `DomainEventEnvelope` con campos: eventId, eventType, timestamp, source ("ms-catalog"), correlationId, payload
-    - Payloads específicos para cada tipo de evento
+    - Payloads específicos para cada tipo de evento (incluyendo cost, price, currency en payloads de productos)
     - Paquete: `com.arka.model.outbox`
-    - _Requisitos: 1.5, 1.6, 7.2, 7.3, 7.6_
+    - _Requisitos: 1.8, 7.2, 7.3, 7.6_
 
-  - [ ] 1.5 Crear jerarquía de excepciones de dominio
+  - [x] 1.6 Crear jerarquía de excepciones de dominio
     - Crear `DomainException` abstracta con `getHttpStatus()` y `getCode()`
-    - Crear subclases: `ProductNotFoundException` (404), `DuplicateSkuException` (409), `CategoryNotFoundException` (400), `DuplicateCategoryException` (409), `InvalidReviewException` (400)
+    - Crear subclases: `ProductNotFoundException` (404), `DuplicateSkuException` (409), `CategoryNotFoundException` (400), `DuplicateCategoryException` (409), `InvalidReviewException` (400), `InvalidPriceException` (400), `InvalidCurrencyException` (400)
     - Paquete: `com.arka.model.commons.exception` o dentro de cada agregado según corresponda
     - _Requisitos: 9.1, 9.2, 9.3_
-
-  - [ ]\* 1.6 Escribir tests de propiedades para validación de entidades de dominio
-    - **Propiedad 2: Validación rechaza entrada inválida** — Generar requests con campos faltantes o precio ≤ 0 y verificar que el compact constructor lanza excepción
-    - **Valida: Requisitos 1.2, 1.3, 3.3**
-
-  - [ ]\* 1.7 Escribir tests de propiedades para reseñas inválidas
-    - **Propiedad 15: Datos de reseña inválidos son rechazados** — Generar reseñas con userId null, comment null o rating fuera de 1-5 y verificar que el constructor lanza excepción
-    - **Valida: Requisitos 6.2, 6.3**
 
 - [ ] 2. Definir ports (gateway interfaces)
   - [ ] 2.1 Crear interfaz `ProductRepository` en `domain/model/product/gateways`
@@ -99,45 +110,31 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencia: `CategoryRepository`
     - _Requisitos: 5.1, 5.2, 5.3, 5.4_
 
-  - [ ]\* 3.2 Escribir tests de propiedades para CategoryUseCase
-    - **Propiedad 12: Unicidad de nombre de categoría** — Generar pares de categorías con mismo nombre y verificar que la segunda creación es rechazada con error de conflicto
-    - **Propiedad 13: Creación de producto con categoría inexistente es rechazada** — Generar categoryIds aleatorios no existentes y verificar rechazo
-    - **Valida: Requisitos 5.2, 5.3, 5.5**
-
-  - [ ]\* 3.3 Escribir tests unitarios para CategoryUseCase
-    - Tests con StepVerifier: creación exitosa, nombre duplicado (409), nombre vacío (400), listado completo
-    - Mockito para ports
-    - _Requisitos: 5.1, 5.2, 5.3, 5.4_
-
 - [ ] 4. Implementar `ProductUseCase` — CRUD completo + Outbox + Cache
   - [ ] 4.1 Generar `ProductUseCase` con Scaffold e implementar métodos
     - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=Product`
     - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/product/ProductUseCase.java` y registra el módulo en `settings.gradle`
-    - Implementar `create(cmd)`: validar SKU único vía `productRepository.findBySku()`, verificar categoría vía `categoryRepository.findById()`, persistir + insertar `OutboxEvent` (ProductCreated) atómicamente, invalidar caché de lista vía `productCachePort.evictProductListCache()`
+    - Implementar `create(cmd)`:
+      - Validar SKU único vía `productRepository.findBySku()`
+      - Verificar categoría vía `categoryRepository.findById()`
+      - Validar que price > cost usando `Money.isGreaterThan()`
+      - Validar moneda soportada (COP, USD, PEN, CLP)
+      - Persistir + insertar `OutboxEvent` (ProductCreated con cost, price, currency) atómicamente
+      - Invalidar caché de lista vía `productCachePort.evictProductListCache()`
     - Implementar `getById(id)`: Cache-Aside (consultar `productCachePort.get(key)`, en miss consultar `productRepository.findById()` y almacenar en caché con `productCachePort.put(key, product)`, si no existe lanzar `ProductNotFoundException`)
     - Implementar `listActive(page, size)`: Cache-Aside paginado (consultar caché, en miss consultar `productRepository.findAllActive(page, size)` y almacenar, retornar solo productos activos)
-    - Implementar `update(id, cmd)`: buscar producto, aplicar cambios con `toBuilder()`, insertar `OutboxEvent` (ProductUpdated) atómicamente, si precio cambió insertar `OutboxEvent` adicional (PriceChanged) con oldPrice y newPrice, invalidar caché individual y de lista
+    - Implementar `update(id, cmd)`:
+      - Buscar producto
+      - Validar que price > cost usando `Money.isGreaterThan()`
+      - Aplicar cambios con `toBuilder()`
+      - Insertar `OutboxEvent` (ProductUpdated con cost, price, currency) atómicamente
+      - Si precio cambió insertar `OutboxEvent` adicional (PriceChanged con oldPrice, newPrice, currency)
+      - Invalidar caché individual y de lista
     - Implementar `deactivate(id)`: buscar producto, marcar `active = false` con `toBuilder()`, insertar `OutboxEvent` (ProductUpdated) atómicamente, invalidar caché individual y de lista
     - Implementar `addReview(productId, review)`: verificar existencia de producto, agregar reseña como subdocumento vía `productRepository.addReview()`
     - Crear `JsonSerializer` interfaz funcional (port para serialización de payloads)
     - Inyectar dependencias: `ProductRepository`, `CategoryRepository`, `OutboxEventRepository`, `ProductCachePort`, `JsonSerializer`
-    - _Requisitos: 1.1, 1.4, 1.5, 1.6, 1.7, 2.1, 2.2, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 6.1, 6.4, 6.5_
-
-  - [ ]\* 4.2 Escribir tests de propiedades para ProductUseCase
-    - **Propiedad 1: Round trip de creación de producto** — Generar productos válidos aleatorios, crear y consultar por ID, verificar que SKU, nombre, precio y categoría coinciden
-    - **Propiedad 2: Validación rechaza entrada inválida** — Generar requests con campos faltantes o precio ≤ 0 y verificar rechazo sin modificar estado
-    - **Propiedad 3: Unicidad de SKU** — Generar pares de productos con mismo SKU y verificar que la segunda creación es rechazada con error 409
-    - **Propiedad 4: Operaciones de escritura producen eventos outbox** — Verificar que crear, actualizar y desactivar generan eventos PENDING en outbox
-    - **Propiedad 5: Completitud del sobre y payload de eventos** — Verificar campos requeridos del envelope y payload por tipo
-    - **Propiedad 6: Escrituras invalidan caché** — Verificar que cada escritura invoca evict en caché individual y de lista
-    - **Propiedad 7: Round trip de Cache-Aside** — Generar productos, simular miss→hit, verificar que la segunda consulta retorna desde caché sin consultar MongoDB
-    - **Propiedad 8: Listado retorna solo productos activos** — Generar mezcla de productos activos/inactivos y verificar que el listado solo retorna activos
-    - **Propiedad 9: Actualización preserva producto y refleja cambios** — Generar updates válidos y verificar que el producto retornado tiene los nuevos valores, mismo ID y updatedAt posterior
-    - **Propiedad 10: Cambio de precio emite evento PriceChanged adicional** — Generar updates con precio diferente y verificar que se inserta evento PriceChanged con oldPrice y newPrice además de ProductUpdated
-    - **Propiedad 11: Soft delete preserva documento con active=false** — Generar productos activos, desactivar y verificar que el documento sigue existiendo con active=false
-    - **Propiedad 14: Agregar reseña incrementa lista y asigna createdAt** — Generar reseñas válidas, agregar y verificar que la lista incrementa en 1 y createdAt no es nulo
-    - **Propiedad 15: Datos de reseña inválidos son rechazados** — Generar reseñas con userId null, comment null o rating fuera de 1-5 y verificar rechazo
-    - **Valida: Requisitos 1.1-1.7, 2.1-2.6, 3.1-3.6, 4.1-4.5, 6.1-6.5, 7.1-7.3, 7.6, 8.1-8.2, 8.5**
+    - _Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.1, 2.2, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 6.1, 6.4, 6.5_
 
 - [ ] 5. Implementar `OutboxRelayUseCase` — Lógica de relay
   - [ ] 5.1 Generar `OutboxRelayUseCase` con Scaffold e implementar métodos
@@ -179,9 +176,10 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Implementar `addReview` con operación `$push` atómica en el array de reviews
     - Implementar `deactivate` con `$set` de `active = false`
     - Implementar `findAllActive` con filtro `active = true` y paginación
-    - Crear documentos MongoDB (data classes) y mappers estáticos para convertir entre dominio y documento
-    - Configurar índices: `{ sku: 1 }` (unique), `{ "category.id": 1 }`, `{ active: 1 }`
-    - _Requisitos: 1.1, 2.1, 2.2, 3.1, 4.1, 6.1_
+    - Crear documentos MongoDB (data classes) con campos: sku (String), name, description, cost (BigDecimal), price (BigDecimal), currency (String), categoryId (String), active, reviews (array de subdocumentos con reviewId, userId, rating, comment, createdAt)
+    - Crear mappers estáticos para convertir entre dominio (Product con VOs SKU, Money, CategoryId) y documento MongoDB
+    - Configurar índices: `{ sku: 1 }` (unique), `{ categoryId: 1 }`, `{ active: 1 }`
+    - _Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 3.1, 4.1, 6.1_
 
   - [ ] 8.2 Implementar `MongoCategoryAdapter` que implementa `CategoryRepository`
     - **NOTA**: Reutilizar el mismo módulo `mongo-repository` generado en 8.1
@@ -213,10 +211,6 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Implementar resiliencia: capturar excepciones de conexión con `onErrorResume()`, log WARN, retornar `Mono.empty()`
     - _Requisitos: 8.1, 8.2, 8.4, 8.5_
 
-  - [ ]\* 9.2 Escribir test de propiedad para fallback Redis→MongoDB
-    - **Propiedad 17: Fallback a MongoDB cuando Redis no está disponible** — Simular Redis caído y verificar que el sistema continúa operando consultando MongoDB
-    - **Valida: Requisitos 8.4**
-
 - [ ] 10. Implementar driven adapter — Kafka Outbox Relay con `reactor-kafka`
   - [ ] 10.1 Crear módulo manual `kafka-producer` en `infrastructure/driven-adapters/`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer`
@@ -243,10 +237,6 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **IMPORTANTE**: Reutilizar la implementación de `ms-inventory/infrastructure/driven-adapters/kafka-producer/KafkaProducerConfig.java`
     - _Estándar: §B.11_
 
-  - [ ]\* 10.4 Escribir test de propiedad para transición de estado del relay
-    - **Propiedad 16: Transición de estado del relay outbox** — Generar eventos PENDING, simular publicación exitosa/fallida y verificar transición a PUBLISHED o permanencia en PENDING
-    - **Valida: Requisitos 7.4, 7.5**
-
 - [ ] 11. Checkpoint — Verificar driven adapters
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
@@ -255,13 +245,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateEntryPoint --type=webflux --router=false`
     - Esto crea automáticamente la estructura en `infrastructure/entry-points/reactive-web/` con controladores REST y registra el módulo en `settings.gradle`
     - Crear DTOs en el paquete de DTOs del módulo generado:
-    - `CreateProductRequest`: `@NotBlank` sku, name; `@NotNull @Positive` price; `@NotBlank` categoryId
-    - `UpdateProductRequest`: `@NotBlank` name; `@NotNull @Positive` price; `@NotBlank` categoryId
+    - `CreateProductRequest`: `@NotBlank` sku, name, currency; `@NotNull @Positive` cost, price; `@NotBlank` categoryId
+    - `UpdateProductRequest`: `@NotBlank` name, currency; `@NotNull @Positive` cost, price; `@NotBlank` categoryId
     - `CreateCategoryRequest`: `@NotBlank` name; description opcional
     - `AddReviewRequest`: `@NotBlank` userId, comment; `@NotNull @Min(1) @Max(5)` rating
-    - `ProductResponse`, `CategoryResponse`, `ReviewResponse`, `ErrorResponse`
+    - `ProductResponse` (con cost, price, currency, categoryId, categoryName separados), `CategoryResponse`, `ReviewResponse` (con reviewId), `ErrorResponse`
     - Todos con `@Builder(toBuilder = true)`
-    - _Requisitos: 1.2, 1.3, 3.3, 5.3, 6.2, 6.3, 9.5_
+    - _Requisitos: 1.2, 1.3, 1.4, 1.5, 3.3, 5.3, 6.2, 6.3, 6.5, 9.5_
 
   - [ ] 12.2 Crear mappers estáticos: `ProductMapper`, `CategoryMapper`, `ReviewMapper`
     - Crear en el paquete de mappers del módulo `reactive-web` generado en 12.1
@@ -304,10 +294,6 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Retornar `ErrorResponse(code, message)` en todos los casos
     - _Requisitos: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-  - [ ]\* 12.7 Escribir test de propiedad para estructura de ErrorResponse
-    - **Propiedad 18: Respuestas de error tienen estructura y HTTP status correctos** — Generar excepciones de distintos tipos y verificar que la respuesta contiene ErrorResponse con code y message, y el HTTP status correcto
-    - **Valida: Requisitos 9.2, 9.3, 9.4, 9.5**
-
 - [ ] 13. Configuración de Spring Boot y cableado de dependencias
   - [ ] 13.1 Configurar `application.yaml` en `app-service`
     - Configuración de MongoDB (catalog_db), Redis (host, port, TTL), Kafka (bootstrap-servers, producer config)
@@ -330,11 +316,11 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
   - [ ] 13.3 Configurar beans de inyección de dependencias
     - Registrar use cases, handlers, adapters y ports en la configuración de Spring
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`)
-    - Agregar dependencias en `build.gradle`: jqwik, reactor-test, mockito, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
+    - Agregar dependencias en `build.gradle`: reactor-test, mockito, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
     - _Estándares: §D.2 (OpenAPI), §B.11 (Kafka)_
 
 - [ ] 14. Checkpoint final — Verificar integración completa
-  - Asegurar que todos los tests pasan (unitarios y de propiedades), preguntar al usuario si surgen dudas.
+  - Asegurar que todos los tests pasan (unitarios), preguntar al usuario si surgen dudas.
 
 ## Notas
 
@@ -343,7 +329,6 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido
 - Cada tarea referencia requisitos específicos para trazabilidad
 - Los checkpoints aseguran validación incremental
-- Los tests de propiedades validan correctitud universal con jqwik (mínimo 100 iteraciones)
 - Los tests unitarios validan ejemplos específicos y edge cases con JUnit 5 + Mockito + StepVerifier
 - Todas las entidades usan `record` con `@Builder(toBuilder = true)` según estándares de Arka
 - Para patrones transversales (Kafka, Redis, Springdoc), reutilizar implementaciones de `ms-inventory` (ver reusability.md)
