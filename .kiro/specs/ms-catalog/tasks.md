@@ -101,8 +101,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Métodos: `get(key)`, `put(key, product)`, `evict(key)`, `evictProductListCache()`
     - _Requisitos: 2.4, 8.1, 8.2_
 
-- [ ] 3. Implementar `CategoryUseCase` — Gestión de categorías
-  - [ ] 3.1 Generar `CategoryUseCase` con Scaffold e implementar métodos
+- [x] 3. Implementar `CategoryUseCase` — Gestión de categorías
+  - [x] 3.1 Generar `CategoryUseCase` con Scaffold e implementar métodos
     - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=Category`
     - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/category/CategoryUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `create(cmd)`: validar nombre único vía `categoryRepository.findByName()`, si existe lanzar `DuplicateCategoryException`, persistir con `categoryRepository.save()`
@@ -110,8 +110,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencia: `CategoryRepository`
     - _Requisitos: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 4. Implementar `ProductUseCase` — CRUD completo + Outbox + Cache
-  - [ ] 4.1 Generar `ProductUseCase` con Scaffold e implementar métodos
+- [x] 4. Implementar `ProductUseCase` — CRUD completo + Outbox + Cache
+  - [x] 4.1 Generar `ProductUseCase` con Scaffold e implementar métodos
     - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=Product`
     - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/product/ProductUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `create(cmd)`:
