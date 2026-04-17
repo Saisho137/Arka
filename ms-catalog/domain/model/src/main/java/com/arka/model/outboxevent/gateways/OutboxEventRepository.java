@@ -1,6 +1,6 @@
 package com.arka.model.outboxevent.gateways;
 
-import com.arka.model.outbox.OutboxEvent;
+import com.arka.model.outboxevent.OutboxEvent;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
