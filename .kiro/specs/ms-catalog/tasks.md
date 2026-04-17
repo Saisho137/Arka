@@ -83,21 +83,21 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Paquete: `com.arka.model.commons.exception` o dentro de cada agregado según corresponda
     - _Requisitos: 9.1, 9.2, 9.3_
 
-- [ ] 2. Definir ports (gateway interfaces)
-  - [ ] 2.1 Crear interfaz `ProductRepository` en `domain/model/product/gateways`
+- [x] 2. Definir ports (gateway interfaces)
+  - [x] 2.1 Crear interfaz `ProductRepository` en `domain/model/product/gateways`
     - Métodos: `save`, `findById`, `findBySku`, `findAllActive(page, size)`, `update`, `deactivate`, `addReview`
     - Todos retornan `Mono<Product>` o `Flux<Product>`
     - _Requisitos: 1.1, 2.1, 2.2, 3.1, 4.1, 6.1_
 
-  - [ ] 2.2 Crear interfaz `CategoryRepository` en `domain/model/category/gateways`
+  - [x] 2.2 Crear interfaz `CategoryRepository` en `domain/model/category/gateways`
     - Métodos: `save`, `findById`, `findByName`, `findAll`
     - _Requisitos: 5.1, 5.4_
 
-  - [ ] 2.3 Crear interfaz `OutboxEventRepository` en `domain/model/outbox/gateways`
+  - [x] 2.3 Crear interfaz `OutboxEventRepository` en `domain/model/outbox/gateways`
     - Métodos: `save`, `findPending`, `markAsPublished`
     - _Requisitos: 7.1, 7.4_
 
-  - [ ] 2.4 Crear interfaz `ProductCachePort` en `domain/model/product/gateways`
+  - [x] 2.4 Crear interfaz `ProductCachePort` en `domain/model/product/gateways`
     - Métodos: `get(key)`, `put(key, product)`, `evict(key)`, `evictProductListCache()`
     - _Requisitos: 2.4, 8.1, 8.2_
 
