@@ -1,4 +1,4 @@
-package com.arka.model.outbox;
+package com.arka.model.outboxevent;
 
 /**
  * OutboxStatus represents the publication status of an outbox event.
