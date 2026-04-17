@@ -21,6 +21,6 @@ public record DomainEventEnvelope(
         Objects.requireNonNull(eventType, "eventType is required");
         Objects.requireNonNull(payload, "payload is required");
         timestamp = timestamp != null ? timestamp : Instant.now();
-        source = source != null ? source : SOURCE;
+        source = source != null ? source : MS_SOURCE;
     }
 }
