@@ -20,9 +20,9 @@ public class CategoryHandler {
     private final CategoryUseCase categoryUseCase;
 
     public Mono<ResponseEntity<CategoryResponse>> create(CreateCategoryRequest request) {
-        UUID eventId = UUID.randomUUID();
-        
-        return categoryUseCase.create(eventId, request.name(), request.description())
+        UUID idempotencyKey = UUID.randomUUID();
+
+        return categoryUseCase.create(idempotencyKey, request.name(), request.description())
                 .map(CategoryMapper::toResponse)
                 .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }

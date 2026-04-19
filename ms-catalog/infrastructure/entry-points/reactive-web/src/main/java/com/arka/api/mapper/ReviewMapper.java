@@ -13,9 +13,9 @@ public final class ReviewMapper {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static Review toDomain(AddReviewRequest request) {
+    public static Review toDomain(AddReviewRequest request, UUID reviewId) {
         return Review.builder()
-                .reviewId(UUID.randomUUID())
+                .reviewId(reviewId)
                 .userId(request.userId())
                 .rating(request.rating())
                 .comment(request.comment())

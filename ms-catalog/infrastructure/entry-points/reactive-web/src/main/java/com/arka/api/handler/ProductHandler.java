@@ -6,6 +6,8 @@ import com.arka.api.dto.ProductResponse;
 import com.arka.api.dto.UpdateProductRequest;
 import com.arka.api.mapper.ProductMapper;
 import com.arka.api.mapper.ReviewMapper;
+import com.arka.model.product.Product;
+import com.arka.model.product.Review;
 import com.arka.usecase.product.ProductUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,10 +25,10 @@ public class ProductHandler {
     private final ProductUseCase productUseCase;
 
     public Mono<ResponseEntity<ProductResponse>> create(CreateProductRequest request) {
-        UUID eventId = UUID.randomUUID();
-        var product = ProductMapper.toDomain(request);
-        
-        return productUseCase.create(eventId, product, request.initialStock())
+        UUID idempotencyKey = UUID.randomUUID();
+        Product product = ProductMapper.toDomain(request, idempotencyKey);
+
+        return productUseCase.create(idempotencyKey, product, request.initialStock())
                 .map(ProductMapper::toResponse)
                 .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
@@ -45,8 +47,8 @@ public class ProductHandler {
     }
 
     public Mono<ResponseEntity<ProductResponse>> update(UUID id, UpdateProductRequest request) {
-        var updatedProduct = ProductMapper.toDomain(request);
-        
+        Product updatedProduct = ProductMapper.toDomain(request);
+
         return productUseCase.update(id, updatedProduct)
                 .map(ProductMapper::toResponse)
                 .map(ResponseEntity::ok);
@@ -60,10 +62,10 @@ public class ProductHandler {
 
 
     public Mono<ResponseEntity<ProductResponse>> addReview(UUID productId, AddReviewRequest request) {
-        UUID eventId = UUID.randomUUID();
-        var review = ReviewMapper.toDomain(request);
-        
-        return productUseCase.addReview(eventId, productId, review)
+        UUID idempotencyKey = UUID.randomUUID();
+        Review review = ReviewMapper.toDomain(request, idempotencyKey);
+
+        return productUseCase.addReview(idempotencyKey, productId, review)
                 .map(ProductMapper::toResponse)
                 .map(ResponseEntity::ok);
     }

@@ -6,7 +6,7 @@ import com.arka.model.commons.exception.CategoryNotFoundException;
 import com.arka.model.commons.exception.DuplicateCategoryException;
 import com.arka.model.commons.exception.InvalidCategoryStateException;
 import com.arka.model.commons.gateways.TransactionalGateway;
-import com.arka.model.processedevent.gateways.ProcessedEventRepository;
+import com.arka.model.idempotency.gateways.IdempotencyRepository;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,11 +18,11 @@ import java.util.UUID;
 public class CategoryUseCase {
 
     private final CategoryRepository categoryRepository;
-    private final ProcessedEventRepository processedEventRepository;
+    private final IdempotencyRepository idempotencyRepository;
     private final TransactionalGateway transactionalGateway;
 
-    public Mono<Category> create(UUID eventId, String name, String description) {
-        Mono<Category> pipeline = processedEventRepository.exists(eventId)
+    public Mono<Category> create(UUID idempotencyKey, String name, String description) {
+        Mono<Category> pipeline = idempotencyRepository.exists(idempotencyKey)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return categoryRepository.findByName(name)
@@ -33,7 +33,7 @@ public class CategoryUseCase {
                             .flatMap(existing -> Mono.<Category>error(new DuplicateCategoryException(name)))
                             .switchIfEmpty(Mono.defer(() -> {
                                 Category newCategory = Category.builder()
-                                        .id(UUID.randomUUID())
+                                        .id(idempotencyKey)
                                         .name(name)
                                         .description(description)
                                         .active(true)
@@ -41,7 +41,7 @@ public class CategoryUseCase {
                                         .build();
 
                                 return categoryRepository.save(newCategory)
-                                        .flatMap(saved -> processedEventRepository.save(eventId)
+                                        .flatMap(saved -> idempotencyRepository.save(idempotencyKey)
                                                 .thenReturn(saved));
                             }));
                 });

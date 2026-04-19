@@ -16,9 +16,9 @@ public final class ProductMapper {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static Product toDomain(CreateProductRequest request) {
+    public static Product toDomain(CreateProductRequest request, UUID productId) {
         return Product.builder()
-                .id(UUID.randomUUID())
+                .id(productId)
                 .sku(request.sku())
                 .name(request.name())
                 .description(request.description())

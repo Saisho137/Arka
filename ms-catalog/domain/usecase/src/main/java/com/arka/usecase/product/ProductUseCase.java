@@ -7,7 +7,7 @@ import com.arka.model.commons.exception.InvalidProductStateException;
 import com.arka.model.commons.exception.ProductNotFoundException;
 import com.arka.model.commons.gateways.JsonSerializer;
 import com.arka.model.commons.gateways.TransactionalGateway;
-import com.arka.model.processedevent.gateways.ProcessedEventRepository;
+import com.arka.model.idempotency.gateways.IdempotencyRepository;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.PriceChangedPayload;
@@ -33,12 +33,12 @@ public class ProductUseCase {
     private final CategoryRepository categoryRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ProductCachePort productCachePort;
-    private final ProcessedEventRepository processedEventRepository;
+    private final IdempotencyRepository idempotencyRepository;
     private final JsonSerializer jsonSerializer;
     private final TransactionalGateway transactionalGateway;
 
-    public Mono<Product> create(UUID eventId, Product product, int initialStock) {
-        Mono<Product> pipeline = processedEventRepository.exists(eventId)
+    public Mono<Product> create(UUID idempotencyKey, Product product, int initialStock) {
+        Mono<Product> pipeline = idempotencyRepository.exists(idempotencyKey)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return productRepository.findBySku(product.sku())
@@ -50,7 +50,7 @@ public class ProductUseCase {
                             .then(validateCategoryExists(product.categoryId()))
                             .then(productRepository.save(product))
                             .flatMap(savedProduct -> publishProductCreatedEvent(savedProduct, initialStock)
-                                    .then(processedEventRepository.save(eventId))
+                                    .then(idempotencyRepository.save(idempotencyKey))
                                     .thenReturn(savedProduct));
                 });
 
@@ -123,8 +123,8 @@ public class ProductUseCase {
                 .flatMap(deactivated -> invalidateProductCache(deactivated.id()).thenReturn(deactivated));
     }
 
-    public Mono<Product> addReview(UUID eventId, UUID productId, Review review) {
-        Mono<Product> pipeline = processedEventRepository.exists(eventId)
+    public Mono<Product> addReview(UUID idempotencyKey, UUID productId, Review review) {
+        Mono<Product> pipeline = idempotencyRepository.exists(idempotencyKey)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return productRepository.findById(productId)
@@ -140,7 +140,7 @@ public class ProductUseCase {
                                 }
 
                                 return productRepository.addReview(productId, review)
-                                        .flatMap(updated -> processedEventRepository.save(eventId)
+                                        .flatMap(updated -> idempotencyRepository.save(idempotencyKey)
                                                 .thenReturn(updated));
                             });
                 });
