@@ -7,6 +7,7 @@ import com.arka.model.commons.exception.InvalidProductStateException;
 import com.arka.model.commons.exception.ProductNotFoundException;
 import com.arka.model.commons.gateways.JsonSerializer;
 import com.arka.model.commons.gateways.TransactionalGateway;
+import com.arka.model.processedevent.gateways.ProcessedEventRepository;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.PriceChangedPayload;
@@ -32,15 +33,26 @@ public class ProductUseCase {
     private final CategoryRepository categoryRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ProductCachePort productCachePort;
+    private final ProcessedEventRepository processedEventRepository;
     private final JsonSerializer jsonSerializer;
     private final TransactionalGateway transactionalGateway;
 
-    public Mono<Product> create(Product product, int initialStock) {
-        Mono<Product> pipeline = validateSkuUnique(product.sku())
-                .then(validateCategoryExists(product.categoryId()))
-                .then(productRepository.save(product))
-                .flatMap(savedProduct -> publishProductCreatedEvent(savedProduct, initialStock)
-                        .thenReturn(savedProduct));
+    public Mono<Product> create(UUID eventId, Product product, int initialStock) {
+        Mono<Product> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return productRepository.findBySku(product.sku())
+                                .switchIfEmpty(Mono.error(new ProductNotFoundException(
+                                        "Idempotent create: product not found for SKU: " + product.sku())));
+                    }
+
+                    return validateSkuUnique(product.sku())
+                            .then(validateCategoryExists(product.categoryId()))
+                            .then(productRepository.save(product))
+                            .flatMap(savedProduct -> publishProductCreatedEvent(savedProduct, initialStock)
+                                    .then(processedEventRepository.save(eventId))
+                                    .thenReturn(savedProduct));
+                });
 
         return transactionalGateway.executeInTransaction(pipeline)
                 .flatMap(savedProduct -> productCachePort.evictProductListCache()
@@ -111,16 +123,29 @@ public class ProductUseCase {
                 .flatMap(deactivated -> invalidateProductCache(deactivated.id()).thenReturn(deactivated));
     }
 
-    public Mono<Product> addReview(UUID productId, Review review) {
-        return productRepository.findById(productId)
-                .switchIfEmpty(Mono.error(new ProductNotFoundException(productId)))
-                .flatMap(product -> {
-                    if (!product.active()) {
-                        return Mono.error(new InvalidProductStateException(productId, "add review to", "INACTIVE"));
+    public Mono<Product> addReview(UUID eventId, UUID productId, Review review) {
+        Mono<Product> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return productRepository.findById(productId)
+                                .switchIfEmpty(Mono.error(new ProductNotFoundException(productId)));
                     }
 
-                    return productRepository.addReview(productId, review);
+                    return productRepository.findById(productId)
+                            .switchIfEmpty(Mono.error(new ProductNotFoundException(productId)))
+                            .flatMap(product -> {
+                                if (!product.active()) {
+                                    return Mono.error(new InvalidProductStateException(
+                                            productId, "add review to", "INACTIVE"));
+                                }
+
+                                return productRepository.addReview(productId, review)
+                                        .flatMap(updated -> processedEventRepository.save(eventId)
+                                                .thenReturn(updated));
+                            });
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline);
     }
 
     private Mono<Void> validateSkuUnique(String sku) {

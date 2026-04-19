@@ -150,7 +150,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencia: `OutboxEventRepository`
     - _Requisitos: 7.4, 7.5_
 
-- [ ] 6. Checkpoint — Verificar dominio y casos de uso
+- [x] 6. Checkpoint — Verificar dominio y casos de uso
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 - [ ] 7. Implementar Handlers — Patrón Controller → Handler → UseCase
