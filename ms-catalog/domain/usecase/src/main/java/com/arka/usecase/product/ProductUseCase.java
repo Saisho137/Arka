@@ -1,10 +1,12 @@
 package com.arka.usecase.product;
 
+import com.arka.model.category.gateways.CategoryRepository;
 import com.arka.model.commons.exception.CategoryNotFoundException;
 import com.arka.model.commons.exception.DuplicateSkuException;
+import com.arka.model.commons.exception.InvalidProductStateException;
 import com.arka.model.commons.exception.ProductNotFoundException;
 import com.arka.model.commons.gateways.JsonSerializer;
-import com.arka.model.category.gateways.CategoryRepository;
+import com.arka.model.commons.gateways.TransactionalGateway;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.model.outboxevent.PriceChangedPayload;
@@ -31,13 +33,16 @@ public class ProductUseCase {
     private final OutboxEventRepository outboxEventRepository;
     private final ProductCachePort productCachePort;
     private final JsonSerializer jsonSerializer;
+    private final TransactionalGateway transactionalGateway;
 
     public Mono<Product> create(Product product, int initialStock) {
-        return validateSkuUnique(product.sku())
+        Mono<Product> pipeline = validateSkuUnique(product.sku())
                 .then(validateCategoryExists(product.categoryId()))
                 .then(productRepository.save(product))
                 .flatMap(savedProduct -> publishProductCreatedEvent(savedProduct, initialStock)
-                        .thenReturn(savedProduct))
+                        .thenReturn(savedProduct));
+
+        return transactionalGateway.executeInTransaction(pipeline)
                 .flatMap(savedProduct -> productCachePort.evictProductListCache()
                         .thenReturn(savedProduct));
     }
@@ -55,28 +60,17 @@ public class ProductUseCase {
     }
 
     public Flux<Product> listActive(int page, int size) {
-        String cacheKey = "products:page:" + page + ":size:" + size;
-
-        return productCachePort.get(cacheKey)
-                .flux()
-                .switchIfEmpty(Mono.defer(() ->
-                        productRepository.findAllActive(page, size)
-                                .collectList()
-                                .flatMap(products -> {
-                                    if (products.isEmpty()) {
-                                        return Mono.just(products);
-                                    }
-                                    return productCachePort.put(cacheKey, products.get(0))
-                                            .thenReturn(products);
-                                })
-                ).flatMapMany(Flux::fromIterable))
-                .switchIfEmpty(productRepository.findAllActive(page, size));
+        return productRepository.findAllActive(page, size);
     }
 
     public Mono<Product> update(UUID id, Product updatedProduct) {
-        return productRepository.findById(id)
+        Mono<Product> pipeline = productRepository.findById(id)
                 .switchIfEmpty(Mono.error(new ProductNotFoundException(id)))
                 .flatMap(existingProduct -> {
+                    if (!existingProduct.active()) {
+                        return Mono.error(new InvalidProductStateException(id, "update", "INACTIVE"));
+                    }
+
                     Product productToUpdate = updatedProduct.toBuilder()
                             .id(id)
                             .sku(existingProduct.sku())
@@ -93,33 +87,40 @@ public class ProductUseCase {
                                     .then(priceChanged
                                             ? publishPriceChangedEvent(updated, existingProduct.price().amount())
                                             : Mono.empty())
-                                    .thenReturn(updated))
-                            .flatMap(updated -> invalidateProductCache(updated.id())
                                     .thenReturn(updated));
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline)
+                .flatMap(updated -> invalidateProductCache(updated.id()).thenReturn(updated));
     }
 
     public Mono<Product> deactivate(UUID id) {
-        return productRepository.findById(id)
+        Mono<Product> pipeline = productRepository.findById(id)
                 .switchIfEmpty(Mono.error(new ProductNotFoundException(id)))
                 .flatMap(product -> {
-                    Product deactivatedProduct = product.toBuilder()
-                            .active(false)
-                            .updatedAt(Instant.now())
-                            .build();
+                    if (!product.active()) {
+                        return Mono.error(new InvalidProductStateException(id, "deactivate", "INACTIVE"));
+                    }
 
                     return productRepository.deactivate(id)
                             .flatMap(deactivated -> publishProductUpdatedEvent(deactivated)
-                                    .thenReturn(deactivated))
-                            .flatMap(deactivated -> invalidateProductCache(deactivated.id())
                                     .thenReturn(deactivated));
                 });
+
+        return transactionalGateway.executeInTransaction(pipeline)
+                .flatMap(deactivated -> invalidateProductCache(deactivated.id()).thenReturn(deactivated));
     }
 
     public Mono<Product> addReview(UUID productId, Review review) {
         return productRepository.findById(productId)
                 .switchIfEmpty(Mono.error(new ProductNotFoundException(productId)))
-                .flatMap(product -> productRepository.addReview(productId, review));
+                .flatMap(product -> {
+                    if (!product.active()) {
+                        return Mono.error(new InvalidProductStateException(productId, "add review to", "INACTIVE"));
+                    }
+
+                    return productRepository.addReview(productId, review);
+                });
     }
 
     private Mono<Void> validateSkuUnique(String sku) {
