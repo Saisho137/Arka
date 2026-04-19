@@ -17,6 +17,9 @@ En Fase 1, el pago se gestiona como proceso externo B2B (facturación diferida a
 7. **Records como estándar**: Todas las entidades, VOs, comandos, eventos y DTOs son `record` con `@Builder(toBuilder = true)`.
 8. **Sin MapStruct**: Mappers manuales con métodos estáticos y `@Builder`.
 9. **RBAC por header**: El rol y la identidad del usuario se propagan desde el API Gateway vía headers `X-User-Email` y `X-User-Role`. Los endpoints validan acceso según rol (CUSTOMER, ADMIN).
+10. **Patrón Controller → Handler → UseCase (§4.2)**: El `OrderController` es thin (solo HTTP concerns), el `OrderHandler` (`@Component`) orquesta UseCase + mapeo + `ResponseEntity`/`Flux`. Reutilizar patrón de `ms-inventory` (`StockController` → `StockHandler` → `StockUseCase`).
+11. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, ProcessedEvents, GlobalExceptionHandler, Controller→Handler), se DEBE reutilizar la implementación ya probada de `ms-inventory` adaptando solo lo específico del dominio.
+12. **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0 (Spring Boot 4.0.3). El consumidor Kafka usa `KafkaReceiver` de reactor-kafka directamente, con `KafkaConsumerConfig` (beans por tópico) y `KafkaConsumerLifecycle` (`ApplicationReadyEvent`).
 
 ---
 
@@ -28,7 +31,10 @@ En Fase 1, el pago se gestiona como proceso externo B2B (facturación diferida a
 graph TB
     subgraph "Entry Points (infrastructure/entry-points)"
         OC[OrderController - REST]
+        OH[OrderHandler]
         KC[KafkaEventConsumer]
+        KCC[KafkaConsumerConfig]
+        KCL[KafkaConsumerLifecycle]
         GEH[GlobalExceptionHandler]
     end
 
@@ -71,7 +77,8 @@ graph TB
         INV[ms-inventory - gRPC]
     end
 
-    OC --> COU & GOU & LOU & CSOU & CAOU
+    OC --> OH
+    OH --> COU & GOU & LOU & CSOU & CAOU
     KC --> PEU
 
     COU --> OR & OIR & OSHR & OER & IC
@@ -426,9 +433,11 @@ public record ErrorResponse(String code, String message) {}
 
 #### Consumidor Kafka
 
-| Consumer             | Tópicos Suscritos                      | Consumer Group        | Eventos Procesados (Fase 2+)                                |
-| -------------------- | -------------------------------------- | --------------------- | ----------------------------------------------------------- |
-| `KafkaEventConsumer` | `payment-events`, `shipping-events`    | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched`   |
+> **Arquitectura (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Se usa `KafkaReceiver` de reactor-kafka directamente. Reutilizar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`: `KafkaConsumerConfig` (beans `KafkaReceiver` por tópico), `KafkaConsumerLifecycle` (`ApplicationReadyEvent` → `startConsuming()`), `KafkaEventConsumer` (switch eventType, per-msg acknowledge, retry backoff).
+
+| Consumer             | Tópicos Suscritos                      | Consumer Group        | Eventos Procesados (Fase 2+)                                | Tecnología |
+| -------------------- | -------------------------------------- | --------------------- | ----------------------------------------------------------- | ---------- |
+| `KafkaEventConsumer` | `payment-events`, `shipping-events`    | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched`   | `KafkaReceiver` (reactor-kafka §B.12) |
 
 Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WARN. En Fase 1, la infraestructura base está lista pero no procesa eventos activamente.
 
@@ -442,7 +451,7 @@ Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WA
 | `R2dbcOutboxAdapter`             | `OutboxEventRepository`        | R2DBC DatabaseClient                    |
 | `R2dbcProcessedEventAdapter`     | `ProcessedEventRepository`     | R2DBC DatabaseClient                    |
 | `GrpcInventoryClient`            | `InventoryClient`              | gRPC Stub (Protobuf)                    |
-| `KafkaOutboxRelay`               | Scheduled relay (cada 5s)      | ReactiveKafkaProducer                   |
+| `KafkaOutboxRelay`               | Scheduled relay (cada 5s)      | `KafkaSender` de `reactor-kafka` (§B.11) |
 
 ### Excepciones de Dominio
 
@@ -603,19 +612,42 @@ public record ReserveStockResult(
 @Builder(toBuilder = true)
 public record OutboxEvent(
     UUID id,
-    String eventType,
+    EventType eventType,
     String topic,
     String partitionKey,  // orderId
     String payload,       // JSON serializado
-    String status,        // PENDING | PUBLISHED
+    OutboxStatus status,
     Instant createdAt
 ) {
     public OutboxEvent {
-        id = id != null ? id : UUID.randomUUID();
-        status = status != null ? status : "PENDING";
+        Objects.requireNonNull(eventType, "eventType is required");
+        Objects.requireNonNull(payload, "payload is required");
+        Objects.requireNonNull(partitionKey, "partitionKey is required");
+        // id is nullable — DB generates UUID via DEFAULT gen_random_uuid()
+        status = status != null ? status : OutboxStatus.PENDING;
         topic = topic != null ? topic : "order-events";
         createdAt = createdAt != null ? createdAt : Instant.now();
     }
+
+    public boolean isPending() { return status == OutboxStatus.PENDING; }
+    public boolean isPublished() { return status == OutboxStatus.PUBLISHED; }
+    public OutboxEvent markAsPublished() {
+        if (status != OutboxStatus.PENDING) {
+            throw new IllegalStateException("Cannot publish event " + id + ". Current: " + status);
+        }
+        return this.toBuilder().status(OutboxStatus.PUBLISHED).build();
+    }
+}
+
+// com.arka.model.outbox.OutboxStatus
+public enum OutboxStatus { PENDING, PUBLISHED }
+
+// com.arka.model.outbox.EventType
+public enum EventType {
+    ORDER_CREATED,
+    ORDER_CONFIRMED,
+    ORDER_STATUS_CHANGED,
+    ORDER_CANCELLED
 }
 ```
 
@@ -631,7 +663,17 @@ public record DomainEventEnvelope(
     String source,         // "ms-order"
     String correlationId,
     Object payload
-) {}
+) {
+    public static final String MS_SOURCE = "ms-order";
+
+    public DomainEventEnvelope {
+        Objects.requireNonNull(eventId, "eventId is required");
+        Objects.requireNonNull(eventType, "eventType is required");
+        Objects.requireNonNull(payload, "payload is required");
+        timestamp = timestamp != null ? timestamp : Instant.now();
+        source = source != null ? source : MS_SOURCE;
+    }
+}
 
 // Payloads específicos
 @Builder(toBuilder = true)

@@ -4,10 +4,25 @@
 
 Implementación incremental del microservicio `ms-notifications` siguiendo Clean Architecture (Bancolombia Scaffold). Se construye desde el dominio hacia afuera: modelo → motor de plantillas → estrategias → caso de uso → adaptadores driven → consumidor Kafka. No expone endpoints REST — es puramente event-driven. Java 21, Spring Boot 4.0.3, Spring WebFlux, Reactive MongoDB, AWS SES (bloqueante envuelto en `Schedulers.boundedElastic()`), Kafka consumer, jqwik para PBT.
 
+**REGLA CRÍTICA DE IMPLEMENTACIÓN:** Todos los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold. La creación manual está PROHIBIDA. Ejecutar siempre desde la raíz de `ms-notifications/`:
+
+```bash
+./gradlew generateModel --name=<Name>
+./gradlew generateUseCase --name=<Name>
+./gradlew generateDrivenAdapter --type=<type>
+./gradlew generateEntryPoint --type=<type>
+./gradlew validateStructure
+```
+
+Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos.
+
+**REUTILIZACIÓN Y VERSIONADO:** Antes de implementar patrones transversales o agregar dependencias, consultar **`.kiro/steering/reusability.md`**. Define los componentes reutilizables de `ms-inventory` (Kafka Consumer con `KafkaReceiver`, GlobalExceptionHandler, Spring Profiles), las versiones exactas de todas las librerías y qué adaptar por dominio. Incluye advertencias §B.11/§B.12 sobre APIs eliminadas en spring-kafka 4.0.
+
 ## Tareas
 
 - [ ] 1. Configurar estructura del proyecto y dependencias
   - [ ] 1.1 Configurar `build.gradle` con dependencias: Spring WebFlux, Reactive MongoDB Driver, Spring Kafka, AWS SES SDK, jqwik, reactor-test, Lombok, BlockHound
+    - **OBLIGATORIO:** Seguir tabla de **Versionado Unificado** en `reusability.md` para todas las versiones
     - Verificar compatibilidad con Spring Boot 4.0.3 y Scaffold 4.2.0
     - Agregar `net.jqwik:jqwik:1.9.2` en testImplementation
     - _Requisitos: transversal_
@@ -17,9 +32,19 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
   - [ ] 1.3 Crear script de inicialización de MongoDB con los índices de las colecciones `templates` (índice único sobre `eventType`) y `notification_history` (índice único sobre `eventId`, TTL Index de 90 días sobre `createdAt` con `expireAfterSeconds: 7776000`)
     - Ubicar en `ms-notifications/applications/app-service/src/main/resources/`
     - _Requisitos: 2.1, 8.2, 8.3_
+  - [ ] 1.4 Configurar Spring Profiles (local/docker)
+    - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados (MongoDB, Kafka)
+    - Crear `application-docker.yaml` con hostnames de contenedores (`arka-mongodb`, `arka-kafka`) y puertos internos
+    - Configurar `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` en `application.yaml`
+    - **OBLIGATORIO (reusability.md #9):** Copiar estructura de `ms-inventory/applications/app-service/src/main/resources/`
+    - _Estándar: §B.10 (Spring Profiles)_
 
 - [ ] 2. Implementar modelo de dominio (`domain/model`)
   - [ ] 2.1 Crear los records de dominio: `NotificationTemplate` (id, eventType, subject, bodyTemplate, active, createdAt con validación en compact constructor y `@Builder(toBuilder=true)`), `NotificationHistory` (id, eventId, eventType, orderId, customerEmail, status, processedAt, createdAt), `NotificationStatus` (enum SENT, FAILED), `DomainEvent` (sobre estándar: eventId, eventType, timestamp, source, correlationId, payload como `Map<String, Object>`) y `NotificationContext` (recipientEmail, orderId, templateVariables como `Map<String, String>`)
+    - **CRÍTICO**: Generar módulos con Scaffold:
+      - `cd ms-notifications && ./gradlew generateModel --name=Template`
+      - `cd ms-notifications && ./gradlew generateModel --name=History`
+      - `cd ms-notifications && ./gradlew generateModel --name=Notification`
     - Validaciones con `Objects.requireNonNull` en compact constructors
     - Defaults para `createdAt` y `processedAt` en compact constructor
     - Ubicar en `com.arka.model.template`, `com.arka.model.history`, `com.arka.model.notification`
@@ -32,6 +57,7 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
 
 - [ ] 3. Implementar motor de plantillas y estrategias (`domain/usecase`)
   - [ ] 3.1 Implementar `TemplateEngine`: componente de dominio que sustituye cada `{{variable}}` en subject y bodyTemplate por el valor correspondiente del mapa de variables. Usar regex `\{\{(\w+)\}\}` para encontrar marcadores. Si una variable no tiene valor en el mapa, reemplazar por cadena vacía y registrar log WARN indicando la variable faltante.
+    - **CRÍTICO**: Generar con Scaffold: `cd ms-notifications && ./gradlew generateUseCase --name=TemplateEngine`
     - Método `resolve(String template, Map<String, String> variables)` retorna String
     - _Requisitos: 2.4, 2.5, 2.6_
 
@@ -59,6 +85,7 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
 
 - [ ] 4. Implementar caso de uso principal (`domain/usecase`)
   - [ ] 4.1 Implementar `ProcessNotificationUseCase`: orquestar el flujo completo — (1) verificar idempotencia consultando `notification_history` por eventId, (2) si existe, log DEBUG "Evento duplicado descartado: {eventId}" y retornar vacío, (3) resolver estrategia via `EventStrategyFactory`, (4) extraer `NotificationContext` del payload, (5) buscar plantilla activa por eventType, (6) si no existe plantilla, log ERROR y guardar historial FAILED, (7) resolver variables en subject y bodyTemplate con `TemplateEngine`, (8) enviar email via `EmailSenderPort`, (9) guardar historial SENT. Aplicar retry con backoff exponencial (3 reintentos: 1s, 2s, 4s) solo para errores transitorios. Errores permanentes registran FAILED sin reintentar. Capturar `DuplicateKeyException` de MongoDB al guardar historial como evento duplicado sin propagar error.
+    - **CRÍTICO**: Generar con Scaffold: `cd ms-notifications && ./gradlew generateUseCase --name=ProcessNotification`
     - Usar operadores reactivos: `flatMap`, `switchIfEmpty`, `retryWhen(Retry.backoff(...))`, `onErrorResume`
     - _Requisitos: 1.3, 1.4, 1.5, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5, 8.1, 8.4, 9.1, 9.2, 9.3, 9.4, 9.5_
 
@@ -97,15 +124,27 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
 
 - [ ] 6. Implementar adaptadores driven (`infrastructure/driven-adapters`)
   - [ ] 6.1 Implementar `MongoTemplateAdapter` (implementa `NotificationTemplateRepository`): consulta a la colección `templates` filtrando por `eventType` y `active = true` usando Reactive MongoDB Driver. Mapeo manual de documento MongoDB a record `NotificationTemplate` con `@Builder`.
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-notifications && ./gradlew generateDrivenAdapter --type=mongodb`
     - _Requisitos: 2.1, 2.2_
   - [ ] 6.2 Implementar `MongoHistoryAdapter` (implementa `NotificationHistoryRepository`): operaciones `existsByEventId` (consulta por eventId, retorna `Mono<Boolean>`) y `save` (inserta documento en `notification_history`). Capturar `DuplicateKeyException` en `save` y tratarla como evento duplicado sin propagar error.
     - _Requisitos: 1.3, 8.1, 8.2, 8.4_
   - [ ] 6.3 Implementar `SesEmailAdapter` (implementa `EmailSenderPort`): envolver llamada al SDK bloqueante de AWS SES con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`. Construir `SendEmailRequest` con source (from-address configurable), destination (to), subject y body HTML. Clasificar errores de SES: `SdkClientException` (timeout) → transitorio, `SesException` HTTP 429/5xx → transitorio, `MessageRejectedException` → permanente, `MailFromDomainNotVerifiedException` → permanente. Lanzar `EmailSendException` con flag `transient` según clasificación.
+    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-notifications && ./gradlew generateDrivenAdapter --type=generic --name=ses-adapter`
     - Obtener credenciales de AWS SES desde AWS Secrets Manager
     - _Requisitos: 3.1, 3.2, 3.6, 9.5_
 
 - [ ] 7. Implementar entry-point Kafka (`infrastructure/entry-points`)
-  - [ ] 7.1 Implementar `KafkaNotificationConsumer`: consumidor Kafka suscrito al consumer group `notification-service-group` en los tópicos `order-events` e `inventory-events`. Deserializar el sobre estándar (`DomainEvent`), extraer `eventType`. Si el eventType pertenece al conjunto relevante de Fase 1 (OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted), delegar a `ProcessNotificationUseCase.execute()`. Si el eventType es desconocido o no relevante, registrar log WARN con el eventType recibido e ignorar (tolerancia a evolución del esquema). Manejar errores de deserialización con log ERROR e ignorar evento.
+  - [ ] 7.1 Implementar `KafkaNotificationConsumer`, `KafkaConsumerConfig` y `KafkaConsumerLifecycle`
+    - **CRÍTICO**: Crear módulo manualmente como `kafka-consumer` en `infrastructure/entry-points/` (o con Scaffold: `cd ms-notifications && ./gradlew generateEntryPoint --type=generic --name=kafka-consumer`)
+    - Agregar dependencia: `reactor-kafka:1.3.25` (misma versión que ms-inventory)
+    - **OBLIGATORIO (reusability.md #6):** Copiar y adaptar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`:
+      - `KafkaConsumerConfig.java` → crear beans `KafkaReceiver<String, String>` por tópico (`orderEventsReceiver`, `inventoryEventsReceiver`) con consumer group `notification-service-group` y sufijos por tópico
+      - `KafkaConsumerLifecycle.java` → copiar tal cual: `@EventListener(ApplicationReadyEvent.class)` que invoca `kafkaNotificationConsumer.startConsuming()`
+      - `KafkaEventConsumer.java` → adaptar como `KafkaNotificationConsumer`: `startConsuming()`, switch por eventType relevante (OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted), per-message `acknowledge()`, `onErrorResume` para errores irrecuperables, retry con backoff exponencial
+    - **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Usar `KafkaReceiver` de reactor-kafka directamente.
+    - Filtrar por eventType relevante (Fase 1: OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted), delegar a `ProcessNotificationUseCase.execute()`
+    - eventTypes desconocidos: log WARN e ignorar (tolerancia a evolución del esquema)
+    - Manejar errores de deserialización con log ERROR e ignorar evento
     - _Requisitos: 1.1, 1.2, 1.6, 1.7_
 
   - [ ]* 7.2 Escribir test de propiedad para filtrado de eventos desconocidos
@@ -128,9 +167,11 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
 
 ## Notas
 
+- **CRÍTICO**: Todos los módulos DEBEN generarse con el plugin Scaffold de Bancolombia. La creación manual está PROHIBIDA. Después de cada generación, ejecutar `./gradlew validateStructure`.
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido
 - Cada tarea referencia requisitos específicos para trazabilidad
 - Los checkpoints aseguran validación incremental
 - Los tests de propiedades validan propiedades universales de correctitud (jqwik, mínimo 100 iteraciones)
 - Los tests unitarios validan ejemplos específicos y edge cases (JUnit 5 + Mockito + StepVerifier)
 - Este microservicio no expone endpoints REST — el único entry-point es el consumidor Kafka
+- Para patrones transversales y versiones de dependencias, consultar `.kiro/steering/reusability.md`

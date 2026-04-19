@@ -14,6 +14,9 @@
 6. **Backoff exponencial (3 reintentos: 1s, 2s, 4s)**: Reintentos solo para errores transitorios (timeout, throttling, HTTP 5xx). Errores permanentes (email inválido) registran FAILED sin reintentar.
 7. **TTL Index de 90 días**: `expireAfterSeconds: 7776000` sobre `createdAt` en `notification_history` para limpieza automática.
 8. **Records como estándar**: Todas las entidades, VOs, comandos y DTOs son `record` con `@Builder(toBuilder = true)`.
+9. **Kafka con `KafkaReceiver` de reactor-kafka directo (§B.12)**: `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0 (Spring Boot 4.0.3). Se usa `KafkaReceiver` directamente con `KafkaConsumerConfig` (beans por tópico) y `KafkaConsumerLifecycle` (`ApplicationReadyEvent`). Reutilizar implementación de `ms-inventory/infrastructure/entry-points/kafka-consumer/`.
+10. **Reutilización de implementaciones probadas**: El consumidor Kafka DEBE reutilizar la implementación ya probada de `ms-inventory` (3 archivos: `KafkaConsumerConfig`, `KafkaConsumerLifecycle`, `KafkaEventConsumer`), adaptando solo tópicos, consumer group y routing por eventType.
+11. **Spring Profiles (local/docker)**: 3 archivos YAML (`application.yaml`, `application-local.yaml`, `application-docker.yaml`) para cambio automático entre MongoDB/Kafka local y contenedores (§B.10).
 
 ---
 
@@ -25,6 +28,8 @@
 graph TB
     subgraph "Entry Points (infrastructure/entry-points)"
         KC[KafkaNotificationConsumer]
+        KCC[KafkaConsumerConfig]
+        KCL[KafkaConsumerLifecycle]
     end
 
     subgraph "Use Cases (domain/usecase)"
@@ -337,15 +342,20 @@ public class TemplateEngine {
 ```java
 // Consumidor Kafka suscrito a order-events e inventory-events
 // Consumer group: notification-service-group
+// Usa KafkaReceiver de reactor-kafka directamente (§B.12)
+// Arquitectura: KafkaConsumerConfig (beans KafkaReceiver por tópico)
+//             + KafkaConsumerLifecycle (ApplicationReadyEvent → startConsuming())
+//             + KafkaNotificationConsumer (switch eventType, per-msg ack)
+// REUTILIZAR los 3 archivos de ms-inventory/infrastructure/entry-points/kafka-consumer/
 // Filtra por eventType relevante, delega a ProcessNotificationUseCase
 // eventTypes relevantes Fase 1: OrderConfirmed, OrderStatusChanged,
 //                                OrderCancelled, StockDepleted
 // eventTypes desconocidos: log WARN, ignorar (tolerancia a evolución)
 ```
 
-| Consumer                     | Tópicos                                  | Eventos Procesados                                                    |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------- |
-| `KafkaNotificationConsumer`  | `order-events`, `inventory-events`       | OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted     |
+| Consumer                     | Tópicos                                  | Eventos Procesados                                                    | Tecnología |
+| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------- | --------- |
+| `KafkaNotificationConsumer`  | `order-events`, `inventory-events`       | OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted     | `KafkaReceiver` (reactor-kafka §B.12) |
 
 ### Capa de Infraestructura — Driven Adapters
 

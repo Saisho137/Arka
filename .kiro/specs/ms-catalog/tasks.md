@@ -25,6 +25,8 @@ Implementación incremental del microservicio de Catálogo Maestro de Productos 
 
 Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos y tipos disponibles.
 
+**REUTILIZACIÓN Y VERSIONADO:** Antes de implementar patrones transversales o agregar dependencias, consultar **`.kiro/steering/reusability.md`**. Define los componentes reutilizables de `ms-inventory` (Outbox, Kafka Producer/Consumer, Controller→Handler, GlobalExceptionHandler, Spring Profiles, Springdoc), las versiones exactas de todas las librerías y qué adaptar por dominio.
+
 ## Tareas
 
 - [x] 1. Definir entidades de dominio, Value Objects y excepciones
@@ -66,13 +68,15 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
   - [x] 1.4 Crear el record `OutboxEvent` y enum `OutboxStatus` en `domain/model`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateModel --name=OutboxEvent`
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#1** (Outbox Domain Model) para estructura, enums (`EventType`, `OutboxStatus`) y métodos de dominio
     - Reemplazar la clase generada por `OutboxEvent` record con defaults en compact constructor (eventId UUID, status PENDING, createdAt, topic "product-events")
     - Crear enum `OutboxStatus` con valores `PENDING`, `PUBLISHED` en el mismo paquete
     - Paquete: `com.arka.model.outbox`
     - _Requisitos: 7.1, 7.2_
 
   - [x] 1.5 Crear records de eventos de dominio: `DomainEventEnvelope`, `ProductCreatedPayload`, `ProductUpdatedPayload`, `PriceChangedPayload`
-    - `DomainEventEnvelope` con campos: eventId, eventType, timestamp, source ("ms-catalog"), correlationId, payload
+    - `DomainEventEnvelope` con campos: eventId, eventType, timestamp, source, correlationId, payload
+    - **OBLIGATORIO (reusability.md #1):** Copiar `ms-inventory/domain/model/outboxevent/DomainEventEnvelope.java` — incluir constante `public static final String MS_SOURCE = "ms-catalog"` y defaults en compact constructor
     - Payloads específicos para cada tipo de evento (incluyendo cost, price, currency en payloads de productos)
     - Paquete: `com.arka.model.outbox`
     - _Requisitos: 1.8, 7.2, 7.3, 7.6_
@@ -139,6 +143,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [ ] 5. Implementar `OutboxRelayUseCase` — Lógica de relay
   - [ ] 5.1 Generar `OutboxRelayUseCase` con Scaffold e implementar métodos
     - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=OutboxRelay`
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#2** (OutboxRelayUseCase) — copiar lógica de ms-inventory
     - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/outboxrelay/OutboxRelayUseCase.java` y registra el módulo en `settings.gradle`
     - Implementar `fetchPendingEvents()`: consultar eventos PENDING vía `outboxEventRepository.findPending()`
     - Implementar `markAsPublished(event)`: actualizar status a PUBLISHED vía `outboxEventRepository.markAsPublished()`
@@ -150,6 +155,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 - [ ] 7. Implementar Handlers — Patrón Controller → Handler → UseCase
   - [ ] 7.1 Implementar `ProductHandler`
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#7** (Controller → Handler → UseCase)
     - Crear `@Component` con métodos para cada operación
     - `create(request)`: UseCase → Mapper → `Mono<ResponseEntity<ProductResponse>>`
     - `getById(id)`: UseCase → Mapper → `Mono<ResponseEntity<ProductResponse>>`
@@ -161,6 +167,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Estándar: §4.2 (Controller → Handler → UseCase)_
 
   - [ ] 7.2 Implementar `CategoryHandler`
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#7** (Controller → Handler → UseCase)
     - Crear `@Component` con métodos para cada operación
     - `create(request)`: UseCase → Mapper → `Mono<ResponseEntity<CategoryResponse>>`
     - `listAll()`: UseCase → Mapper → `Flux<CategoryResponse>`
@@ -212,29 +219,27 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 8.1, 8.2, 8.4, 8.5_
 
 - [ ] 10. Implementar driven adapter — Kafka Outbox Relay con `reactor-kafka`
-  - [ ] 10.1 Crear módulo manual `kafka-producer` en `infrastructure/driven-adapters/`
+  - [ ] 10.1 Crear módulo `kafka-producer` en `infrastructure/driven-adapters/`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer`
-    - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/kafka-producer/` y registra el módulo en `settings.gradle`
-    - Agregar dependencias manualmente en el `build.gradle` del módulo: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind`
-    - **IMPORTANTE**: Reutilizar la implementación de referencia de `ms-inventory/infrastructure/driven-adapters/kafka-producer/` (ver reusability.md)
+    - Agregar dependencias: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind` (mismas versiones que `ms-inventory/infrastructure/driven-adapters/kafka-producer/build.gradle`)
+    - **OBLIGATORIO (reusability.md #5):** Copiar y adaptar los 2 archivos de `ms-inventory/infrastructure/driven-adapters/kafka-producer/src/main/java/com/arka/kafka/`:
+      - `KafkaProducerConfig.java` → copiar tal cual (bean `KafkaSender<String, String>`, acks=all, retries=3)
+      - `KafkaOutboxRelay.java` → copiar y adaptar: `TOPIC = "product-events"`, `DomainEventEnvelope.MS_SOURCE = "ms-catalog"`, inyectar `OutboxRelayUseCase`
     - _Estándar: §B.11 (Kafka con reactor-kafka directo)_
 
-  - [ ] 10.2 Implementar `KafkaOutboxRelay`
-    - Crear en el módulo `kafka-producer` generado en 10.1
-    - `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")` — sin default inline
-    - Consultar eventos PENDING vía `OutboxRelayUseCase.fetchPendingEvents()`
-    - Publicar con `KafkaSender` al tópico `product-events` usando `productId` como partition key
-    - Marcar como PUBLISHED tras ack exitoso vía `OutboxRelayUseCase.markAsPublished()`
-    - `onErrorResume` mantiene PENDING para reintento
-    - **IMPORTANTE**: Reutilizar la implementación de `ms-inventory/infrastructure/driven-adapters/kafka-producer/KafkaOutboxRelay.java` adaptando tópico y partition key
+  - [ ] 10.2 Implementar `KafkaOutboxRelay` (ya copiado en 10.1)
+    - Adaptar la copia de `ms-inventory/.../KafkaOutboxRelay.java`:
+      - `TOPIC = "product-events"` (era `"inventory-events"`)
+      - `DomainEventEnvelope.MS_SOURCE` → constante del `DomainEventEnvelope` de ms-catalog
+      - El patrón `relay() → fetchPendingEvents → publishAndMark → buildEnvelopeJson → send` es idéntico
+      - `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")` — sin default inline
+      - `onErrorResume` mantiene PENDING para reintento — idéntico a ms-inventory
     - _Requisitos: 7.3, 7.4, 7.5, 7.7_
     - _Estándar: §B.11, §D.6 (Schedulers externalizados)_
 
-  - [ ] 10.3 Implementar `KafkaProducerConfig`
-    - Crear en el módulo `kafka-producer` generado en 10.1
-    - Bean `KafkaSender<String, String>` con configuración de producer
-    - `ACKS_CONFIG = "all"`, `RETRIES_CONFIG = 3`, `ENABLE_IDEMPOTENCE_CONFIG = true`
-    - **IMPORTANTE**: Reutilizar la implementación de `ms-inventory/infrastructure/driven-adapters/kafka-producer/KafkaProducerConfig.java`
+  - [ ] 10.3 Implementar `KafkaProducerConfig` (ya copiado en 10.1)
+    - Copiar tal cual de `ms-inventory/.../KafkaProducerConfig.java` — no requiere cambios
+    - Bean `KafkaSender<String, String>`: `ACKS_CONFIG = "all"`, `RETRIES_CONFIG = 3`
     - _Estándar: §B.11_
 
 - [ ] 11. Checkpoint — Verificar driven adapters
@@ -260,6 +265,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 1.1, 2.1, 2.2_
 
   - [ ] 12.3 Implementar `ProductController`
+    - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1, reemplazando el controlador de ejemplo
     - `POST /products` → `ProductHandler.create()` → 201 Created
     - `GET /products` → `ProductHandler.listActive()` → 200 OK (paginado con query params page, size)
@@ -272,6 +278,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Estándar: §4.2 (Controller → Handler), §D.2 (OpenAPI)_
 
   - [ ] 12.4 Implementar `CategoryController`
+    - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /categories` → `CategoryHandler.create()` → 201 Created
     - `GET /categories` → `CategoryHandler.listAll()` → 200 OK
@@ -280,6 +287,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Estándar: §4.2, §D.2_
 
   - [ ] 12.5 Implementar `ReviewController`
+    - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /products/{id}/reviews` → `ProductHandler.addReview()` → 200 OK
     - Anotaciones Springdoc: `@Tag`, `@Operation`, `@ApiResponse`
@@ -287,6 +295,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Estándar: §4.2, §D.2_
 
   - [ ] 12.6 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
+    - **OBLIGATORIO (reusability.md #8):** Copiar de `ms-inventory` y adaptar subclases de `DomainException`
     - Crear en el módulo `reactive-web` generado en 12.1
     - Manejar `WebExchangeBindException` → 400 con campos inválidos
     - Manejar `DomainException` subclases → HTTP status y código según subclase
@@ -308,12 +317,14 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Estándares: §D.2 (OpenAPI), §D.6 (Schedulers), §D.7 (Logging)_
 
   - [ ] 13.2 Configurar Spring Profiles (local/docker)
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#9** (Spring Profiles)
     - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados
     - Crear `application-docker.yaml` con hostnames de contenedores (`arka-mongodb`, `arka-redis`, `arka-kafka`) y puertos internos
     - Configurar `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` en `application.yaml`
     - _Estándar: §B.10 (Spring Profiles)_
 
   - [ ] 13.3 Configurar beans de inyección de dependencias
+    - **OBLIGATORIO:** Seguir `reusability.md` componente **#10** (Springdoc/OpenAPI) y tabla de **Versionado Unificado** para todas las dependencias
     - Registrar use cases, handlers, adapters y ports en la configuración de Spring
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`)
     - Agregar dependencias en `build.gradle`: reactor-test, mockito, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
@@ -331,4 +342,4 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - Los checkpoints aseguran validación incremental
 - Los tests unitarios validan ejemplos específicos y edge cases con JUnit 5 + Mockito + StepVerifier
 - Todas las entidades usan `record` con `@Builder(toBuilder = true)` según estándares de Arka
-- Para patrones transversales (Kafka, Redis, Springdoc), reutilizar implementaciones de `ms-inventory` (ver reusability.md)
+- Para patrones transversales y versiones de dependencias, consultar `.kiro/steering/reusability.md`

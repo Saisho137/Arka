@@ -82,11 +82,8 @@ Ejecutar desde la raíz del microservicio (`cd ms-<name>`):
 
 - Reactivo por defecto: retornar `Mono<T>` o `Flux<T>` en servicios WebFlux; imperativo en ms-reporter (MVC + Virtual Threads)
 - Lombok: `@Builder`, `@Value` para modelos; `@RequiredArgsConstructor` para inyección
-- Tests: JUnit 5 + `reactor-test` (StepVerifier) + mocks con Mockito
-- Dockerfile: corretto 21 Alpine, usuario no-root `appuser`
 - Infraestructura local: `docker compose up` ( PostgreSQL 17 + LocalStack)
 
 ## NO Incluido Aquí
 
-Guías detalladas de testing → usar skill/agent `TestScaffolder`
 Scaffolding paso a paso → usar skill `scaffold-tasks`

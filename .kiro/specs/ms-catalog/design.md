@@ -20,7 +20,7 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 10. **Documentación API con Springdoc/OpenAPI**: Swagger UI disponible en `/swagger-ui.html`, especificación JSON en `/api-docs`. Anotaciones `@Tag`, `@Operation` y `@ApiResponse` en el controlador REST (ver §D.2 de patrones-y-estandares-codigo.md).
 11. **Spring Profiles (local/docker)**: 3 archivos YAML por microservicio (`application.yaml`, `application-local.yaml`, `application-docker.yaml`) para cambio automático entre BD local y contenedores (ver §B.10 de patrones-y-estandares-codigo.md).
 12. **Kafka con `reactor-kafka` directo**: No se usa `reactive-commons` (`DomainEventBus`). El relay usa `KafkaSender` para control explícito de partition key, tópico y ack (ver §B.11 de patrones-y-estandares-codigo.md).
-13. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, configuración de reactor-kafka, Springdoc), se DEBE reutilizar la implementación ya probada de `ms-inventory` como referencia, adaptando únicamente los aspectos específicos del dominio (nombres de entidades, tópicos, payloads). Esto garantiza consistencia y reduce errores.
+13. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, configuración de reactor-kafka, Springdoc), se DEBE reutilizar la implementación ya probada de `ms-inventory` como referencia, adaptando únicamente los aspectos específicos del dominio (nombres de entidades, tópicos, payloads, constante `DomainEventEnvelope.MS_SOURCE`). Esto garantiza consistencia y reduce errores.
 14. **Versionado unificado de librerías**: Todas las librerías transversales (reactor-kafka, springdoc-openapi, jackson, etc.) DEBEN usar exactamente las mismas versiones en TODO el monorepo. Consultar `ms-inventory/build.gradle` como referencia canónica para versiones.
 15. **CRÍTICO — Generación de módulos con Scaffold Plugin**: TODOS los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold (`./gradlew generateModel`, `generateUseCase`, `generateDrivenAdapter`, `generateEntryPoint`, `generateHelper`). La creación manual de estructura de módulos está PROHIBIDA. Esto garantiza consistencia arquitectónica, registro automático en `settings.gradle`, y validación con `./gradlew validateStructure`. Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos.
 
@@ -731,7 +731,17 @@ public record DomainEventEnvelope(
     String source,         // "ms-catalog"
     String correlationId,
     Object payload
-) {}
+) {
+    public static final String MS_SOURCE = "ms-catalog";
+
+    public DomainEventEnvelope {
+        Objects.requireNonNull(eventId, "eventId is required");
+        Objects.requireNonNull(eventType, "eventType is required");
+        Objects.requireNonNull(payload, "payload is required");
+        timestamp = timestamp != null ? timestamp : Instant.now();
+        source = source != null ? source : MS_SOURCE;
+    }
+}
 
 // Payloads específicos
 @Builder(toBuilder = true)
