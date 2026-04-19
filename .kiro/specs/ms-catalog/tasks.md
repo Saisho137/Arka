@@ -140,8 +140,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencias: `ProductRepository`, `CategoryRepository`, `OutboxEventRepository`, `ProductCachePort`, `JsonSerializer`
     - _Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.1, 2.2, 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 6.1, 6.4, 6.5_
 
-- [ ] 5. Implementar `OutboxRelayUseCase` — Lógica de relay
-  - [ ] 5.1 Generar `OutboxRelayUseCase` con Scaffold e implementar métodos
+- [x] 5. Implementar `OutboxRelayUseCase` — Lógica de relay
+  - [x] 5.1 Generar `OutboxRelayUseCase` con Scaffold e implementar métodos
     - **CRÍTICO**: Generar con Scaffold: `cd ms-catalog && ./gradlew generateUseCase --name=OutboxRelay`
     - **OBLIGATORIO:** Seguir `reusability.md` componente **#2** (OutboxRelayUseCase) — copiar lógica de ms-inventory
     - Esto crea automáticamente `domain/usecase/src/main/java/com/arka/usecase/outboxrelay/OutboxRelayUseCase.java` y registra el módulo en `settings.gradle`
