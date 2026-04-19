@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: no doc inline
 ---
 
 # Regla: NO Documentación Inline Excesiva

@@ -153,8 +153,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [x] 6. Checkpoint — Verificar dominio y casos de uso
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 7. Implementar Handlers — Patrón Controller → Handler → UseCase
-  - [ ] 7.1 Implementar `ProductHandler`
+- [x] 7. Implementar Handlers — Patrón Controller → Handler → UseCase
+  - [x] 7.1 Implementar `ProductHandler`
     - **OBLIGATORIO:** Seguir `reusability.md` componente **#7** (Controller → Handler → UseCase)
     - Crear `@Component` con métodos para cada operación
     - `create(request)`: UseCase → Mapper → `Mono<ResponseEntity<ProductResponse>>`
@@ -166,7 +166,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencia: `ProductUseCase`
     - _Estándar: §4.2 (Controller → Handler → UseCase)_
 
-  - [ ] 7.2 Implementar `CategoryHandler`
+  - [x] 7.2 Implementar `CategoryHandler`
     - **OBLIGATORIO:** Seguir `reusability.md` componente **#7** (Controller → Handler → UseCase)
     - Crear `@Component` con métodos para cada operación
     - `create(request)`: UseCase → Mapper → `Mono<ResponseEntity<CategoryResponse>>`

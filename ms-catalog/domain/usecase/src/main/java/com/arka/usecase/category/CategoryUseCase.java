@@ -30,7 +30,7 @@ public class CategoryUseCase {
                     }
 
                     return categoryRepository.findByName(name)
-                            .flatMap(existing -> Mono.error(new DuplicateCategoryException(name)))
+                            .flatMap(existing -> Mono.<Category>error(new DuplicateCategoryException(name)))
                             .switchIfEmpty(Mono.defer(() -> {
                                 Category newCategory = Category.builder()
                                         .id(UUID.randomUUID())
