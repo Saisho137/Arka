@@ -44,6 +44,104 @@
 - **Reactivo** (`Mono<Optional<R>>`): reglas que requieren I/O (BD, servicios externos)
 - **Mixto**: fast-fail síncrono primero, luego validaciones reactivas
 
+#### Implementación de Referencia — Engine Síncrono
+
+Para reglas puras en memoria (validaciones de negocio, compliance, elegibilidad):
+
+```java
+// 1. @FunctionalInterface genérica — una por dominio
+@FunctionalInterface
+public interface OrderRule {
+    Optional<OrderRejection> evaluate(Order order, List<OrderItem> items);
+}
+
+// 2. Sealed interface para el resultado polimórfico
+public sealed interface OrderRejection permits
+        OrderRejection.AmountExceeded,
+        OrderRejection.RestrictedCustomer,
+        OrderRejection.ProductIneligible {
+    String reason();
+    record AmountExceeded(String reason, BigDecimal limit) implements OrderRejection {}
+    record RestrictedCustomer(String reason) implements OrderRejection {}
+    record ProductIneligible(String reason, String sku) implements OrderRejection {}
+}
+
+// 3. Engine — lista de reglas con short-circuit en el primer rechazo
+public class OrderRuleEngine {
+    private final List<OrderRule> rules;
+
+    public OrderRuleEngine(List<OrderRule> rules) {
+        this.rules = List.copyOf(rules);
+    }
+
+    public Optional<OrderRejection> evaluate(Order order, List<OrderItem> items) {
+        return rules.stream()
+                .map(rule -> rule.evaluate(order, items))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .findFirst();  // Short-circuit: primer rechazo detiene evaluación
+    }
+}
+```
+
+Uso en UseCase (inyectado como dependencia):
+
+```java
+public Mono<Order> createOrder(CreateOrderCommand cmd) {
+    Order order = buildOrder(cmd);
+    // Fast-fail síncrono — no bloquea EventLoop (reglas en memoria)
+    Optional<OrderRejection> rejection = ruleEngine.evaluate(order, cmd.items());
+    if (rejection.isPresent()) {
+        return Mono.error(new OrderRejectedException(rejection.get()));
+    }
+    // Continuar con pipeline reactivo (gRPC, BD, outbox...)
+    return proceedWithOrder(order, cmd);
+}
+```
+
+#### Implementación de Referencia — Engine Reactivo
+
+Para reglas que requieren I/O (consultar BD, servicios externos):
+
+```java
+@FunctionalInterface
+public interface ReactiveOrderRule {
+    Mono<Optional<OrderRejection>> evaluate(Order order, List<OrderItem> items);
+}
+
+public class ReactiveOrderRuleEngine {
+    private final List<ReactiveOrderRule> rules;
+
+    public ReactiveOrderRuleEngine(List<ReactiveOrderRule> rules) {
+        this.rules = List.copyOf(rules);
+    }
+
+    public Mono<Optional<OrderRejection>> evaluate(Order order, List<OrderItem> items) {
+        return Flux.fromIterable(rules)
+                .concatMap(rule -> rule.evaluate(order, items))  // Secuencial para short-circuit
+                .filter(Optional::isPresent)
+                .next()                                          // Short-circuit reactivo
+                .defaultIfEmpty(Optional.empty());
+    }
+}
+```
+
+#### Patrón Mixto (fast-fail síncrono + validaciones reactivas)
+
+```java
+// En el UseCase: síncrono primero (barato), reactivo después (I/O)
+Optional<OrderRejection> syncRejection = syncEngine.evaluate(order, items);
+if (syncRejection.isPresent()) {
+    return Mono.error(new OrderRejectedException(syncRejection.get()));
+}
+return reactiveEngine.evaluate(order, items)
+        .flatMap(rejection -> rejection.isPresent()
+                ? Mono.error(new OrderRejectedException(rejection.get()))
+                : proceedWithOrder(order, items));
+```
+
+> **Cuándo usar:** Fase 2+ cuando aparezcan reglas de negocio complejas (límite de crédito B2B, restricciones por región, blacklists de compliance). En Fase 1, la validación directa en el UseCase es suficiente.
+
 ### Strategy + Factory
 
 - Comportamientos intercambiables en runtime (pasarelas, operadores logísticos)
