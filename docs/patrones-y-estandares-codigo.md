@@ -933,6 +933,8 @@ void shouldCreateOrder_whenStockAvailable() {
 | Schedulers                  | **Intervalos externalizados** a `application.yaml` sin defaults inline; schedulers en entry-points (ver §D.6)                          | Fallo rápido si falta propiedad; configuración sin recompilar                                                  |
 | Logging en dominio          | **`LoggerGateway`** port en dominio + implementación en `helpers` (ver §7.3)                                                           | Scaffold no permite deps en `usecase`; desacopla dominio de SLF4J                                              |
 | Logging producción          | **JSON estructurado** en perfil `docker`; formato legible en perfil `local` (ver §D.7)                                                 | Facilita ingesta en CloudWatch/Grafana/Loki sin parsing adicional                                              |
+| Flag `-parameters` en Gradle | **Obligatorio** en `main.gradle` de cada microservicio: `options.compilerArgs += ['-parameters']` en `tasks.withType(JavaCompile)` | Spring WebFlux requiere nombres de parámetros para resolver `@RequestParam`/`@PathVariable` sin `value` explícito. Sin el flag, falla con `INVALID_ARGUMENT` en runtime |
+| MongoDB URI (SB 4.0)        | **`spring.mongodb.uri`** (no `spring.data.mongodb.uri`). Incluir `uuidRepresentation=standard` en el query string                     | Spring Boot 4.0 movió el namespace; MongoDB driver 5.x requiere UUID representation explícita para codificar `java.util.UUID` |
 
 ---
 

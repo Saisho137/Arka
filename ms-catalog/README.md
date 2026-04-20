@@ -217,13 +217,66 @@ Sin `replicaSet=rs0` el driver reactive lanza:
 
 ---
 
+## Decisiones técnicas — Por qué hay un `mongo-keyfile` y un `mongo-entrypoint.sh`
+
+### Problema 1: MongoDB 7 requiere `--keyFile` cuando se combinan autenticación y Replica Set
+
+MongoDB permite habilitar autenticación (`MONGO_INITDB_ROOT_*`) y Replica Set (`--replSet`) de forma independiente, pero **al usarlos juntos impone una restricción de seguridad**: los nodos del Replica Set deben autenticarse entre sí mediante un shared secret. Esto se configura con `--keyFile`.
+
+Sin `--keyFile`, `mongod` falla al arrancar con:
+
+```text
+BadValue: security.keyFile is required when authorization is enabled with replica sets
+```
+
+La solución es generar el archivo una sola vez:
+
+```bash
+openssl rand -base64 756 > scripts/mongo-keyfile
+chmod 400 scripts/mongo-keyfile
+```
+
+Y montarlo en el contenedor con permisos correctos antes de que `mongod` arranque.
+
+### Problema 2: El `command` override en Docker Compose saltaba la creación del usuario admin
+
+El primer intento fue usar `command: bash -c "cp keyfile && exec mongod ..."` en el servicio `mongodb` del `compose.yaml`. Esto funciona para otras imágenes, pero **la imagen oficial de MongoDB usa `docker-entrypoint.sh` como `ENTRYPOINT`**, y al sobrescribir `command` con `bash -c ...`, Docker interpreta que `bash` es un comando para pasarle al entrypoint — el cual lo ejecuta directamente sin correr el proceso de inicialización que crea el usuario root (`MONGO_INITDB_ROOT_*`).
+
+Resultado: `mongo-init-replica` fallaba con `Authentication failed` porque el usuario admin nunca se creó.
+
+La solución correcta es sobrescribir `entrypoint` (no `command`), con un script wrapper [`scripts/mongo-entrypoint.sh`](scripts/mongo-entrypoint.sh) que:
+
+1. Prepara el keyFile con los permisos correctos (`chmod 400`, `chown mongodb:mongodb`).
+2. Delega explícitamente al entrypoint oficial: `exec /usr/local/bin/docker-entrypoint.sh "$@"`.
+
+Así la imagen crea el usuario admin normalmente y luego arranca `mongod` con `--keyFile`.
+
+### Problema 3: `MongoIndexConfig` mataba la app en el primer arranque
+
+`MongoIndexConfig` crea los índices de MongoDB al arrancar vía `CommandLineRunner`. En el primer arranque del Replica Set recién iniciado, el nodo tarda unos segundos en elegirse como primario. Si la creación de índices se ejecuta en ese instante, el driver lanza `DataAccessResourceFailureException`.
+
+El `.block()` al final de la cadena reactiva propaga la excepción al `CommandLineRunner`. Spring Boot interpreta cualquier excepción no capturada en un `CommandLineRunner` como fallo fatal y llama a `System.exit(1)` — la JVM muere, Netty deja de escuchar en el puerto 8084 y el healthcheck falla, aunque en los logs aparezca `Started MainApplication` justo antes del crash.
+
+La solución es agregar `.onErrorResume()` antes del `.block()` para que el fallo sea **no fatal**: se loguea un warning y la app continúa. Los índices se crearán correctamente en el siguiente reinicio (cuando MongoDB ya sea primario estable) o en ejecución normal si MongoDB está disponible.
+
+```java
+.doOnError(e -> log.error("Error creating MongoDB indexes", e))
+.onErrorResume(e -> {
+    log.warn("MongoDB index creation failed (non-fatal). Indexes will be created on next startup.");
+    return Mono.empty();
+})
+.block();
+```
+
+---
+
 ## Cómo Levantar el Servicio
 
 ### Opción 1: Local (IntelliJ / terminal)
 
 ```bash
 # 1. Levantar infraestructura (desde raíz del monorepo)
-docker compose up -d mongodb mongo-init-replica arka-redis kafka kafka-ui
+docker compose up -d mongodb mongo-init-replica redis kafka kafka-ui
 
 # 2. Ejecutar el servicio
 cd ms-catalog
@@ -238,7 +291,7 @@ cd ms-catalog
 
 ```bash
 # Desde raíz del monorepo
-docker compose up -d mongodb mongo-init-replica arka-redis kafka kafka-ui
+docker compose up -d mongodb mongo-init-replica redis kafka kafka-ui
 docker compose up ms-catalog
 ```
 

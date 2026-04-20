@@ -4,49 +4,27 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
-import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import static com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.ANY;
 import static com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.NONE;
 
 /**
  * Redis configuration for reactive cache operations.
- * Provides ReactiveRedisTemplate with String serialization and ObjectMapper for JSON.
+ * ReactiveRedisTemplate<String,String> is already auto-configured by Spring Boot
+ * as 'reactiveStringRedisTemplate' — no need to redefine it here.
  */
 @Configuration
 public class RedisConfig {
 
     /**
-     * Configure ReactiveRedisTemplate with String serializers for both key and value.
-     * Values will be JSON strings serialized by ObjectMapper.
-     */
-    @Bean
-    public ReactiveRedisTemplate<String, String> reactiveRedisTemplate(
-            ReactiveRedisConnectionFactory connectionFactory) {
-        
-        StringRedisSerializer serializer = new StringRedisSerializer();
-        
-        RedisSerializationContext<String, String> serializationContext = 
-                RedisSerializationContext.<String, String>newSerializationContext()
-                        .key(serializer)
-                        .value(serializer)
-                        .hashKey(serializer)
-                        .hashValue(serializer)
-                        .build();
-        
-        return new ReactiveRedisTemplate<>(connectionFactory, serializationContext);
-    }
-
-    /**
      * Configure ObjectMapper for JSON serialization of domain models.
      * Registers JavaTimeModule for Instant serialization.
      * Configures for Java records support and ignores getters/setters.
+     * Named 'jacksonObjectMapper' to avoid conflict with the reactivecommons
+     * ObjectMapper bean defined in ObjectMapperConfig (app-service).
      */
     @Bean
-    public ObjectMapper objectMapper() {
+    public ObjectMapper jacksonObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         // findAndRegisterModules discovers JavaTimeModule (and others) from the classpath
         mapper.findAndRegisterModules();

@@ -48,6 +48,10 @@ public class MongoIndexConfig {
 
                     .doOnSuccess(v -> log.info("MongoDB indexes created successfully"))
                     .doOnError(e -> log.error("Error creating MongoDB indexes", e))
+                    .onErrorResume(e -> {
+                        log.warn("MongoDB index creation failed (non-fatal). Indexes will be created on next startup once a primary is available.");
+                        return reactor.core.publisher.Mono.empty();
+                    })
                     .block();
         };
     }

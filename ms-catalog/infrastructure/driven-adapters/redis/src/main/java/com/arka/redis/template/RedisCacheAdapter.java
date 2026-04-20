@@ -5,6 +5,7 @@ import com.arka.model.product.gateways.ProductCachePort;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
@@ -29,7 +30,7 @@ public class RedisCacheAdapter implements ProductCachePort {
     private final ObjectMapper objectMapper;
     private final Duration ttl;
 
-    public RedisCacheAdapter(ReactiveRedisTemplate<String, String> reactiveRedisTemplate,
+    public RedisCacheAdapter(@Qualifier("reactiveStringRedisTemplate") ReactiveRedisTemplate<String, String> reactiveRedisTemplate,
                              ObjectMapper objectMapper,
                              @Value("${cache.redis.ttl:3600}") long ttlSeconds) {
         this.reactiveRedisTemplate = reactiveRedisTemplate;
