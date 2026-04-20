@@ -60,7 +60,8 @@ class RedisCacheAdapterTest {
     void setUp() {
         objectMapper = SHARED_MAPPER;
         
-        redisCacheAdapter = new RedisCacheAdapter(reactiveRedisTemplate, objectMapper);
+        // Constructor expects: ReactiveRedisTemplate, ObjectMapper, ttlSeconds (long)
+        redisCacheAdapter = new RedisCacheAdapter(reactiveRedisTemplate, objectMapper, 3600L);
 
         testProduct = Product.builder()
                 .id(UUID.randomUUID())

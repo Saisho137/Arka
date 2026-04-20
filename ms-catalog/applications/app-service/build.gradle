@@ -13,6 +13,9 @@ dependencies {
     runtimeOnly('org.springframework.boot:spring-boot-devtools')
     implementation 'tools.jackson.core:jackson-databind'
     
+    // Springdoc OpenAPI for Swagger UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2'
+    
     // Testing dependencies
     testImplementation 'io.projectreactor:reactor-test'
     testImplementation 'org.mockito:mockito-core'
