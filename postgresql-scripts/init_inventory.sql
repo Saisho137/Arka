@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS stock (
     reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
     available_quantity INTEGER GENERATED ALWAYS AS (quantity - reserved_quantity) STORED,
     depletion_threshold INTEGER NOT NULL DEFAULT 10 CHECK (depletion_threshold >= 0),
-    updated_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     version BIGINT NOT NULL DEFAULT 1,
     CONSTRAINT chk_reserved_not_exceeds_quantity CHECK (reserved_quantity <= quantity)
 );
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
     event_type event_type NOT NULL,
     payload JSONB NOT NULL,
-    partition_key VARCHAR(50),
+    partition_key VARCHAR(50) NOT NULL,
     status outbox_status NOT NULL DEFAULT 'PENDING',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
