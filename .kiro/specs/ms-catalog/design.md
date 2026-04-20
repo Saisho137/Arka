@@ -16,10 +16,10 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 6. **Sin MapStruct**: Mappers manuales con métodos estáticos y `@Builder`.
 7. **Organización de UseCases**: 1 UseCase por entidad de dominio con múltiples métodos públicos (no 1 UseCase por operación con `execute()`).
 8. **Patrón Controller → Handler → UseCase**: El `Controller` es thin (solo HTTP concerns), el `Handler` (`@Component`) orquesta UseCase + mapeo + `ResponseEntity`/`Flux`.
-9. **Schedulers externalizados**: El intervalo del `KafkaOutboxRelay` se configura desde `application.yaml` sin defaults inline en `@Scheduled` (ver §D.6 de patrones-y-estandares-codigo.md).
-10. **Documentación API con Springdoc/OpenAPI**: Swagger UI disponible en `/swagger-ui.html`, especificación JSON en `/api-docs`. Anotaciones `@Tag`, `@Operation` y `@ApiResponse` en el controlador REST (ver §D.2 de patrones-y-estandares-codigo.md).
-11. **Spring Profiles (local/docker)**: 3 archivos YAML por microservicio (`application.yaml`, `application-local.yaml`, `application-docker.yaml`) para cambio automático entre BD local y contenedores (ver §B.10 de patrones-y-estandares-codigo.md).
-12. **Kafka con `reactor-kafka` directo**: No se usa `reactive-commons` (`DomainEventBus`). El relay usa `KafkaSender` para control explícito de partition key, tópico y ack (ver §B.11 de patrones-y-estandares-codigo.md).
+9. **Schedulers externalizados**: El intervalo del `KafkaOutboxRelay` se configura desde `application.yaml` sin defaults inline en `@Scheduled` (ver §D.6 de 06-patrones-y-estandares.md).
+10. **Documentación API con Springdoc/OpenAPI**: Swagger UI disponible en `/swagger-ui.html`, especificación JSON en `/api-docs`. Anotaciones `@Tag`, `@Operation` y `@ApiResponse` en el controlador REST (ver §D.2 de 06-patrones-y-estandares.md).
+11. **Spring Profiles (local/docker)**: 3 archivos YAML por microservicio (`application.yaml`, `application-local.yaml`, `application-docker.yaml`) para cambio automático entre BD local y contenedores (ver §B.10 de 06-patrones-y-estandares.md).
+12. **Kafka con `reactor-kafka` directo**: No se usa `reactive-commons` (`DomainEventBus`). El relay usa `KafkaSender` para control explícito de partition key, tópico y ack (ver §B.11 de 06-patrones-y-estandares.md).
 13. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, configuración de reactor-kafka, Springdoc), se DEBE reutilizar la implementación ya probada de `ms-inventory` como referencia, adaptando únicamente los aspectos específicos del dominio (nombres de entidades, tópicos, payloads, constante `DomainEventEnvelope.MS_SOURCE`). Esto garantiza consistencia y reduce errores.
 14. **Versionado unificado de librerías**: Todas las librerías transversales (reactor-kafka, springdoc-openapi, jackson, etc.) DEBEN usar exactamente las mismas versiones en TODO el monorepo. Consultar `ms-inventory/build.gradle` como referencia canónica para versiones.
 15. **CRÍTICO — Generación de módulos con Scaffold Plugin**: TODOS los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold (`./gradlew generateModel`, `generateUseCase`, `generateDrivenAdapter`, `generateEntryPoint`, `generateHelper`). La creación manual de estructura de módulos está PROHIBIDA. Esto garantiza consistencia arquitectónica, registro automático en `settings.gradle`, y validación con `./gradlew validateStructure`. Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos.
@@ -304,7 +304,7 @@ public record ErrorResponse(String code, String message) {}
 
 ### Controlador REST y Handler
 
-> **Patrón Controller → Handler → UseCase (ver §4.2 de patrones-y-estandares-codigo.md):** El `ProductController` es thin — solo anotaciones HTTP, validación y delegación al `ProductHandler`. El `ProductHandler` (`@Component`) orquesta la llamada al UseCase, el mapeo vía `ProductMapper`/`CategoryMapper`/`ReviewMapper` y el wrapping en `ResponseEntity`. Los endpoints de recurso único retornan `Mono<ResponseEntity<T>>`; los endpoints de colección retornan `Flux<T>` directamente para streaming reactivo (sin `collectList()`).
+> **Patrón Controller → Handler → UseCase (ver §4.2 de 06-patrones-y-estandares.md):** El `ProductController` es thin — solo anotaciones HTTP, validación y delegación al `ProductHandler`. El `ProductHandler` (`@Component`) orquesta la llamada al UseCase, el mapeo vía `ProductMapper`/`CategoryMapper`/`ReviewMapper` y el wrapping en `ResponseEntity`. Los endpoints de recurso único retornan `Mono<ResponseEntity<T>>`; los endpoints de colección retornan `Flux<T>` directamente para streaming reactivo (sin `collectList()`).
 
 | Componente               | Responsabilidad                                                                                        | Retorno                                                            |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
@@ -458,7 +458,7 @@ public class InvalidReviewException extends DomainException { /* 400, INVALID_RE
 
 ### Driven Adapter — Kafka Outbox Relay con `reactor-kafka`
 
-**Decisión:** Se usa `reactor-kafka` (`KafkaSender`) directamente en lugar de `reactive-commons` (`DomainEventBus`) para control explícito de partition key, tópico y ack (ver §B.11 de patrones-y-estandares-codigo.md).
+**Decisión:** Se usa `reactor-kafka` (`KafkaSender`) directamente en lugar de `reactive-commons` (`DomainEventBus`) para control explícito de partition key, tópico y ack (ver §B.11 de 06-patrones-y-estandares.md).
 
 **Justificación:** El Outbox Pattern requiere un relay que lee eventos PENDING de la colección `outbox_events`, los publica a Kafka con el `productId` como partition key al tópico `product-events`, y solo marca como PUBLISHED tras recibir el ack de Kafka. `reactive-commons` abstrae el broker y no expone el control necesario para este flujo.
 
@@ -913,7 +913,7 @@ spring:
     bootstrap-servers: arka-kafka:9092
 ```
 
-Ver §B.10 de patrones-y-estandares-codigo.md para detalles completos.
+Ver §B.10 de 06-patrones-y-estandares.md para detalles completos.
 
 ---
 
@@ -990,7 +990,7 @@ public class ProductController {
 | OpenAPI JSON | `http://localhost:8081/api-docs`        | Especificación JSON  |
 | OpenAPI YAML | `http://localhost:8081/api-docs.yaml`   | Especificación YAML  |
 
-Ver §D.2 de patrones-y-estandares-codigo.md para detalles completos.
+Ver §D.2 de 06-patrones-y-estandares.md para detalles completos.
 
 ---
 

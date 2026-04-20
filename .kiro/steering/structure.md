@@ -108,7 +108,7 @@ entry-points    → :model, :usecase
 - Value Objects: `com.arka.valueobjects`
 - Use Cases: `com.arka.usecase`
 
-## Domain Modeling (from docs/patrones-y-estandares-codigo.md)
+## Domain Modeling (from docs/06-patrones-y-estandares.md)
 
 - Records as default for entities, VOs, commands, events, DTOs — `@Builder(toBuilder = true)`
 - Classes with Lombok only when inheritance or framework mutability required

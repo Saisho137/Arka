@@ -2,7 +2,7 @@
 
 ## 1. Creación de Pedido — Happy Path (Fase 1 MVP)
 
-```
+```text
 Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                                       │
                                           Valida request
@@ -32,7 +32,7 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
 
 ## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment)
 
-```
+```text
 ms-order ──gRPC──▶ ms-inventory (stock reservado)
     │
     Guarda orden PENDIENTE_PAGO
@@ -51,7 +51,7 @@ ms-order ──gRPC──▶ ms-inventory (stock reservado)
 
 ## 3. Stock Insuficiente — Fail-Fast
 
-```
+```text
 ms-order ──gRPC──▶ ms-inventory
                         │
                   SELECT ... FOR UPDATE
@@ -67,7 +67,7 @@ ms-order ◄── 409 Conflict al cliente
 
 ## 4. Fallo de Pago — Compensación (Fase 2)
 
-```
+```text
 ms-payment ──PaymentFailed──▶ Kafka
                                   │
                             ms-order (consume)
@@ -83,7 +83,7 @@ ms-payment ──PaymentFailed──▶ Kafka
 
 ## 5. Registro de Producto → Stock Inicial
 
-```
+```text
 Admin ──POST /products──▶ ms-catalog
                               │
                         Valida (SKU único, precio > 0)
@@ -100,7 +100,7 @@ Admin ──POST /products──▶ ms-catalog
 
 ## 6. Actualización de Estado por Admin
 
-```
+```text
 Admin ──PUT /orders/{id}/status──▶ ms-order
                                        │
                                  Valida transición (CONFIRMADO → EN_DESPACHO)

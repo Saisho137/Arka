@@ -306,7 +306,7 @@ public class EventStrategyFactory {
 }
 ```
 
-**Nota:** `Optional` es válido aquí porque `resolve()` es un método utilitario puro sin I/O que no participa en cadenas reactivas (ver §1.1 de patrones-y-estandares-codigo.md).
+**Nota:** `Optional` es válido aquí porque `resolve()` es un método utilitario puro sin I/O que no participa en cadenas reactivas (ver §1.1 de 06-patrones-y-estandares.md).
 
 #### TemplateEngine (Motor de Plantillas)
 

@@ -6,11 +6,11 @@
 
 ## Herramientas y UIs
 
-| Recurso                   | URL                                       | Descripción                                                         |
-| ------------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
-| Kafka UI                  | http://localhost:8080                     | Visualización de tópicos, mensajes, consumer groups y offsets       |
-| LocalStack Dashboard      | http://localhost:4566/\_localstack/health | Estado de los servicios AWS emulados                                |
-| LocalStack (endpoint AWS) | http://localhost:4566                     | Emulador AWS: Secrets Manager, S3, SES, API Gateway, CloudFormation |
+| Recurso                   | URL                                         | Descripción                                                         |
+| ------------------------- | ------------------------------------------- | ------------------------------------------------------------------- |
+| Kafka UI                  | <http://localhost:8080>                     | Visualización de tópicos, mensajes, consumer groups y offsets       |
+| LocalStack Dashboard      | <http://localhost:4566/\_localstack/health> | Estado de los servicios AWS emulados                                |
+| LocalStack (endpoint AWS) | <http://localhost:4566>                     | Emulador AWS: Secrets Manager, S3, SES, API Gateway, CloudFormation |
 
 ---
 
@@ -18,10 +18,10 @@
 
 Disponible en los microservicios que ya tienen entry-points REST implementados:
 
-| Servicio     | Swagger UI                            | OpenAPI JSON                   | OpenAPI YAML                        |
-| ------------ | ------------------------------------- | ------------------------------ | ----------------------------------- |
-| ms-catalog   | http://localhost:8084/swagger-ui.html | http://localhost:8084/api-docs | http://localhost:8084/api-docs.yaml |
-| ms-inventory | http://localhost:8082/swagger-ui.html | http://localhost:8082/api-docs | http://localhost:8082/api-docs.yaml |
+| Servicio     | Swagger UI                              | OpenAPI JSON                     | OpenAPI YAML                          |
+| ------------ | --------------------------------------- | -------------------------------- | ------------------------------------- |
+| ms-catalog   | <http://localhost:8084/swagger-ui.html> | <http://localhost:8084/api-docs> | <http://localhost:8084/api-docs.yaml> |
+| ms-inventory | <http://localhost:8082/swagger-ui.html> | <http://localhost:8082/api-docs> | <http://localhost:8082/api-docs.yaml> |
 
 ---
 
@@ -29,17 +29,17 @@ Disponible en los microservicios que ya tienen entry-points REST implementados:
 
 Todos los microservicios exponen el endpoint de Spring Actuator:
 
-| Servicio         | Health Check                          |
-| ---------------- | ------------------------------------- |
-| ms-order         | http://localhost:8081/actuator/health |
-| ms-inventory     | http://localhost:8082/actuator/health |
-| ms-payment       | http://localhost:8083/actuator/health |
-| ms-catalog       | http://localhost:8084/actuator/health |
-| ms-notifications | http://localhost:8085/actuator/health |
-| ms-cart          | http://localhost:8086/actuator/health |
-| ms-reporter      | http://localhost:8087/actuator/health |
-| ms-shipping      | http://localhost:8088/actuator/health |
-| ms-provider      | http://localhost:8089/actuator/health |
+| Servicio         | Health Check                            |
+| ---------------- | --------------------------------------- |
+| ms-order         | <http://localhost:8081/actuator/health> |
+| ms-inventory     | <http://localhost:8082/actuator/health> |
+| ms-payment       | <http://localhost:8083/actuator/health> |
+| ms-catalog       | <http://localhost:8084/actuator/health> |
+| ms-notifications | <http://localhost:8085/actuator/health> |
+| ms-cart          | <http://localhost:8086/actuator/health> |
+| ms-reporter      | <http://localhost:8087/actuator/health> |
+| ms-shipping      | <http://localhost:8088/actuator/health> |
+| ms-provider      | <http://localhost:8089/actuator/health> |
 
 ---
 
@@ -110,7 +110,7 @@ mongosh "mongodb://localhost:27017/catalog_db" -u <MONGO_USER> -p <MONGO_PASSWOR
 | ---------- | ----------- | -------------------- | ----------------------------------- |
 | arka-redis | **6379**    | ms-catalog           | Cache-Aside para productos (TTL 1h) |
 
-### Conexión
+### Conexión Redis
 
 ```bash
 # redis-cli

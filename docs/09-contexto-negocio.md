@@ -29,11 +29,13 @@ Plataforma e-commerce **B2B** para distribución de accesorios de PC en Colombia
 
 ## Decisiones Estratégicas
 
-1. **BFF descartado** — API Gateway como único punto de entrada REST
+1. **BFF descartado** — API Gateway como único punto de entrada REST. Clientes (Web/Móvil) interactúan directamente con el API GW via HTTPS/REST
 2. **Reseñas en ms-catalog** — Subdocumentos en MongoDB, no microservicio separado
-3. **Pago B2B offline en Fase 1** — Facturación diferida, pasarelas en Fase 2
-4. **ms-reporter imperativo** — Único servicio con Virtual Threads para CPU-bound
+3. **Pago B2B offline en Fase 1** — Facturación diferida (30-60 días), pasarelas en Fase 2
+4. **ms-reporter imperativo** — Único servicio con Virtual Threads para CPU-bound (archivos hasta 500MB en S3)
 5. **Naming: kebab-case** con prefijo `ms-` (ms-catalog, ms-inventory, etc.)
+6. **Zero Trust** — Autenticación delegada a Entra ID / Cognito. API Gateway valida JWT, inyecta `X-User-Email`, aplica Tenant Restrictions (bloquea `@gmail.com`). Microservicios 100% stateless
+7. **Comunicación interna** — gRPC síncrono para validaciones críticas (reserva stock, precio actual); Kafka asíncrono para Sagas, Event Sourcing y desacoplamiento temporal
 
 ## Historias de Usuario
 

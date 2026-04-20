@@ -112,14 +112,14 @@ Esto levanta automáticamente toda la infraestructura necesaria (PostgreSQL, Mon
 
 ## URLs Útiles
 
-| Recurso              | URL                                   |
-| -------------------- | ------------------------------------- |
-| Kafka UI             | http://localhost:8080                 |
-| LocalStack           | http://localhost:4566                 |
-| ms-catalog Swagger   | http://localhost:8084/swagger-ui.html |
-| ms-inventory Swagger | http://localhost:8082/swagger-ui.html |
-| ms-catalog Health    | http://localhost:8084/actuator/health |
-| ms-inventory Health  | http://localhost:8082/actuator/health |
+| Recurso              | URL                                     |
+| -------------------- | --------------------------------------- |
+| Kafka UI             | <http://localhost:8080>                 |
+| LocalStack           | <http://localhost:4566>                 |
+| ms-catalog Swagger   | <http://localhost:8084/swagger-ui.html> |
+| ms-inventory Swagger | <http://localhost:8082/swagger-ui.html> |
+| ms-catalog Health    | <http://localhost:8084/actuator/health> |
+| ms-inventory Health  | <http://localhost:8082/actuator/health> |
 
 ---
 

@@ -10,15 +10,15 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa PostgreSQL 
 
 1. **Lock Pesimista para reservas**: `SELECT ... FOR UPDATE` en transacciones R2DBC ultra-cortas garantiza atomicidad y previene race conditions en la reserva de stock. Se usa exclusivamente en el flujo gRPC de reserva.
 2. **Lock Optimista para ajustes manuales**: El campo `version` (BIGINT) previene actualizaciones perdidas en el endpoint `PUT /inventory/{sku}/stock` mediante versionado optimista.
-3. **Transactional Outbox Pattern**: Los eventos de dominio se insertan en la tabla `outbox_events` dentro de la misma transacción R2DBC que la escritura de negocio, garantizada por `TransactionalGateway` (ver §D.1 de patrones-y-estandares-codigo.md). Un relay asíncrono (poll configurable desde YAML) los publica a Kafka.
+3. **Transactional Outbox Pattern**: Los eventos de dominio se insertan en la tabla `outbox_events` dentro de la misma transacción R2DBC que la escritura de negocio, garantizada por `TransactionalGateway` (ver §D.1 de 06-patrones-y-estandares.md). Un relay asíncrono (poll configurable desde YAML) los publica a Kafka.
 4. **`TransactionalGateway` en UseCases (no `@Transactional`)**: Los UseCases que modifican múltiples tablas arman el pipeline reactivo con su lógica de negocio y lo delegan a `TransactionalGateway.executeInTransaction()`. En infraestructura, `R2dbcTransactionalAdapter` implementa este port usando `TransactionalOperator` de Spring. El dominio no importa dependencias de Spring. Rollback automático ante cualquier `onError`. Los driven adapters NO manejan transacciones — la transacción la define el UseCase vía el gateway.
 5. **Idempotencia en consumidores**: La tabla `processed_events` con `event_id` como PK garantiza procesamiento exactamente-una-vez de eventos Kafka.
 6. **Columna generada `available_quantity`**: Calculada como `quantity - reserved_quantity` a nivel de PostgreSQL, eliminando inconsistencias entre campos.
 7. **CHECK constraints como última defensa**: `quantity >= 0` y `reserved_quantity >= 0` a nivel de BD previenen estados inválidos incluso ante bugs de aplicación.
 8. **Records como estándar**: Todas las entidades, VOs, comandos, eventos y DTOs son `record` con `@Builder(toBuilder = true)`.
 9. **Sin MapStruct**: Mappers manuales con métodos estáticos y `@Builder`.
-10. **Schedulers externalizados**: Los intervalos de `KafkaOutboxRelay` y `ExpiredReservationScheduler` se configuran desde `application.yaml` sin defaults inline en la anotación `@Scheduled` (ver §D.6 de patrones-y-estandares-codigo.md).
-11. **Documentación API con Springdoc/OpenAPI**: Swagger UI disponible en `/swagger-ui.html`, especificación JSON en `/api-docs`. Anotaciones `@Tag`, `@Operation` y `@ApiResponse` en el controlador REST (ver §D.2 de patrones-y-estandares-codigo.md).
+10. **Schedulers externalizados**: Los intervalos de `KafkaOutboxRelay` y `ExpiredReservationScheduler` se configuran desde `application.yaml` sin defaults inline en la anotación `@Scheduled` (ver §D.6 de 06-patrones-y-estandares.md).
+11. **Documentación API con Springdoc/OpenAPI**: Swagger UI disponible en `/swagger-ui.html`, especificación JSON en `/api-docs`. Anotaciones `@Tag`, `@Operation` y `@ApiResponse` en el controlador REST (ver §D.2 de 06-patrones-y-estandares.md).
 
 ---
 
@@ -354,7 +354,7 @@ public record ErrorResponse(String code, String message) {}
 
 #### Controlador REST y Handler
 
-> **Patrón Controller → Handler → UseCase (ver §4.2 de patrones-y-estandares-codigo.md):** El `StockController` es thin — solo anotaciones HTTP, validación y delegación al `StockHandler`. El `StockHandler` (`@Component`) orquesta la llamada al UseCase, el mapeo vía `StockMapper`/`StockMovementMapper` y el wrapping en `ResponseEntity`. Los endpoints de recurso único retornan `Mono<ResponseEntity<T>>`; los endpoints de colección retornan `Flux<T>` directamente para streaming reactivo (sin `collectList()`).
+> **Patrón Controller → Handler → UseCase (ver §4.2 de 06-patrones-y-estandares.md):** El `StockController` es thin — solo anotaciones HTTP, validación y delegación al `StockHandler`. El `StockHandler` (`@Component`) orquesta la llamada al UseCase, el mapeo vía `StockMapper`/`StockMovementMapper` y el wrapping en `ResponseEntity`. Los endpoints de recurso único retornan `Mono<ResponseEntity<T>>`; los endpoints de colección retornan `Flux<T>` directamente para streaming reactivo (sin `collectList()`).
 
 | Componente               | Responsabilidad                                                                      | Retorno                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |

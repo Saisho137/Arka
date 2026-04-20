@@ -8,6 +8,16 @@
 - Nuevo evento = nuevo `eventType`, sin cambio de infraestructura
 - Consumidores filtran por `eventType` e ignoran eventos desconocidos (log warning)
 
+### Justificación: Tópico por Servicio vs Tópico por Evento
+
+| Criterio                | Tópico por Evento (❌ descartado)               | Tópico por Servicio (✅ adoptado)                                         |
+| ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
+| Cantidad de tópicos     | 13+ (crece con cada nuevo evento)               | **7 fijos** (crece solo con nuevo microservicio)                          |
+| Complejidad operacional | Alta: más ACLs, particiones, monitoreo          | **Baja:** un tópico por equipo/servicio owner                             |
+| Ordenamiento de eventos | Sin garantía entre tópicos del mismo dominio    | **Garantizado por partición** con `aggregateId` como key                  |
+| Evolución del esquema   | Nuevo evento = nuevo tópico + config + permisos | **Nuevo evento = nuevo `eventType`**, sin cambio de infraestructura       |
+| Consistencia causal     | Fragmentada entre múltiples tópicos             | **Natural:** todos los eventos de un dominio fluyen por un canal ordenado |
+
 ## Configuración
 
 - **Particiones:** 3 por tópico
@@ -96,7 +106,7 @@
 
 ---
 
-## Event Envelope (Sobre Estándar)
+## Event Envelope ("Sobre" Estándar)
 
 Todos los eventos siguen este formato:
 
@@ -113,7 +123,7 @@ Todos los eventos siguen este formato:
 
 ### Reglas de Consumo
 
-1. Deserializar el sobre → leer `eventType`
+1. Deserializar el Sobre → leer `eventType`
 2. Si es relevante → procesar `payload`
 3. Si es desconocido → **ignorar con log warning** (tolerancia a evolución)
 4. Nunca fallar por un `eventType` no reconocido
@@ -148,3 +158,11 @@ Debido a la discontinuación de `reactor-kafka` y la eliminación de `ReactiveKa
 - **Producer:** `reactor-kafka` 1.3.25 (`KafkaSender`) — control de partition key y ack explícito para Outbox
 - **Consumer:** `reactor-kafka` 1.3.25 (`KafkaReceiver`) — única opción reactiva disponible en Spring Boot 4.0.3
 - **No usar:** `reactive-commons` (DomainEventBus) ni `@KafkaListener` en servicios reactivos
+
+---
+
+## Referencia: Estado de Kafka Reactivo en Spring Boot 4.x
+
+Para profundizar en la discontinuación de `reactor-kafka`, la resolución del `NoSuchMethodError` con Kafka 8 y las opciones arquitectónicas disponibles, ver:
+
+→ [caso-kafka-reactivo.md](caso-kafka-reactivo.md)
