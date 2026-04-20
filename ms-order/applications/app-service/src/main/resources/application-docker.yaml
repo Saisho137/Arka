@@ -1,6 +1,21 @@
 # Perfil DOCKER — cuando corre dentro de Docker Compose
+# Solo sobreescribe los campos que difieren del application.yaml base.
+# Apunta al hostname del contenedor PostgreSQL definido en compose.yaml.
 spring:
   r2dbc:
     url: r2dbc:postgresql://arka-db-orders:5432/db_orders
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:29092
+
+grpc:
+  client:
+    ms-inventory:
+      address: "static://arka-ms-inventory:9090"
+
+logging:
+  level:
+    com.arka: DEBUG
+    org.springframework.transaction: DEBUG
+    org.springframework.data.r2dbc: DEBUG

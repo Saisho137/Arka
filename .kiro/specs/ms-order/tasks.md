@@ -29,21 +29,29 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 ## Tareas
 
-- [ ] 1. Configurar estructura del proyecto y esquema de base de datos
+- [x] 1. Configurar estructura del proyecto y esquema de base de datos
   - [x] 1.1 Crear script SQL de inicialización con las tablas `orders`, `order_items`, `order_state_history`, `outbox_events` y `processed_events` según el esquema del diseño (índices, columna generada `subtotal`, constraints)
     - Incluir `CREATE TABLE`, índices y constraints CHECK
     - Ubicado en `postgresql-scripts/init_orders.sql`
     - _Requisitos: 1.3, 4.5, 7.1, 8.3_
-  - [ ] 1.2 Configurar `application.yml` con conexión R2DBC a PostgreSQL (`order_db`), propiedades de Kafka (bootstrap-servers, consumer group `order-service-group`, tópicos) y propiedades gRPC del cliente ms-inventory
+  - [x] 1.2 Configurar `application.yml` con conexión R2DBC a PostgreSQL (`order_db`), propiedades de Kafka (bootstrap-servers, consumer group `order-service-group`, tópicos) y propiedades gRPC del cliente ms-inventory
     - Configurar perfiles `default` y `local`
     - Externalizar intervalo del relay: `scheduler.outbox-relay.interval: 5000` (sin default inline, §D.6)
     - Configurar Springdoc/OpenAPI: `springdoc.api-docs.path`, `springdoc.swagger-ui.path/enabled` (§D.2)
     - _Requisitos: 7.3, 8.1, 9.1_
-  - [ ] 1.3 Agregar dependencias en `build.gradle`: R2DBC PostgreSQL, Spring Kafka (reactive), gRPC client (protobuf), jqwik, reactor-test, Lombok, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
+  - [x] 1.3 Agregar dependencias en `build.gradle`: R2DBC PostgreSQL, Spring Kafka (reactive), gRPC client (protobuf), jqwik, reactor-test, Lombok, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
     - **OBLIGATORIO:** Seguir tabla de **Versionado Unificado** en `reusability.md` para todas las versiones
     - Verificar compatibilidad con Spring Boot 4.0.3 y Scaffold 4.2.0
+    - **En `main.gradle` (subprojects):** Agregar `net.jqwik:jqwik:1.9.2` y `com.tngtech.archunit:archunit:1.4.1` en testImplementation ✅
+    - **En `app-service/build.gradle`:** Agregar solo `springdoc-openapi-starter-webflux-ui:3.0.2` y `jackson-databind` ✅
+    - **NOTA:** Las demás dependencias se agregarán en sus módulos específicos cuando se creen con Scaffold:
+      - R2DBC + PostgreSQL → tarea 6.1 (`r2dbc-postgresql` module)
+      - Kafka producer (reactor-kafka:1.3.25) → tarea 10.1 (`kafka-producer` module)
+      - Kafka consumer → tarea 10.3 (`kafka-consumer` module)
+      - gRPC client → tarea 6.6 (`grpc-inventory` module)
+      - WebFlux → tarea 8.4 (`reactive-web` module)
     - _Requisitos: transversal_
-  - [ ] 1.4 Configurar Spring Profiles (local/docker)
+  - [x] 1.4 Configurar Spring Profiles (local/docker)
     - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados (PostgreSQL, Kafka)
     - Crear `application-docker.yaml` con hostnames de contenedores (`arka-postgres`, `arka-kafka`) y puertos internos
     - Configurar `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` en `application.yaml`
@@ -157,6 +165,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [ ] 6. Implementar adaptadores de infraestructura (`infrastructure/driven-adapters`)
   - [ ] 6.1 Implementar `R2dbcOrderAdapter` (implementa `OrderRepository`): operaciones CRUD con `DatabaseClient` de R2DBC, incluyendo `findByFilters` con filtros dinámicos y paginación
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateDrivenAdapter --type=r2dbc`
+    - **Agregar dependencias en `r2dbc-postgresql/build.gradle`:** `spring-boot-starter-data-r2dbc`, `r2dbc-postgresql` (versiones del Spring BOM)
     - **OBLIGATORIO (reusability.md #4):** Copiar patrón DTO + Mapper + SpringDataRepository de `ms-inventory/infrastructure/driven-adapters/r2dbc-postgresql/.../stock/`
     - Mapeo manual de filas a records con `@Builder`
     - _Requisitos: 1.3, 2.1, 3.1, 5.1_
@@ -187,6 +196,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [ ] 8. Implementar entry-points (`infrastructure/entry-points`)
   - [ ] 8.1 Crear los DTOs de request: `CreateOrderRequest`, `OrderItemRequest`, `ChangeStatusRequest`, `CancelOrderRequest` con Bean Validation (`@NotNull`, `@NotBlank`, `@NotEmpty`, `@Positive`, `@Valid`)
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateEntryPoint --type=webflux --router=false`
+    - **Agregar dependencias en `reactive-web/build.gradle`:** `spring-boot-starter-webflux`, `spring-boot-starter-validation` (versiones del Spring BOM)
     - Records con `@Builder(toBuilder=true)`
     - _Requisitos: 1.1, 1.8_
   - [ ] 8.2 Crear los DTOs de response: `OrderResponse`, `OrderItemResponse`, `OrderSummaryResponse`, `ErrorResponse`
@@ -241,6 +251,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Valida: Requisitos 7.5, 7.6**
   - [ ] 10.3 Implementar `KafkaEventConsumer`: consumer suscrito a `payment-events` y `shipping-events` (consumer group `order-service-group`). Deserializar sobre estándar, filtrar por eventType. Ignorar tipos desconocidos con log WARN. Delegar a `ProcessExternalEventUseCase`.
     - **CRÍTICO**: Generar módulo manualmente como `kafka-consumer` en `infrastructure/entry-points/` (o con Scaffold: `cd ms-order && ./gradlew generateEntryPoint --type=generic --name=kafka-consumer`)
+    - **Agregar dependencias en `kafka-consumer/build.gradle`:** `spring-kafka`, `reactor-kafka:1.3.25`, `jackson-databind` (mismas versiones que ms-inventory)
     - **OBLIGATORIO (reusability.md #6):** Copiar y adaptar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`:
       - `KafkaConsumerConfig.java` → crear beans `KafkaReceiver<String, String>` por tópico (`paymentEventsReceiver`, `shippingEventsReceiver`) con consumer group `order-service-group`
       - `KafkaEventConsumer.java` → adaptar: `startConsuming()`, switch por eventType (PaymentProcessed, PaymentFailed, ShippingDispatched para Fase 2+), per-message `acknowledge()`, `onErrorResume` para errores irrecuperables, retry con backoff exponencial
@@ -259,6 +270,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 - [ ] 11. Integración final y configuración de Spring
   - [ ] 11.1 Configurar beans de Spring en `app-service`: inyección de dependencias para todos los UseCases, adaptadores R2DBC, cliente gRPC, relay outbox y consumidor Kafka. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio.
+    - **Actualizar `app-service/build.gradle`:** Agregar referencias a los módulos de infraestructura creados: `implementation project(':reactive-web')`, `implementation project(':r2dbc-postgresql')`, `implementation project(':kafka-producer')`, `implementation project(':kafka-consumer')`, `implementation project(':grpc-inventory')` (si existe)
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`) — **OBLIGATORIO (reusability.md #10):** copiar patrón de `ms-inventory` (§D.2)
     - _Requisitos: transversal_
   - [ ] 11.2 Configurar `@Transactional` en los UseCases que requieren atomicidad (CreateOrderUseCase, ChangeOrderStatusUseCase, CancelOrderUseCase, ProcessExternalEventUseCase) para garantizar que escritura de negocio + outbox + historial ocurren en la misma transacción R2DBC

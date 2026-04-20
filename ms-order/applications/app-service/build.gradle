@@ -1,10 +1,30 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+    // Domain modules
     implementation project(':model')
     implementation project(':usecase')
+    
+    // Infrastructure modules (will be added as they are created with Scaffold)
+    // implementation project(':reactive-web')
+    // implementation project(':r2dbc-postgresql')
+    // implementation project(':kafka-producer')
+    // implementation project(':kafka-consumer')
+    // implementation project(':grpc-inventory')
+    
+    // Spring Boot starter (minimal)
     implementation 'org.springframework.boot:spring-boot-starter'
-    runtimeOnly('org.springframework.boot:spring-boot-devtools')
+    
+    // Springdoc OpenAPI (API documentation for the entire service)
+    implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2'
+    
+    // Jackson for JSON serialization (used by multiple modules)
+    implementation 'tools.jackson.core:jackson-databind'
+    
+    // Development tools
+    runtimeOnly 'org.springframework.boot:spring-boot-devtools'
+    
+    // Testing
     testImplementation 'com.tngtech.archunit:archunit:1.4.1'
     testImplementation 'tools.jackson.core:jackson-databind'
 }

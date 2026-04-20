@@ -1,16 +1,64 @@
 server:
-  port: ${MS_ORDER_PORT:8081}
+  port: "${MS_ORDER_PORT:8081}"
+
+grpc:
+  client:
+    ms-inventory:
+      address: "static://${MS_INVENTORY_GRPC_HOST:localhost}:${MS_INVENTORY_GRPC_PORT:9090}"
+      negotiationType: plaintext
 
 spring:
   application:
-    name: ms-order
+    name: "ms-order"
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
+    active: "${SPRING_PROFILES_ACTIVE:local}"
   r2dbc:
-    url: r2dbc:postgresql://${R2DBC_HOST:localhost}:${R2DBC_PORT:5432}/${R2DBC_DB:db_orders}
-    username: ${R2DBC_USER:arka}
-    password: ${R2DBC_PASSWORD:arkaSecret2025}
+    url: "r2dbc:postgresql://${R2DBC_HOST:localhost}:${R2DBC_PORT:5432}/${R2DBC_DB:db_orders}"
+    username: "${R2DBC_USER:arka}"
+    password: "${R2DBC_PASSWORD:arkaSecret2025}"
     pool:
       enabled: true
       initial-size: 5
       max-size: 20
+  kafka:
+    bootstrap-servers: "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
+    consumer:
+      group-id: "order-service-group"
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    producer:
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
+scheduler:
+  outbox-relay:
+    interval: 5000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  show-actuator: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus"
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+cors:
+  allowed-origins: "http://localhost:4200,http://localhost:8080"
+
+logging:
+  level:
+    com.arka: INFO
+    org.springframework.r2dbc: WARN
+    io.r2dbc: WARN
