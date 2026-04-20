@@ -69,7 +69,7 @@ public class KafkaOutboxRelay {
                 .eventId(event.id().toString())
                 .eventType(toCamelCase(event.eventType()))
                 .timestamp(event.createdAt() != null ? event.createdAt() : Instant.now())
-                .source(DomainEventEnvelope.SOURCE)
+                .source(DomainEventEnvelope.MS_SOURCE)
                 .correlationId(event.partitionKey())
                 .payload(parsedPayload)
                 .build();
