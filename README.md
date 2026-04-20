@@ -208,7 +208,7 @@ cd ms-<name>
 
 ## Documentación
 
-- [Diseño arquitectónico completo](docs/diseño-aquitectura-backend-arka.md) — Fases, patrones, responsabilidades C4
-- [Contexto de negocio](docs/contexto-negocio-arka-extra.md) — Acuerdos de integración, diagramas C1/C2
-- [Backlog del proyecto](docs/Backlog%20del%20proyecto%20Java%20Backend%20Arka.md) — Historias de usuario priorizadas
-- [Contexto del reto](docs/Proyecto%20Java%20Backend%20Reto%20V2.md) — Necesidades del negocio y problemas actuales
+- [Diseño arquitectónico completo](docs/01-arquitectura.md) — Stack, paradigma híbrido, Clean Architecture, seguridad, persistencia, fases
+- [Contexto de negocio](docs/09-contexto-negocio.md) — Qué es Arka, problemas, actores, HUs, decisiones estratégicas
+- [Backlog del proyecto](docs/tarea-original/Backlog%20del%20proyecto%20Java%20Backend%20Arka.md) — Historias de usuario priorizadas
+- [Contexto del reto](docs/tarea-original/Proyecto%20Java%20Backend%20Reto%20V2.md) — Necesidades del negocio y problemas actuales
