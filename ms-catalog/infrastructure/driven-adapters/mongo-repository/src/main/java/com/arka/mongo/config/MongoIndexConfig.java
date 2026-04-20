@@ -9,10 +9,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.index.Index;
 
-/**
- * MongoDB index configuration.
- * Creates indexes on startup for optimal query performance.
- */
+import java.time.Duration;
+
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
@@ -42,6 +40,11 @@ public class MongoIndexConfig {
                                     .on("createdAt", Sort.Direction.ASC)))
                     .then(mongoTemplate.indexOps("outbox_events")
                             .ensureIndex(new Index().on("eventId", Sort.Direction.ASC).unique()))
+
+                    // Idempotency records — TTL: auto-purge after 24 h
+                    .then(mongoTemplate.indexOps("idempotency_records")
+                            .ensureIndex(new Index().on("createdAt", Sort.Direction.ASC)
+                                    .expire(Duration.ofHours(24))))
 
                     .doOnSuccess(v -> log.info("MongoDB indexes created successfully"))
                     .doOnError(e -> log.error("Error creating MongoDB indexes", e))
