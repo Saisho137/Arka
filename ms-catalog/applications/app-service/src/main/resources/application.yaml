@@ -11,6 +11,12 @@ spring:
   redis:
     host: "${REDIS_HOST:localhost}"
     port: "${REDIS_PORT:6379}"
+  kafka:
+    bootstrap-servers: "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
+    consumer:
+      group-id: "ms-catalog"
+      auto-offset-reset: earliest
+      enable-auto-commit: false
 management:
   endpoints:
     web:
@@ -22,3 +28,13 @@ management:
         enabled: true
 cors:
   allowed-origins: "http://localhost:4200,http://localhost:8080"
+
+scheduler:
+  outbox-relay:
+    interval: 5000
+
+logging:
+  level:
+    com.arka: INFO
+    org.springframework.data.mongodb.core: WARN
+    org.mongodb.driver: WARN

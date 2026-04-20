@@ -218,8 +218,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Implementar resiliencia: capturar excepciones de conexión con `onErrorResume()`, log WARN, retornar `Mono.empty()`
     - _Requisitos: 8.1, 8.2, 8.4, 8.5_
 
-- [ ] 10. Implementar driven adapter — Kafka Outbox Relay con `reactor-kafka`
-  - [ ] 10.1 Crear módulo `kafka-producer` en `infrastructure/driven-adapters/`
+- [x] 10. Implementar driven adapter — Kafka Outbox Relay con `reactor-kafka`
+  - [x] 10.1 Crear módulo `kafka-producer` en `infrastructure/driven-adapters/`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer`
     - Agregar dependencias: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind` (mismas versiones que `ms-inventory/infrastructure/driven-adapters/kafka-producer/build.gradle`)
     - **OBLIGATORIO (reusability.md #5):** Copiar y adaptar los 2 archivos de `ms-inventory/infrastructure/driven-adapters/kafka-producer/src/main/java/com/arka/kafka/`:
@@ -227,7 +227,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
       - `KafkaOutboxRelay.java` → copiar y adaptar: `TOPIC = "product-events"`, `DomainEventEnvelope.MS_SOURCE = "ms-catalog"`, inyectar `OutboxRelayUseCase`
     - _Estándar: §B.11 (Kafka con reactor-kafka directo)_
 
-  - [ ] 10.2 Implementar `KafkaOutboxRelay` (ya copiado en 10.1)
+  - [x] 10.2 Implementar `KafkaOutboxRelay` (ya copiado en 10.1)
     - Adaptar la copia de `ms-inventory/.../KafkaOutboxRelay.java`:
       - `TOPIC = "product-events"` (era `"inventory-events"`)
       - `DomainEventEnvelope.MS_SOURCE` → constante del `DomainEventEnvelope` de ms-catalog
@@ -237,7 +237,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 7.3, 7.4, 7.5, 7.7_
     - _Estándar: §B.11, §D.6 (Schedulers externalizados)_
 
-  - [ ] 10.3 Implementar `KafkaProducerConfig` (ya copiado en 10.1)
+  - [x] 10.3 Implementar `KafkaProducerConfig` (ya copiado en 10.1)
     - Copiar tal cual de `ms-inventory/.../KafkaProducerConfig.java` — no requiere cambios
     - Bean `KafkaSender<String, String>`: `ACKS_CONFIG = "all"`, `RETRIES_CONFIG = 3`
     - _Estándar: §B.11_
