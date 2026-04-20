@@ -59,6 +59,7 @@ graph TB
         OER[OutboxEventRepository port]
         PER[ProcessedEventRepository port]
         IC[InventoryClient port]
+        CC[CatalogClient port]
     end
 
     subgraph "Driven Adapters (infrastructure/driven-adapters)"
@@ -68,6 +69,7 @@ graph TB
         R2OE[R2dbcOutboxAdapter]
         R2PE[R2dbcProcessedEventAdapter]
         GIC[GrpcInventoryClient]
+        GCC[GrpcCatalogClient]
         KOR[KafkaOutboxRelay]
     end
 
@@ -75,13 +77,14 @@ graph TB
         PG[(PostgreSQL 17 - order_db)]
         Kafka[Apache Kafka]
         INV[ms-inventory - gRPC]
+        CAT[ms-catalog - gRPC]
     end
 
     OC --> OH
     OH --> COU & GOU & LOU & CSOU & CAOU
     KC --> PEU
 
-    COU --> OR & OIR & OSHR & OER & IC
+    COU --> OR & OIR & OSHR & OER & IC & CC
     GOU --> OR & OIR
     LOU --> OR
     CSOU --> OR & OSHR & OER
@@ -94,10 +97,12 @@ graph TB
     R2OE -.-> OER
     R2PE -.-> PER
     GIC -.-> IC
+    GCC -.-> CC
 
     R2O & R2OI & R2OSH & R2OE & R2PE --> PG
     KOR --> Kafka & R2OE
     GIC --> INV
+    GCC --> CAT
     KC --> Kafka
 ```
 
@@ -108,29 +113,36 @@ sequenceDiagram
     participant Client as Cliente B2B
     participant Controller as OrderController
     participant UseCase as CreateOrderUseCase
+    participant gRPCCatalog as GrpcCatalogClient
+    participant Catalog as ms-catalog
     participant gRPC as GrpcInventoryClient
     participant Inventory as ms-inventory
     participant PG as PostgreSQL 17
     participant Outbox as outbox_events
 
-    Client->>Controller: POST /orders (customerId, items, shippingAddress)
+    Client->>Controller: POST /orders (customerId, items[{productId, sku, quantity}], shippingAddress)
     Controller->>Controller: Bean Validation (@Valid)
     Controller->>UseCase: execute(CreateOrderCommand)
 
     UseCase->>UseCase: Crear Order en estado PENDIENTE_RESERVA
 
     loop Por cada item
+        UseCase->>gRPCCatalog: getProductInfo(sku)
+        gRPCCatalog->>Catalog: gRPC GetProductInfo
+        Catalog-->>gRPCCatalog: GetProductInfoResponse(sku, productName, unitPrice)
+        gRPCCatalog-->>UseCase: ProductInfo(sku, productName, unitPrice)
+
         UseCase->>gRPC: reserveStock(sku, orderId, quantity)
         gRPC->>Inventory: gRPC ReserveStock
-        Inventory-->>gRPC: ReserveStockResponse(success, unitPrice)
-        gRPC-->>UseCase: resultado
+        Inventory-->>gRPC: ReserveStockResponse(success, reservationId, availableQuantity)
+        gRPC-->>UseCase: ReserveStockResult
     end
 
     alt Todos los items reservados exitosamente
         rect rgb(235, 255, 235)
             Note over UseCase,PG: Transacción R2DBC atómica
             UseCase->>PG: INSERT INTO orders (status=CONFIRMADO, total_amount)
-            UseCase->>PG: INSERT INTO order_items (por cada item con unitPrice, subtotal)
+            UseCase->>PG: INSERT INTO order_items (por cada item con unitPrice de catálogo, subtotal)
             UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_RESERVA→CONFIRMADO)
             UseCase->>Outbox: INSERT OrderConfirmed event (PENDING)
         end
@@ -139,7 +151,7 @@ sequenceDiagram
     else Algún item sin stock suficiente
         UseCase-->>Controller: Error stock insuficiente
         Controller-->>Client: 409 Conflict (SKU, cantidad disponible)
-    else Error de comunicación gRPC
+    else Error de comunicación gRPC (ms-inventory o ms-catalog)
         UseCase-->>Controller: Error servicio no disponible
         Controller-->>Client: 503 Service Unavailable
     end
@@ -329,13 +341,18 @@ public interface ProcessedEventRepository {
 public interface InventoryClient {
     Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity);
 }
+
+// com.arka.model.order.gateways.CatalogClient
+public interface CatalogClient {
+    Mono<ProductInfo> getProductInfo(String sku);
+}
 ```
 
 ### Capa de Dominio — Casos de Uso (`domain/usecase`)
 
 | Caso de Uso                   | Responsabilidad                                                                                                                                                                                                                 | Ports Usados                                                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `CreateOrderUseCase`          | Valida items, invoca gRPC por cada item para reservar stock, persiste Order con estado CONFIRMADO, items con precios, historial PENDIENTE_RESERVA→CONFIRMADO, y evento OrderConfirmed en outbox. Todo en una transacción R2DBC. | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient` |
+| `CreateOrderUseCase`          | Consulta precio autoritativo por SKU vía `CatalogClient.getProductInfo()`, invoca gRPC a ms-inventory para reservar stock, persiste Order con estado CONFIRMADO, items con precios de catálogo, historial PENDIENTE_RESERVA→CONFIRMADO, y evento OrderConfirmed en outbox. Todo en una transacción R2DBC. | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient`, `CatalogClient` |
 | `GetOrderUseCase`             | Consulta orden por ID con sus items. Valida acceso: CUSTOMER solo ve sus propias órdenes.                                                                                                                                       | `OrderRepository`, `OrderItemRepository`                                                                            |
 | `ListOrdersUseCase`           | Lista órdenes paginadas con filtros por status y customerId. CUSTOMER ve solo sus órdenes (filtro automático).                                                                                                                  | `OrderRepository`                                                                                                   |
 | `ChangeOrderStatusUseCase`    | Valida transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO), actualiza orden, registra historial y emite OrderStatusChanged en outbox. Solo ADMIN.                                                              | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
@@ -451,6 +468,7 @@ Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WA
 | `R2dbcOutboxAdapter`            | `OutboxEventRepository`       | R2DBC DatabaseClient                     |
 | `R2dbcProcessedEventAdapter`    | `ProcessedEventRepository`    | R2DBC DatabaseClient                     |
 | `GrpcInventoryClient`           | `InventoryClient`             | gRPC Stub (Protobuf)                     |
+| `GrpcCatalogClient`             | `CatalogClient`               | gRPC Stub (Protobuf)                     |
 | `KafkaOutboxRelay`              | Scheduled relay (cada 5s)     | `KafkaSender` de `reactor-kafka` (§B.11) |
 
 ### Excepciones de Dominio
@@ -482,7 +500,7 @@ public class InvalidOrderStatusException extends DomainException { /* 400, INVAL
 public record Order(
     UUID id,
     UUID customerId,
-    String status,
+    OrderStatus status,        // tipo rico — nunca String en dominio
     BigDecimal totalAmount,
     String customerEmail,
     String shippingAddress,
@@ -494,7 +512,7 @@ public record Order(
         Objects.requireNonNull(customerId, "customerId is required");
         Objects.requireNonNull(customerEmail, "customerEmail is required");
         Objects.requireNonNull(shippingAddress, "shippingAddress is required");
-        status = status != null ? status : "PENDIENTE_RESERVA";
+        status = status != null ? status : new OrderStatus.PendingReserve();
         createdAt = createdAt != null ? createdAt : Instant.now();
         updatedAt = updatedAt != null ? updatedAt : Instant.now();
     }
@@ -525,6 +543,10 @@ public record OrderItem(
 }
 
 // com.arka.model.order.OrderStatus — Sealed Interface (Java 21)
+// Records son vacíos intencionalmente: el dato contextual (timestamps, reason)
+// vive en OrderStateHistory. Los records sirven para validación via fromValue()
+// y extensibilidad (Phase 2: PendingPayment). Order.status es String para
+// compatibilidad directa con R2DBC VARCHAR.
 public sealed interface OrderStatus permits
         OrderStatus.PendingReserve,
         OrderStatus.Confirmed,
@@ -532,21 +554,33 @@ public sealed interface OrderStatus permits
         OrderStatus.Delivered,
         OrderStatus.Cancelled {
 
+    String DEFAULT_STATUS = "PENDIENTE_RESERVA";
     String value();
+
+    static OrderStatus fromValue(String value) {
+        return switch (value) {
+            case "PENDIENTE_RESERVA" -> new PendingReserve();
+            case "CONFIRMADO"        -> new Confirmed();
+            case "EN_DESPACHO"       -> new InShipment();
+            case "ENTREGADO"         -> new Delivered();
+            case "CANCELADO"         -> new Cancelled();
+            default -> throw new InvalidOrderStatusException("Unknown order status: '" + value + "'...");
+        };
+    }
 
     record PendingReserve() implements OrderStatus {
         public String value() { return "PENDIENTE_RESERVA"; }
     }
-    record Confirmed(Instant confirmedAt) implements OrderStatus {
+    record Confirmed() implements OrderStatus {
         public String value() { return "CONFIRMADO"; }
     }
-    record InShipment(Instant dispatchedAt) implements OrderStatus {
+    record InShipment() implements OrderStatus {
         public String value() { return "EN_DESPACHO"; }
     }
-    record Delivered(Instant deliveredAt) implements OrderStatus {
+    record Delivered() implements OrderStatus {
         public String value() { return "ENTREGADO"; }
     }
-    record Cancelled(String reason, Instant cancelledAt) implements OrderStatus {
+    record Cancelled() implements OrderStatus {
         public String value() { return "CANCELADO"; }
     }
 }
@@ -643,11 +677,16 @@ public record OutboxEvent(
 public enum OutboxStatus { PENDING, PUBLISHED }
 
 // com.arka.model.outbox.EventType
+// Cada constante tiene un value() con el string PascalCase usado en el envelope Kafka
 public enum EventType {
-    ORDER_CREATED,
-    ORDER_CONFIRMED,
-    ORDER_STATUS_CHANGED,
-    ORDER_CANCELLED
+    ORDER_CREATED("OrderCreated"),
+    ORDER_CONFIRMED("OrderConfirmed"),
+    ORDER_STATUS_CHANGED("OrderStatusChanged"),
+    ORDER_CANCELLED("OrderCancelled");
+
+    private final String value;
+    EventType(String value) { this.value = value; }
+    public String value() { return value; }
 }
 ```
 
@@ -676,6 +715,14 @@ public record DomainEventEnvelope(
 }
 
 // Payloads específicos
+@Builder(toBuilder = true)
+public record OrderCreatedPayload(
+    UUID orderId,
+    UUID customerId,
+    List<OrderItemPayload> items,
+    BigDecimal totalAmount
+) {}
+
 @Builder(toBuilder = true)
 public record OrderConfirmedPayload(
     UUID orderId,

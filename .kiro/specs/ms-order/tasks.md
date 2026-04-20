@@ -58,13 +58,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **OBLIGATORIO (reusability.md #9):** Copiar estructura de `ms-inventory/applications/app-service/src/main/resources/`
     - _Estándar: §B.10 (Spring Profiles)_
 
-- [ ] 2. Implementar modelo de dominio (`domain/model`)
-  - [ ] 2.1 Crear la sealed interface `OrderStatus` con los records `PendingReserve`, `Confirmed`, `InShipment`, `Delivered` y `Cancelled`, cada uno con método `value()` que retorna el String correspondiente (PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO)
+- [x] 2. Implementar modelo de dominio (`domain/model`)
+  - [x] 2.1 Crear la sealed interface `OrderStatus` con los records `PendingReserve`, `Confirmed`, `InShipment`, `Delivered` y `Cancelled`, cada uno con método `value()` que retorna el String correspondiente (PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO)
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateModel --name=Order`
     - Incluir pattern matching exhaustivo en Java 21
     - Ubicar en `com.arka.model.order`
     - _Requisitos: 4.1, 4.7_
-  - [ ] 2.2 Crear la clase `OrderStateTransition` con el mapa de transiciones válidas y métodos `isValidTransition(from, to)` e `isTerminal(status)`, incluyendo los estados terminales ENTREGADO y CANCELADO
+  - [x] 2.2 Crear la clase `OrderStateTransition` con el mapa de transiciones válidas y métodos `isValidTransition(from, to)` e `isTerminal(status)`, incluyendo los estados terminales ENTREGADO y CANCELADO
     - Mapa inmutable con `Map.of()`
     - _Requisitos: 4.2, 4.3, 4.4_
 
@@ -72,7 +72,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 7: Máquina de estados acepta solo transiciones válidas**
     - Generar todos los pares (from, to) de estados posibles y verificar que solo las 5 transiciones válidas son aceptadas; el resto rechazadas. ENTREGADO y CANCELADO no tienen transiciones de salida.
     - **Valida: Requisitos 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 10.3**
-  - [ ] 2.4 Crear los records de dominio: `Order` (con validación en compact constructor, `@Builder(toBuilder=true)`), `OrderItem` (con cálculo de subtotal), `OrderStateHistory`, `ReserveStockResult`
+  - [x] 2.4 Crear los records de dominio: `Order` (con validación en compact constructor, `@Builder(toBuilder=true)`), `OrderItem` (con cálculo de subtotal), `OrderStateHistory`, `ReserveStockResult`
     - Validaciones: `Objects.requireNonNull` para campos requeridos, `quantity > 0`, defaults para `status`, `createdAt`, `updatedAt`
     - Ubicar en `com.arka.model.order`
     - _Requisitos: 1.1, 1.5, 4.5_
@@ -80,21 +80,24 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 4: Invariante de total_amount**
     - Generar listas de items con precios (BigDecimal positivos) y cantidades (int positivos) aleatorios, verificar que la suma de `quantity * unitPrice` por item es exactamente igual al `totalAmount` calculado.
     - **Valida: Requisitos 1.5**
-  - [ ] 2.6 Crear el record `OutboxEvent` con defaults para `id`, `status`, `topic` y `createdAt` en compact constructor
+  - [x] 2.6 Crear el record `OutboxEvent` con defaults para `id`, `status`, `topic` y `createdAt` en compact constructor
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateModel --name=OutboxEvent`
     - **OBLIGATORIO (reusability.md #1):** Copiar `ms-inventory/domain/model/outboxevent/` — crear `EventType` enum (ORDER_CONFIRMED, ORDER_STATUS_CHANGED, ORDER_CANCELLED, ORDER_CREATED), `OutboxStatus` enum (PENDING, PUBLISHED), y métodos de dominio `isPending()`, `isPublished()`, `markAsPublished()` idénticos a ms-inventory
     - Ubicar en `com.arka.model.outbox`
     - _Requisitos: 7.1, 7.2_
-  - [ ] 2.7 Crear los records de eventos de dominio: `DomainEventEnvelope`, `OrderConfirmedPayload`, `OrderStatusChangedPayload`, `OrderCancelledPayload`, `OrderItemPayload`
+  - [x] 2.7 Crear los records de eventos de dominio: `DomainEventEnvelope`, `OrderCreatedPayload`, `OrderConfirmedPayload`, `OrderStatusChangedPayload`, `OrderCancelledPayload`, `OrderItemPayload`
     - **OBLIGATORIO (reusability.md #1):** Copiar `ms-inventory/domain/model/outboxevent/DomainEventEnvelope.java` — incluir constante `public static final String MS_SOURCE = "ms-order"` y defaults en compact constructor
-    - Ubicar en `com.arka.model.order` o `com.arka.model.outbox`
+    - `EventType` enum con `value()` method que retorna el string PascalCase para el envelope Kafka (e.g., `ORDER_CONFIRMED.value()` → `"OrderConfirmed"`)
+    - `OrderCreatedPayload` incluido por Req 7.8 (orderId, customerId, items, totalAmount) — usado en Fase 2+
+    - Ubicar en `com.arka.model.outboxevent`
     - _Requisitos: 7.7, 7.8, 7.9, 7.10, 7.11_
-  - [ ] 2.8 Crear las interfaces de gateway (ports): `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`, `InventoryClient`
+  - [x] 2.8 Crear las interfaces de gateway (ports): `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`, `InventoryClient`, `CatalogClient`
     - **OBLIGATORIO (reusability.md #1, #3):** Copiar firmas de `OutboxEventRepository` y `ProcessedEventRepository` de ms-inventory (`domain/model/outboxevent/gateways/` y `domain/model/processedevent/gateways/`)
+    - `CatalogClient`: port para consultar precio y nombre del producto por SKU vía gRPC a ms-catalog. Retorna `Mono<ProductInfo>` donde `ProductInfo(sku, productName, unitPrice)`
     - Retornos reactivos (`Mono`/`Flux`) según el diseño
     - Ubicar en `com.arka.model.<aggregate>.gateways`
     - _Requisitos: transversal_
-  - [ ] 2.9 Crear la jerarquía de excepciones de dominio: `DomainException` (abstract), `OrderNotFoundException`, `InvalidStateTransitionException`, `InsufficientStockException`, `InventoryServiceUnavailableException`, `AccessDeniedException`, `InvalidOrderStatusException`
+  - [x] 2.9 Crear la jerarquía de excepciones de dominio: `DomainException` (abstract), `OrderNotFoundException`, `InvalidStateTransitionException`, `InsufficientStockException`, `InventoryServiceUnavailableException`, `AccessDeniedException`, `InvalidOrderStatusException`
     - **OBLIGATORIO (reusability.md #8):** Copiar estructura de `ms-inventory/domain/model/commons/exception/DomainException.java` como base (abstract con `getHttpStatus()` y `getCode()`)
     - Cada una con `getHttpStatus()` y `getCode()` según la tabla del diseño
     - _Requisitos: 10.1, 10.2, 10.3, 10.4, 10.5, 10.7, 10.8_
@@ -103,11 +106,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 - [ ] 4. Implementar casos de uso (`domain/usecase`)
-  - [ ] 4.1 Implementar `CreateOrderUseCase`: crear Order en estado PENDIENTE_RESERVA, invocar `InventoryClient.reserveStock()` por cada item, persistir Order con estado CONFIRMADO, items con precios, historial PENDIENTE_RESERVA→CONFIRMADO y evento OrderConfirmed en outbox, todo en transacción R2DBC atómica
+  - [ ] 4.1 Implementar `CreateOrderUseCase`: crear Order en estado PENDIENTE_RESERVA, consultar `CatalogClient.getProductInfo(sku)` por cada item para obtener precio y nombre autoritativo, invocar `InventoryClient.reserveStock()` por cada item, persistir Order con estado CONFIRMADO, items con precios de catálogo, historial PENDIENTE_RESERVA→CONFIRMADO y evento OrderConfirmed en outbox, todo en transacción R2DBC atómica
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=CreateOrder`
-    - Calcular `totalAmount` como suma de subtotales
+    - **Fuente de precio:** ms-catalog vía gRPC (`CatalogClient.getProductInfo(sku)`) — NO del frontend, NO de ms-inventory. ms-catalog es la fuente autoritativa de `unitPrice` y `productName`
+    - Calcular `totalAmount` como suma de subtotales (`quantity * unitPrice` de catálogo)
     - Si algún item falla por stock insuficiente, acumular todos los fallos y lanzar `InsufficientStockException` con detalle de SKUs
-    - Si gRPC falla por comunicación, lanzar `InventoryServiceUnavailableException`
+    - Si gRPC de ms-inventory falla por comunicación, lanzar `InventoryServiceUnavailableException`
+    - Si gRPC de ms-catalog falla o producto no encontrado, lanzar excepción apropiada (CatalogServiceUnavailableException o similar)
     - _Requisitos: 1.2, 1.3, 1.4, 1.5, 1.7, 1.9, 9.1, 9.2, 9.3, 9.5, 9.6_
 
   - [ ]\* 4.2 Escribir test de propiedad para creación exitosa de orden
@@ -183,9 +188,19 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
   - [ ] 6.6 Implementar `GrpcInventoryClient` (implementa `InventoryClient`): invocar `ReserveStock` de ms-inventory vía gRPC stub, traducir respuestas y errores gRPC a tipos de dominio (`ReserveStockResult`, `InventoryServiceUnavailableException`)
     - Integrar de forma reactiva sin bloquear EventLoop
     - Manejar `UNAVAILABLE`, timeout y errores inesperados
+    - **Nota:** `ReserveStockResult` NO incluye `unitPrice` — alineado con el proto real de ms-inventory. El precio viene de `CatalogClient`
     - _Requisitos: 9.1, 9.4, 9.5_
+  - [ ] 6.7 Implementar `GrpcCatalogClient` (implementa `CatalogClient`): invocar `GetProductInfo` de ms-catalog vía gRPC stub, traducir respuesta a `ProductInfo(sku, productName, unitPrice)` de dominio
+    - Crear módulo `grpc-catalog` en `infrastructure/driven-adapters/` (módulo manual, gRPC sin tipo Scaffold)
+    - Copiar el `catalog.proto` de ms-catalog (`infrastructure/entry-points/grpc-catalog/src/main/proto/catalog.proto`) al directorio `src/main/proto/` del módulo
+    - Configurar `build.gradle` con plugin `com.google.protobuf` (misma config que `grpc-inventory` de ms-inventory pero como client stub)
+    - Dependencias: `net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE`, `io.grpc:grpc-stub`, `io.grpc:grpc-protobuf`, `javax.annotation:javax.annotation-api:1.3.2`
+    - Mapear `GetProductInfoResponse` → `ProductInfo` de dominio (parsear `unitPrice` de String a `BigDecimal`)
+    - Manejar errores: `NOT_FOUND` → `ProductNotFoundException`, `UNAVAILABLE` → excepción de servicio no disponible
+    - Configurar en `application.yaml`: `grpc.client.ms-catalog.address: static://localhost:9091` (local) / `static://ms-catalog:9090` (docker)
+    - _Requisitos: 1.5 (precio autoritativo)_
 
-  - [ ]\* 6.7 Escribir test de propiedad para error de comunicación gRPC
+  - [ ]\* 6.8 Escribir test de propiedad para error de comunicación gRPC
     - **Propiedad 6: Error de comunicación gRPC retorna 503**
     - Simular errores gRPC variados (timeout, conexión rechazada, UNAVAILABLE), verificar que se lanza `InventoryServiceUnavailableException` sin persistir datos.
     - **Valida: Requisitos 1.9, 9.4, 10.4**
@@ -270,10 +285,12 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 - [ ] 11. Integración final y configuración de Spring
   - [ ] 11.1 Configurar beans de Spring en `app-service`: inyección de dependencias para todos los UseCases, adaptadores R2DBC, cliente gRPC, relay outbox y consumidor Kafka. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio.
-    - **Actualizar `app-service/build.gradle`:** Agregar referencias a los módulos de infraestructura creados: `implementation project(':reactive-web')`, `implementation project(':r2dbc-postgresql')`, `implementation project(':kafka-producer')`, `implementation project(':kafka-consumer')`, `implementation project(':grpc-inventory')` (si existe)
+    - **Actualizar `app-service/build.gradle`:** Agregar referencias a los módulos de infraestructura creados: `implementation project(':reactive-web')`, `implementation project(':r2dbc-postgresql')`, `implementation project(':kafka-producer')`, `implementation project(':kafka-consumer')`, `implementation project(':grpc-inventory')`, `implementation project(':grpc-catalog')` (si existen)
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`) — **OBLIGATORIO (reusability.md #10):** copiar patrón de `ms-inventory` (§D.2)
     - _Requisitos: transversal_
-  - [ ] 11.2 Configurar `@Transactional` en los UseCases que requieren atomicidad (CreateOrderUseCase, ChangeOrderStatusUseCase, CancelOrderUseCase, ProcessExternalEventUseCase) para garantizar que escritura de negocio + outbox + historial ocurren en la misma transacción R2DBC
+  - [ ] 11.2 Inyectar `TransactionalGateway` en los UseCases que requieren atomicidad (CreateOrderUseCase, ChangeOrderStatusUseCase, CancelOrderUseCase, ProcessExternalEventUseCase) y envolver el pipeline reactivo con `transactionalGateway.executeInTransaction(pipeline)` para garantizar que escritura de negocio + outbox + historial ocurren en la misma transacción R2DBC
+    - **OBLIGATORIO (reusability.md #1):** Copiar patrón de `ms-inventory` `StockUseCase.java` — usar `TransactionalGateway.executeInTransaction()`, NO `@Transactional` (Spring annotation no pertenece a la capa de dominio según Clean Architecture)
+    - `TransactionalGateway` port ya está en `com.arka.model.commons.gateways.TransactionalGateway`
     - _Requisitos: 1.3, 4.5, 4.6, 7.1_
 
 - [ ] 12. Checkpoint final — Verificar que todos los tests pasan
