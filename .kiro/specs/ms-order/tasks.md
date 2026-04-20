@@ -30,9 +30,9 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 ## Tareas
 
 - [ ] 1. Configurar estructura del proyecto y esquema de base de datos
-  - [ ] 1.1 Crear script SQL de inicialización con las tablas `orders`, `order_items`, `order_state_history`, `outbox_events` y `processed_events` según el esquema del diseño (índices, columna generada `subtotal`, constraints)
+  - [x] 1.1 Crear script SQL de inicialización con las tablas `orders`, `order_items`, `order_state_history`, `outbox_events` y `processed_events` según el esquema del diseño (índices, columna generada `subtotal`, constraints)
     - Incluir `CREATE TABLE`, índices y constraints CHECK
-    - Ubicar en `ms-order/applications/app-service/src/main/resources/` (e.g. `schema.sql`)
+    - Ubicado en `postgresql-scripts/init_orders.sql`
     - _Requisitos: 1.3, 4.5, 7.1, 8.3_
   - [ ] 1.2 Configurar `application.yml` con conexión R2DBC a PostgreSQL (`order_db`), propiedades de Kafka (bootstrap-servers, consumer group `order-service-group`, tópicos) y propiedades gRPC del cliente ms-inventory
     - Configurar perfiles `default` y `local`
