@@ -7,7 +7,11 @@ spring:
     active: "${SPRING_PROFILES_ACTIVE:local}"
   data:
     mongodb:
-      uri: "mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_catalog?authSource=admin"
+      # replicaSet=rs0 requerido para que ReactiveMongoTransactionManager habilite
+      # transacciones multi-documento (Outbox Pattern). El driver descubre el primary
+      # automáticamente; sin este parámetro las transacciones fallan con
+      # "Sessions are not supported by the MongoDB cluster to which this client is connected".
+      uri: "mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_catalog?authSource=admin&replicaSet=rs0"
 management:
   endpoints:
     web:

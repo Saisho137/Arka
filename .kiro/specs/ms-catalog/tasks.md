@@ -174,8 +174,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Inyectar dependencia: `CategoryUseCase`
     - _Estándar: §4.2_
 
-- [ ] 8. Implementar driven adapters — MongoDB
-  - [ ] 8.1 Implementar `MongoProductAdapter` que implementa `ProductRepository`
+- [x] 8. Implementar driven adapters — MongoDB
+  - [x] 8.1 Implementar `MongoProductAdapter` que implementa `ProductRepository`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=mongodb`
     - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/mongo-repository/` y registra el módulo en `settings.gradle`
     - Renombrar el adapter generado a `MongoProductAdapter` y configurar para implementar `ProductRepository`
@@ -188,7 +188,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Configurar índices: `{ sku: 1 }` (unique), `{ categoryId: 1 }`, `{ active: 1 }`
     - _Requisitos: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 3.1, 4.1, 6.1_
 
-  - [ ] 8.2 Implementar `MongoCategoryAdapter` que implementa `CategoryRepository`
+  - [x] 8.2 Implementar `MongoCategoryAdapter` que implementa `CategoryRepository`
     - **NOTA**: Reutilizar el mismo módulo `mongo-repository` generado en 8.1
     - Crear `MongoCategoryAdapter` en el mismo módulo para implementar `CategoryRepository`
     - Usar `ReactiveMongoTemplate`
@@ -196,7 +196,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Configurar índice: `{ name: 1 }` (unique)
     - _Requisitos: 5.1, 5.4_
 
-  - [ ] 8.3 Implementar `MongoOutboxAdapter` que implementa `OutboxEventRepository`
+  - [x] 8.3 Implementar `MongoOutboxAdapter` que implementa `OutboxEventRepository`
     - **NOTA**: Reutilizar el mismo módulo `mongo-repository` generado en 8.1
     - Crear `MongoOutboxAdapter` en el mismo módulo para implementar `OutboxEventRepository`
     - Usar `ReactiveMongoTemplate`
