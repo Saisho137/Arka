@@ -302,8 +302,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Retornar `ErrorResponse(code, message)` en todos los casos
     - _Requisitos: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 13. Configuración de Spring Boot y cableado de dependencias
-  - [ ] 13.1 Configurar `application.yaml` en `app-service`
+- [x] 13. Configuración de Spring Boot y cableado de dependencias
+  - [x] 13.1 Configurar `application.yaml` en `app-service`
     - Configuración de MongoDB (catalog_db), Redis (host, port, TTL), Kafka (bootstrap-servers, producer config)
     - Intervalos de schedulers externalizados (sin defaults inline):
       - `scheduler.outbox-relay.interval: 5000`
@@ -315,14 +315,14 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 7.7, 8.1_
     - _Estándares: §D.2 (OpenAPI), §D.6 (Schedulers), §D.7 (Logging)_
 
-  - [ ] 13.2 Configurar Spring Profiles (local/docker)
+  - [x] 13.2 Configurar Spring Profiles (local/docker)
     - **OBLIGATORIO:** Seguir `reusability.md` componente **#9** (Spring Profiles)
     - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados
     - Crear `application-docker.yaml` con hostnames de contenedores (`arka-mongodb`, `arka-redis`, `arka-kafka`) y puertos internos
     - Configurar `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` en `application.yaml`
     - _Estándar: §B.10 (Spring Profiles)_
 
-  - [ ] 13.3 Configurar beans de inyección de dependencias
+  - [x] 13.3 Configurar beans de inyección de dependencias
     - **OBLIGATORIO:** Seguir `reusability.md` componente **#10** (Springdoc/OpenAPI) y tabla de **Versionado Unificado** para todas las dependencias
     - Registrar use cases, handlers, adapters y ports en la configuración de Spring
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`)

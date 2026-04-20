@@ -1,5 +1,6 @@
 server:
   port: "${MS_CATALOG_PORT:8084}"
+
 spring:
   application:
     name: "ms-catalog"
@@ -17,6 +18,23 @@ spring:
       group-id: "ms-catalog"
       auto-offset-reset: earliest
       enable-auto-commit: false
+
+scheduler:
+  outbox-relay:
+    interval: 5000
+
+cache:
+  redis:
+    ttl: 3600  # 1 hour in seconds
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  show-actuator: false
+
 management:
   endpoints:
     web:
@@ -26,12 +44,9 @@ management:
     health:
       probes:
         enabled: true
+
 cors:
   allowed-origins: "http://localhost:4200,http://localhost:8080"
-
-scheduler:
-  outbox-relay:
-    interval: 5000
 
 logging:
   level:

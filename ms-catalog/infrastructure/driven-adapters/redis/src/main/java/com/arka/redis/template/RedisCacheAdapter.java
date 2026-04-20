@@ -4,8 +4,8 @@ import com.arka.model.product.Product;
 import com.arka.model.product.gateways.ProductCachePort;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Component;
@@ -16,19 +16,26 @@ import java.time.Duration;
 /**
  * Redis Cache-Aside adapter for Product caching.
  * Implements resilience by catching connection exceptions and returning empty results.
- * Uses JSON serialization for Product storage with 1-hour TTL.
+ * TTL is externalized via 'cache.redis.ttl' (seconds).
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RedisCacheAdapter implements ProductCachePort {
 
-    private static final Duration TTL = Duration.ofHours(1);
     private static final String PRODUCT_KEY_PREFIX = "product:";
     private static final String PRODUCT_LIST_KEY_PATTERN = "products:page:*";
 
     private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
     private final ObjectMapper objectMapper;
+    private final Duration ttl;
+
+    public RedisCacheAdapter(ReactiveRedisTemplate<String, String> reactiveRedisTemplate,
+                             ObjectMapper objectMapper,
+                             @Value("${cache.redis.ttl:3600}") long ttlSeconds) {
+        this.reactiveRedisTemplate = reactiveRedisTemplate;
+        this.objectMapper = objectMapper;
+        this.ttl = Duration.ofSeconds(ttlSeconds);
+    }
 
     @Override
     public Mono<Product> get(String key) {
@@ -50,10 +57,10 @@ public class RedisCacheAdapter implements ProductCachePort {
         
         return serializeProduct(product)
                 .flatMap(json -> reactiveRedisTemplate.opsForValue()
-                        .set(redisKey, json, TTL))
+                        .set(redisKey, json, ttl))
                 .doOnSuccess(success -> {
                     if (Boolean.TRUE.equals(success)) {
-                        log.debug("Cache PUT for key: {} with TTL: {}", redisKey, TTL);
+                        log.debug("Cache PUT for key: {} with TTL: {}", redisKey, ttl);
                     } else {
                         log.warn("Cache PUT failed for key: {}", redisKey);
                     }
