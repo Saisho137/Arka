@@ -329,7 +329,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Agregar dependencias en `build.gradle`: reactor-test, mockito, `springdoc-openapi-starter-webflux-ui:3.0.2`, `reactor-kafka:1.3.25`
     - _Estándares: §D.2 (OpenAPI), §B.11 (Kafka)_
 
-- [ ] 14. Checkpoint final — Verificar integración completa
+- [x] 14. Checkpoint final — Verificar integración completa
   - Asegurar que todos los tests pasan (unitarios), preguntar al usuario si surgen dudas.
 
 ## Notas
