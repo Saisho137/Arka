@@ -2,17 +2,17 @@
 
 ## Mapa de Servicios
 
-| Servicio | Dominio | BD | Paradigma | Puerto | Fase |
-|---|---|---|---|---|---|
-| ms-catalog | Catálogo de productos + reseñas anidadas | MongoDB + Redis | Reactivo | 8084 | 1 |
-| ms-inventory | Stock, reservas, lock pesimista | PostgreSQL 17 (R2DBC) | Reactivo | 8082 | 1 |
-| ms-order | Pedidos, Saga orchestrator | PostgreSQL 17 (R2DBC) | Reactivo | 8081 | 1 |
-| ms-notifications | Alertas y correos (AWS SES) | MongoDB | Reactivo | 8085 | 1 |
-| ms-cart | Carrito de compras, abandono | MongoDB | Reactivo | 8086 | 2 |
-| ms-payment | Pagos ACL (Stripe/Wompi/MercadoPago) | PostgreSQL 17 (R2DBC) | Reactivo | 8083 | 2 |
-| ms-reporter | Reportes, CQRS, Event Sourcing | PostgreSQL 17 (JDBC) + S3 | Imperativo | 8087 | 3 |
-| ms-shipping | Logística ACL (DHL/FedEx/Legacy) | PostgreSQL 17 (R2DBC) | Reactivo | 8088 | 3 |
-| ms-provider | Proveedores B2B ACL | PostgreSQL 17 (R2DBC) | Reactivo | 8089 | 4 |
+| Servicio         | Dominio                                  | BD                        | Paradigma  | Puerto | Fase |
+| ---------------- | ---------------------------------------- | ------------------------- | ---------- | ------ | ---- |
+| ms-catalog       | Catálogo de productos + reseñas anidadas | MongoDB + Redis           | Reactivo   | 8084   | 1    |
+| ms-inventory     | Stock, reservas, lock pesimista          | PostgreSQL 17 (R2DBC)     | Reactivo   | 8082   | 1    |
+| ms-order         | Pedidos, Saga orchestrator               | PostgreSQL 17 (R2DBC)     | Reactivo   | 8081   | 1    |
+| ms-notifications | Alertas y correos (AWS SES)              | MongoDB                   | Reactivo   | 8085   | 1    |
+| ms-cart          | Carrito de compras, abandono             | MongoDB                   | Reactivo   | 8086   | 2    |
+| ms-payment       | Pagos ACL (Stripe/Wompi/MercadoPago)     | PostgreSQL 17 (R2DBC)     | Reactivo   | 8083   | 2    |
+| ms-reporter      | Reportes, CQRS, Event Sourcing           | PostgreSQL 17 (JDBC) + S3 | Imperativo | 8087   | 3    |
+| ms-shipping      | Logística ACL (DHL/FedEx/Legacy)         | PostgreSQL 17 (R2DBC)     | Reactivo   | 8088   | 3    |
+| ms-provider      | Proveedores B2B ACL                      | PostgreSQL 17 (R2DBC)     | Reactivo   | 8089   | 4    |
 
 ---
 
@@ -48,16 +48,16 @@
 
 #### Transiciones de Estado
 
-| Desde | Hacia | Trigger |
-|---|---|---|
-| PENDIENTE_RESERVA | CONFIRMADO | gRPC exitoso (Fase 1) |
-| PENDIENTE_RESERVA | CANCELADO | Stock insuficiente (fail-fast) |
-| CONFIRMADO | EN_DESPACHO | Admin marca despacho |
-| CONFIRMADO | CANCELADO | Admin/cliente cancela |
-| EN_DESPACHO | ENTREGADO | Admin marca entrega |
-| *Fase 2:* PENDIENTE_RESERVA | PENDIENTE_PAGO | gRPC exitoso + ms-payment |
-| *Fase 2:* PENDIENTE_PAGO | CONFIRMADO | PaymentProcessed |
-| *Fase 2:* PENDIENTE_PAGO | CANCELADO | PaymentFailed |
+| Desde                       | Hacia          | Trigger                        |
+| --------------------------- | -------------- | ------------------------------ |
+| PENDIENTE_RESERVA           | CONFIRMADO     | gRPC exitoso (Fase 1)          |
+| PENDIENTE_RESERVA           | CANCELADO      | Stock insuficiente (fail-fast) |
+| CONFIRMADO                  | EN_DESPACHO    | Admin marca despacho           |
+| CONFIRMADO                  | CANCELADO      | Admin/cliente cancela          |
+| EN_DESPACHO                 | ENTREGADO      | Admin marca entrega            |
+| _Fase 2:_ PENDIENTE_RESERVA | PENDIENTE_PAGO | gRPC exitoso + ms-payment      |
+| _Fase 2:_ PENDIENTE_PAGO    | CONFIRMADO     | PaymentProcessed               |
+| _Fase 2:_ PENDIENTE_PAGO    | CANCELADO      | PaymentFailed                  |
 
 > Estados terminales: `ENTREGADO` y `CANCELADO` (no permiten transiciones).
 
@@ -126,11 +126,11 @@
 
 Son **Bounded Contexts distintos** con necesidades opuestas:
 
-| Aspecto | ms-catalog | ms-inventory |
-|---|---|---|
-| Pregunta | ¿QUÉ vendemos? | ¿CUÁNTO hay disponible? |
-| Datos | Maestros, estáticos | Transaccionales, dinámicos |
-| Acceso | 95% lecturas, 5% escrituras | 60% escrituras, 40% lecturas |
-| Consistencia | Eventual (caché) | ACID estricto (lock pesimista) |
-| Escalado | Horizontal + Redis | Vertical + PostgreSQL locks |
-| Problema crítico | Búsqueda eficiente | **Sobreventa por concurrencia** |
+| Aspecto          | ms-catalog                  | ms-inventory                    |
+| ---------------- | --------------------------- | ------------------------------- |
+| Pregunta         | ¿QUÉ vendemos?              | ¿CUÁNTO hay disponible?         |
+| Datos            | Maestros, estáticos         | Transaccionales, dinámicos      |
+| Acceso           | 95% lecturas, 5% escrituras | 60% escrituras, 40% lecturas    |
+| Consistencia     | Eventual (caché)            | ACID estricto (lock pesimista)  |
+| Escalado         | Horizontal + Redis          | Vertical + PostgreSQL locks     |
+| Problema crítico | Búsqueda eficiente          | **Sobreventa por concurrencia** |

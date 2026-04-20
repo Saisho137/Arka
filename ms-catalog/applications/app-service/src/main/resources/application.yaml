@@ -23,7 +23,7 @@ scheduler:
 
 cache:
   redis:
-    ttl: 3600  # 1 hour in seconds
+    ttl: 3600 # 1 hour in seconds
 
 springdoc:
   api-docs:

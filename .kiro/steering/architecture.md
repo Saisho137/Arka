@@ -5,12 +5,15 @@ When creating or modifying specs, implementations, or any code in this monorepo,
 ## Normative Documents
 
 ### Code Patterns & Standards
+
 #[[file:docs/patrones-y-estandares-codigo.md]]
 
 ### System Architecture Design
+
 #[[file:docs/diseño-aquitectura-backend-arka.md]]
 
 ### Business Context & Integration Agreements
+
 #[[file:docs/contexto-negocio-arka-extra.md]]
 
 ## Key Rules
@@ -19,7 +22,7 @@ When creating or modifying specs, implementations, or any code in this monorepo,
 - All specs must align with the architecture defined in the design document
 - All implementations must follow the patterns and conventions in patrones-y-estandares-codigo.md
 - Business context and integration agreements in contexto-negocio-arka-extra.md define the boundaries of each microservice
-- When creating a new spec for any ms-*, verify it aligns with the phase delivery strategy and bounded context responsibilities
+- When creating a new spec for any ms-\*, verify it aligns with the phase delivery strategy and bounded context responsibilities
 - PostgreSQL services use R2DBC (reactive) except ms-reporter (JDBC + Virtual Threads)
 - MongoDB services use Reactive Mongo drivers
 - All inter-service communication follows the patterns defined: gRPC for sync, Kafka for async

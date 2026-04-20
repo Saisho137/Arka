@@ -61,7 +61,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Método `resolve(String template, Map<String, String> variables)` retorna String
     - _Requisitos: 2.4, 2.5, 2.6_
 
-  - [ ]* 3.2 Escribir test de propiedad para round-trip del motor de plantillas
+  - [ ]\* 3.2 Escribir test de propiedad para round-trip del motor de plantillas
     - **Propiedad 3: Round-trip del motor de plantillas**
     - Generar plantillas con N variables `{{variable}}` y mapas de variables completos/parciales. Verificar que el resultado no contiene marcadores `{{...}}` cuando el mapa es completo, y que cada valor del mapa aparece en el resultado. Variables faltantes se reemplazan por cadena vacía.
     - **Valida: Requisitos 2.4, 2.5, 2.6**
@@ -74,7 +74,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - `StockDepletedStrategy` recibe el email del administrador por constructor
     - _Requisitos: 4.1, 4.2, 5.1, 5.2, 6.1, 6.2, 7.1, 7.2_
 
-  - [ ]* 3.5 Escribir test de propiedad para extracción de campos por estrategia
+  - [ ]\* 3.5 Escribir test de propiedad para extracción de campos por estrategia
     - **Propiedad 4: Estrategia extrae campos correctos por tipo de evento**
     - Generar payloads válidos por tipo de evento con valores aleatorios. Verificar que la estrategia correspondiente produce un `NotificationContext` con `recipientEmail` no vacío y `templateVariables` conteniendo todas las claves esperadas (OrderConfirmed: orderId, customerId, customerEmail, items, totalAmount; OrderStatusChanged: orderId, previousStatus, newStatus; OrderCancelled: orderId, reason; StockDepleted: sku, productName, currentQuantity, threshold).
     - **Valida: Requisitos 4.1, 5.1, 6.1, 7.1**
@@ -89,32 +89,32 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Usar operadores reactivos: `flatMap`, `switchIfEmpty`, `retryWhen(Retry.backoff(...))`, `onErrorResume`
     - _Requisitos: 1.3, 1.4, 1.5, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5, 8.1, 8.4, 9.1, 9.2, 9.3, 9.4, 9.5_
 
-  - [ ]* 4.2 Escribir test de propiedad para idempotencia
+  - [ ]\* 4.2 Escribir test de propiedad para idempotencia
     - **Propiedad 1: Idempotencia — eventos duplicados no generan envío**
     - Generar eventos de dominio válidos con eventId que ya existe en `notification_history` (mock `existsByEventId` retorna true). Verificar que no se invoca `EmailSenderPort.sendEmail()`, no se crea nuevo registro en historial, y el flujo completa sin error.
     - **Valida: Requisitos 1.3, 1.4, 1.5, 8.4**
 
-  - [ ]* 4.3 Escribir test de propiedad para email al destinatario correcto
+  - [ ]\* 4.3 Escribir test de propiedad para email al destinatario correcto
     - **Propiedad 6: Email enviado al destinatario correcto**
     - Generar eventos de tipo OrderConfirmed, OrderStatusChanged y OrderCancelled con customerEmail aleatorio, y eventos StockDepleted. Verificar que para los primeros 3 tipos el email se envía al customerEmail del payload, y para StockDepleted se envía al email del administrador configurado.
     - **Valida: Requisitos 3.2, 4.3, 5.3, 6.3, 7.3**
 
-  - [ ]* 4.4 Escribir test de propiedad para historial completo y correcto
+  - [ ]\* 4.4 Escribir test de propiedad para historial completo y correcto
     - **Propiedad 7: Historial de notificación completo y correcto**
     - Generar eventos procesados exitosamente y con fallo. Verificar que cada historial tiene todos los campos no nulos: eventId (igual al del evento), eventType, status (SENT si exitoso, FAILED si fallo), processedAt y createdAt.
     - **Valida: Requisitos 3.3, 3.5, 8.1**
 
-  - [ ]* 4.5 Escribir test de propiedad para reintentos con backoff exponencial
+  - [ ]\* 4.5 Escribir test de propiedad para reintentos con backoff exponencial
     - **Propiedad 8: Reintentos con backoff exponencial para errores transitorios**
     - Simular fallos transitorios del `EmailSenderPort` (mock lanza `EmailSendException` con `transient=true`). Verificar que se reintenta hasta 3 veces. Si tiene éxito en algún reintento, historial con SENT. Si falla tras 3 reintentos, historial con FAILED.
     - **Valida: Requisitos 3.4, 9.1, 9.2, 9.3, 9.4**
 
-  - [ ]* 4.6 Escribir test de propiedad para errores permanentes sin reintentos
+  - [ ]\* 4.6 Escribir test de propiedad para errores permanentes sin reintentos
     - **Propiedad 9: Errores permanentes no generan reintentos**
     - Simular errores permanentes del `EmailSenderPort` (mock lanza `EmailSendException` con `transient=false`). Verificar que `sendEmail` se invoca exactamente 1 vez (sin reintentos) y el historial se registra con status FAILED.
     - **Valida: Requisitos 9.5**
 
-  - [ ]* 4.7 Escribir test de propiedad para búsqueda de plantilla activa
+  - [ ]\* 4.7 Escribir test de propiedad para búsqueda de plantilla activa
     - **Propiedad 10: Búsqueda de plantilla activa por eventType**
     - Generar eventTypes relevantes con y sin plantilla activa (mock `findActiveByEventType` retorna `Mono.empty()` o plantilla). Verificar que sin plantilla activa el historial se registra con FAILED sin intentar enviar correo. Con plantilla activa, se procede al envío.
     - **Valida: Requisitos 2.2, 2.3**
@@ -147,12 +147,12 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Manejar errores de deserialización con log ERROR e ignorar evento
     - _Requisitos: 1.1, 1.2, 1.6, 1.7_
 
-  - [ ]* 7.2 Escribir test de propiedad para filtrado de eventos desconocidos
+  - [ ]\* 7.2 Escribir test de propiedad para filtrado de eventos desconocidos
     - **Propiedad 2: Filtrado de eventos desconocidos**
     - Generar eventos con eventTypes aleatorios que no pertenezcan al conjunto relevante (excluyendo OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted). Verificar que no se invoca `ProcessNotificationUseCase`, no se crea registro en `notification_history` y no se lanza excepción.
     - **Valida: Requisitos 1.6, 1.7**
 
-  - [ ]* 7.3 Escribir test de propiedad para email resuelto con variables completas
+  - [ ]\* 7.3 Escribir test de propiedad para email resuelto con variables completas
     - **Propiedad 5: Email resuelto contiene todas las variables requeridas**
     - Generar eventos de cada tipo relevante con plantilla activa y payload completo. Verificar que el subject y bodyTemplate resueltos contienen los valores de todas las variables especificadas para ese tipo de evento y no queda ningún marcador `{{...}}` sin resolver.
     - **Valida: Requisitos 4.4, 5.4, 6.4, 7.4**

@@ -14,36 +14,43 @@
 ## 2. Modelado de Dominio
 
 ### Records vs Clases
+
 - **Records como estándar** — inmutables, `equals`/`hashCode` gratis, `@Builder` compatible desde Lombok 1.18.42
 - **Clases con Lombok** solo cuando hay herencia o mutabilidad obligatoria de framework
 - `@Builder.Default` NO funciona en records → defaults van en el compact constructor
 
 ### UUIDs
+
 - **IDs nullable en dominio** — PostgreSQL genera con `DEFAULT gen_random_uuid()`
 - Evita bugs silenciosos de `repository.save()` (INSERT vs UPDATE)
 - Excepción: `processed_events` (UUID viene de Kafka) → usar `DatabaseClient` con INSERT explícito
 
 ### Validación
+
 - `Objects.requireNonNull()` en compact constructors (idiomático JDK)
 - Mutaciones encapsuladas en la entidad (métodos `with*()`, `increaseBy()`, etc.) — nunca manipular con `toBuilder()` desde fuera
 - Excepciones de dominio: `DomainException` (abstract class extends RuntimeException) con `getHttpStatus()` y `getCode()`
 
 ### Sealed Interfaces
+
 - Máquinas de estado y resultados polimórficos como sealed interfaces + records
 - Exhaustividad verificada en compile-time con switch pattern matching (Java 21)
 
 ## 3. Lógica de Negocio (UseCases)
 
 ### Engine de Reglas
+
 - **Síncrono** (`Optional<R>`): reglas puras en memoria, no bloquean EventLoop
 - **Reactivo** (`Mono<Optional<R>>`): reglas que requieren I/O (BD, servicios externos)
 - **Mixto**: fast-fail síncrono primero, luego validaciones reactivas
 
 ### Strategy + Factory
+
 - Comportamientos intercambiables en runtime (pasarelas, operadores logísticos)
 - `switch pattern matching` para dominios sealed; Strategy+Factory para extensiones en infraestructura
 
 ### Organización
+
 - **1 UseCase por entidad de dominio** con múltiples métodos descriptivos
 - No 1 UseCase por operación con `execute()` — cohesión por agregado
 
@@ -55,6 +62,7 @@
 - Siempre usar `@Builder` al construir objetos destino
 
 ### Controller → Handler → UseCase
+
 - Controller thin: solo HTTP concerns (`@Valid`, rutas, OpenAPI)
 - Handler `@Component`: orquestación, mapeo, ResponseEntity
 - `Mono<ResponseEntity<T>>` para elementos únicos; `Flux<T>` directo para colecciones (streaming reactivo, nunca `collectList()`)
@@ -113,15 +121,15 @@
 
 ## 14. Otras Decisiones
 
-| Decisión | Resolución |
-|---|---|
-| Timestamps | `Instant` (UTC) → `TIMESTAMPTZ`. `LocalDateTime` solo si zona horaria irrelevante |
-| Enums | Autoexplicativos (`RESTOCK`, `SHRINKAGE`), no genéricos (`MANUAL_ADJUSTMENT`) |
-| Constantes | `static final` + nombre descriptivo. Configurables → YAML con `@Value` |
-| `Mono.defer()` | Obligatorio en `switchIfEmpty` cuando el fallback produce side-effects |
-| Paginación | Offset (`page`/`size`) para MVP; Cursor (keyset) para alto volumen futuro |
-| Schedulers | Intervalos en `application.yaml` sin defaults inline — fallo al startup si falta |
-| Flag `-parameters` | Obligatorio en `main.gradle` para resolver `@RequestParam`/`@PathVariable` |
-| MongoDB URI (SB 4.0) | `spring.mongodb.uri` (no `spring.data.mongodb.uri`) + `uuidRepresentation=standard` |
-| Documentación API | Springdoc OpenAPI en `/swagger-ui.html` |
-| gRPC modules | Manuales en entry-points con plugin `com.google.protobuf` + `grpc-server-spring-boot-starter` |
+| Decisión             | Resolución                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| Timestamps           | `Instant` (UTC) → `TIMESTAMPTZ`. `LocalDateTime` solo si zona horaria irrelevante             |
+| Enums                | Autoexplicativos (`RESTOCK`, `SHRINKAGE`), no genéricos (`MANUAL_ADJUSTMENT`)                 |
+| Constantes           | `static final` + nombre descriptivo. Configurables → YAML con `@Value`                        |
+| `Mono.defer()`       | Obligatorio en `switchIfEmpty` cuando el fallback produce side-effects                        |
+| Paginación           | Offset (`page`/`size`) para MVP; Cursor (keyset) para alto volumen futuro                     |
+| Schedulers           | Intervalos en `application.yaml` sin defaults inline — fallo al startup si falta              |
+| Flag `-parameters`   | Obligatorio en `main.gradle` para resolver `@RequestParam`/`@PathVariable`                    |
+| MongoDB URI (SB 4.0) | `spring.mongodb.uri` (no `spring.data.mongodb.uri`) + `uuidRepresentation=standard`           |
+| Documentación API    | Springdoc OpenAPI en `/swagger-ui.html`                                                       |
+| gRPC modules         | Manuales en entry-points con plugin `com.google.protobuf` + `grpc-server-spring-boot-starter` |

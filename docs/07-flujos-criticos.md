@@ -116,15 +116,15 @@ Admin ──PUT /orders/{id}/status──▶ ms-order
 
 ### Fase 1 (2 pasos)
 
-| Paso | Servicio | Acción | Mecanismo | Compensación |
-|---|---|---|---|---|
-| 1 | ms-order | Reserva stock | gRPC sync | Fail-fast (no hay stock) |
-| 2 | ms-order | Confirma orden | Local | N/A |
+| Paso | Servicio | Acción         | Mecanismo | Compensación             |
+| ---- | -------- | -------------- | --------- | ------------------------ |
+| 1    | ms-order | Reserva stock  | gRPC sync | Fail-fast (no hay stock) |
+| 2    | ms-order | Confirma orden | Local     | N/A                      |
 
 ### Fase 2 (3 pasos)
 
-| Paso | Servicio | Acción | Mecanismo | Compensación |
-|---|---|---|---|---|
-| 1 | ms-order | Reserva stock | gRPC sync | Fail-fast |
-| 2 | ms-order | Guarda PENDIENTE_PAGO | Local | N/A |
-| 3 | ms-payment | Procesa pago | Kafka async | ReleaseStock si falla |
+| Paso | Servicio   | Acción                | Mecanismo   | Compensación          |
+| ---- | ---------- | --------------------- | ----------- | --------------------- |
+| 1    | ms-order   | Reserva stock         | gRPC sync   | Fail-fast             |
+| 2    | ms-order   | Guarda PENDIENTE_PAGO | Local       | N/A                   |
+| 3    | ms-payment | Procesa pago          | Kafka async | ReleaseStock si falla |

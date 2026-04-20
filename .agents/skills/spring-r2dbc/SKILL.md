@@ -11,6 +11,7 @@ description: |
   MongoDB reactive - use `spring-data-mongodb` with reactive repository
 allowed-tools: Read, Grep, Glob, Write, Edit
 ---
+
 # Spring Data R2DBC
 
 ## Quick Start
@@ -232,13 +233,13 @@ public class OrderService {
 
 ## Best Practices
 
-| Do | Don't |
-|----|-------|
-| Use R2DBC for WebFlux applications | Mix JDBC and R2DBC |
-| Configure connection pool | Use without pool |
-| Handle relations manually with batch queries | Expect JPA-like lazy loading |
+| Do                                              | Don't                         |
+| ----------------------------------------------- | ----------------------------- |
+| Use R2DBC for WebFlux applications              | Mix JDBC and R2DBC            |
+| Configure connection pool                       | Use without pool              |
+| Handle relations manually with batch queries    | Expect JPA-like lazy loading  |
 | Use `@Transactional` or `TransactionalOperator` | Forget transaction management |
-| Use `StepVerifier` for testing | Use `.block()` in production |
+| Use `StepVerifier` for testing                  | Use `.block()` in production  |
 
 ---
 
@@ -253,47 +254,47 @@ public class OrderService {
 
 ## Common Pitfalls
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `NoSuchBeanDefinitionException: ConnectionFactory` | Missing R2DBC driver | Add r2dbc-postgresql/mysql dependency |
-| `Connection timeout` | Pool exhausted | Increase max-size, check connection leaks |
-| `TransactionRequiredException` | Missing @Transactional | Add annotation or use TransactionalOperator |
-| Entity not mapped | Missing annotations | Verify @Table, @Id, @Column |
-| N+1 queries | Loading relations | Use batch queries with `IN` clause |
+| Error                                              | Cause                  | Solution                                    |
+| -------------------------------------------------- | ---------------------- | ------------------------------------------- |
+| `NoSuchBeanDefinitionException: ConnectionFactory` | Missing R2DBC driver   | Add r2dbc-postgresql/mysql dependency       |
+| `Connection timeout`                               | Pool exhausted         | Increase max-size, check connection leaks   |
+| `TransactionRequiredException`                     | Missing @Transactional | Add annotation or use TransactionalOperator |
+| Entity not mapped                                  | Missing annotations    | Verify @Table, @Id, @Column                 |
+| N+1 queries                                        | Loading relations      | Use batch queries with `IN` clause          |
 
 ---
 
 ## Anti-Patterns
 
-| Anti-Pattern | Problem | Solution |
-|--------------|---------|----------|
-| Using .block() in production | Blocks event loop | Use reactive operators |
-| N+1 queries for relations | Performance issues | Use batch queries with IN |
-| Missing connection pool | Connection exhaustion | Configure r2dbc-pool |
-| Large transactions | Connection held too long | Keep transactions short |
-| No error handling | Silent failures | Use onErrorResume, onErrorMap |
+| Anti-Pattern                 | Problem                  | Solution                      |
+| ---------------------------- | ------------------------ | ----------------------------- |
+| Using .block() in production | Blocks event loop        | Use reactive operators        |
+| N+1 queries for relations    | Performance issues       | Use batch queries with IN     |
+| Missing connection pool      | Connection exhaustion    | Configure r2dbc-pool          |
+| Large transactions           | Connection held too long | Keep transactions short       |
+| No error handling            | Silent failures          | Use onErrorResume, onErrorMap |
 
 ---
 
 ## Quick Troubleshooting
 
-| Problem | Diagnostic | Fix |
-|---------|------------|-----|
-| Connection timeout | Check pool settings | Increase max-size, check leaks |
-| Entity not mapped | Check annotations | Add @Table, @Id, @Column |
-| Transaction not working | Check @Transactional | Use TransactionalOperator if needed |
-| Query returns empty | Check column names | Verify mapping matches DB |
-| Pool exhausted | Monitor active connections | Increase pool, fix leaks |
+| Problem                 | Diagnostic                 | Fix                                 |
+| ----------------------- | -------------------------- | ----------------------------------- |
+| Connection timeout      | Check pool settings        | Increase max-size, check leaks      |
+| Entity not mapped       | Check annotations          | Add @Table, @Id, @Column            |
+| Transaction not working | Check @Transactional       | Use TransactionalOperator if needed |
+| Query returns empty     | Check column names         | Verify mapping matches DB           |
+| Pool exhausted          | Monitor active connections | Increase pool, fix leaks            |
 
 ---
 
 ## Reference Files
 
-| File | Content |
-|------|---------|
+| File                                     | Content                                       |
+| ---------------------------------------- | --------------------------------------------- |
 | [database-client.md](database-client.md) | DatabaseClient, Dynamic Queries, Aggregations |
-| [transactions.md](transactions.md) | Transactions, Relations, Pagination |
-| [advanced.md](advanced.md) | Auditing, Converters, Pool Config, Testing |
+| [transactions.md](transactions.md)       | Transactions, Relations, Pagination           |
+| [advanced.md](advanced.md)               | Auditing, Converters, Pool Config, Testing    |
 
 ---
 

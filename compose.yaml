@@ -163,7 +163,15 @@ services:
     # IMPORTANTE: se usa 'entrypoint' (no 'command') para que docker-entrypoint.sh
     # cree el usuario admin antes de arrancar mongod con --keyFile.
     entrypoint: ["/scripts/mongo-entrypoint.sh"]
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
+    command:
+      [
+        "mongod",
+        "--replSet",
+        "rs0",
+        "--bind_ip_all",
+        "--keyFile",
+        "/etc/mongo/keyfile",
+      ]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}

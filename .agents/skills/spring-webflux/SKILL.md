@@ -14,6 +14,7 @@ description: |
   batch processing - use `spring-batch` skill
 allowed-tools: Read, Grep, Glob, Write, Edit
 ---
+
 # Spring WebFlux
 
 > **Full Reference**: See [advanced.md](advanced.md) for SSE with Sinks, Testing with StepVerifier, and Context Propagation patterns.
@@ -291,13 +292,13 @@ public class UserHandler {
 
 ## Best Practices
 
-| Do | Don't |
-|----|-------|
-| Keep chain fully reactive | Use .block() in handlers |
+| Do                                               | Don't                     |
+| ------------------------------------------------ | ------------------------- |
+| Keep chain fully reactive                        | Use .block() in handlers  |
 | Use appropriate operators (flatMap vs concatMap) | Mix blocking and reactive |
-| Handle errors with onError* operators | Ignore errors |
-| Use StepVerifier for testing | Test with .block() |
-| Propagate Context for MDC/security | Use ThreadLocal |
+| Handle errors with onError\* operators           | Ignore errors             |
+| Use StepVerifier for testing                     | Test with .block()        |
+| Propagate Context for MDC/security               | Use ThreadLocal           |
 
 ## Production Checklist
 
@@ -318,23 +319,23 @@ public class UserHandler {
 
 ## Anti-Patterns
 
-| Anti-Pattern | Problem | Solution |
-|--------------|---------|----------|
-| Nothing executes | Publisher not subscribed | Ensure subscribe/return from controller |
-| Blocking call | .block() in reactive chain | Avoid block, use operators |
-| Context lost | MDC not propagated | Use Context propagation |
-| Memory leak | Infinite Flux without backpressure | Use backpressure operators |
-| Cold vs Hot confusion | Publisher recreated every subscribe | Use .share() or .cache() |
+| Anti-Pattern          | Problem                             | Solution                                |
+| --------------------- | ----------------------------------- | --------------------------------------- |
+| Nothing executes      | Publisher not subscribed            | Ensure subscribe/return from controller |
+| Blocking call         | .block() in reactive chain          | Avoid block, use operators              |
+| Context lost          | MDC not propagated                  | Use Context propagation                 |
+| Memory leak           | Infinite Flux without backpressure  | Use backpressure operators              |
+| Cold vs Hot confusion | Publisher recreated every subscribe | Use .share() or .cache()                |
 
 ## Quick Troubleshooting
 
-| Problem | Diagnostic | Fix |
-|---------|------------|-----|
-| Mono/Flux never completes | Check for missing subscribe | Return from controller |
-| Context not available | Check propagation | Use Hooks.enableAutomaticContextPropagation() |
-| Backpressure overflow | Check buffer size | Use onBackpressure* operators |
-| Test times out | Check StepVerifier usage | Use virtual time for delays |
-| Memory keeps growing | Check for leaks | Use .limitRate() or .take() |
+| Problem                   | Diagnostic                  | Fix                                           |
+| ------------------------- | --------------------------- | --------------------------------------------- |
+| Mono/Flux never completes | Check for missing subscribe | Return from controller                        |
+| Context not available     | Check propagation           | Use Hooks.enableAutomaticContextPropagation() |
+| Backpressure overflow     | Check buffer size           | Use onBackpressure\* operators                |
+| Test times out            | Check StepVerifier usage    | Use virtual time for delays                   |
+| Memory keeps growing      | Check for leaks             | Use .limitRate() or .take()                   |
 
 ## Reference Documentation
 

@@ -7,7 +7,7 @@ El microservicio `ms-order` es el dueño del dominio de Gestión de Pedidos y ac
 ## Glosario
 
 - **Orden**: Registro de un pedido de compra B2B almacenado en la tabla `orders` de PostgreSQL 17, con campos id, customer_id, status, total_amount, customer_email, shipping_address, notes, created_at y updated_at
-- **Item_De_Orden**: Línea de detalle de una Orden almacenada en la tabla `order_items`, con campos id, order_id, product_id, sku, product_name, quantity, unit_price y subtotal (columna generada: quantity * unit_price)
+- **Item_De_Orden**: Línea de detalle de una Orden almacenada en la tabla `order_items`, con campos id, order_id, product_id, sku, product_name, quantity, unit_price y subtotal (columna generada: quantity \* unit_price)
 - **Estado_De_Orden**: Sealed interface de Java 21 que modela los estados posibles del pedido: PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO y CANCELADO (Fase 1). En Fase 2 se incorpora PENDIENTE_PAGO
 - **PENDIENTE_RESERVA**: Estado efímero mientras se verifica la disponibilidad de stock vía gRPC contra ms-inventory
 - **CONFIRMADO**: Estado que indica que el stock fue reservado exitosamente. En Fase 1, el pago B2B es offline (facturación diferida 30-60 días)

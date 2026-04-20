@@ -21,54 +21,54 @@
 
 ### `product-events` (Productor: ms-catalog)
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `ProductCreated` | Producto registrado | `productId` |
-| `ProductUpdated` | Producto actualizado | `productId` |
-| `PriceChanged` | Precio modificado | `productId` |
+| Evento           | Descripción          | Partition Key |
+| ---------------- | -------------------- | ------------- |
+| `ProductCreated` | Producto registrado  | `productId`   |
+| `ProductUpdated` | Producto actualizado | `productId`   |
+| `PriceChanged`   | Precio modificado    | `productId`   |
 
 ### `inventory-events` (Productor: ms-inventory)
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `StockReserved` | Stock reservado para una orden | `sku` |
-| `StockReserveFailed` | Reserva fallida por stock insuficiente | `sku` |
-| `StockReleased` | Stock liberado (expiración/cancelación) | `sku` |
-| `StockUpdated` | Stock actualizado manualmente por admin | `sku` |
-| `StockDepleted` | Alerta de stock bajo (umbral por producto) | `sku` |
+| Evento               | Descripción                                | Partition Key |
+| -------------------- | ------------------------------------------ | ------------- |
+| `StockReserved`      | Stock reservado para una orden             | `sku`         |
+| `StockReserveFailed` | Reserva fallida por stock insuficiente     | `sku`         |
+| `StockReleased`      | Stock liberado (expiración/cancelación)    | `sku`         |
+| `StockUpdated`       | Stock actualizado manualmente por admin    | `sku`         |
+| `StockDepleted`      | Alerta de stock bajo (umbral por producto) | `sku`         |
 
 ### `order-events` (Productor: ms-order)
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `OrderCreated` | Orden creada | `orderId` |
-| `OrderConfirmed` | Orden confirmada (stock reservado + pago OK) | `orderId` |
-| `OrderStatusChanged` | Transición de estado | `orderId` |
-| `OrderCancelled` | Orden cancelada | `orderId` |
+| Evento               | Descripción                                  | Partition Key |
+| -------------------- | -------------------------------------------- | ------------- |
+| `OrderCreated`       | Orden creada                                 | `orderId`     |
+| `OrderConfirmed`     | Orden confirmada (stock reservado + pago OK) | `orderId`     |
+| `OrderStatusChanged` | Transición de estado                         | `orderId`     |
+| `OrderCancelled`     | Orden cancelada                              | `orderId`     |
 
 ### `cart-events` (Productor: ms-cart) — Fase 2
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `CartAbandoned` | Carrito detectado como abandonado | `cartId` |
+| Evento          | Descripción                       | Partition Key |
+| --------------- | --------------------------------- | ------------- |
+| `CartAbandoned` | Carrito detectado como abandonado | `cartId`      |
 
 ### `payment-events` (Productor: ms-payment) — Fase 2
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `PaymentProcessed` | Pago procesado exitosamente | `orderId` |
-| `PaymentFailed` | Pago rechazado | `orderId` |
+| Evento             | Descripción                 | Partition Key |
+| ------------------ | --------------------------- | ------------- |
+| `PaymentProcessed` | Pago procesado exitosamente | `orderId`     |
+| `PaymentFailed`    | Pago rechazado              | `orderId`     |
 
 ### `shipping-events` (Productor: ms-shipping) — Fase 3
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
-| `ShippingDispatched` | Envío despachado con tracking | `orderId` |
+| Evento               | Descripción                   | Partition Key |
+| -------------------- | ----------------------------- | ------------- |
+| `ShippingDispatched` | Envío despachado con tracking | `orderId`     |
 
 ### `provider-events` (Productor: ms-provider) — Fase 4
 
-| Evento | Descripción | Partition Key |
-|---|---|---|
+| Evento                 | Descripción                          | Partition Key     |
+| ---------------------- | ------------------------------------ | ----------------- |
 | `PurchaseOrderCreated` | Orden de compra generada a proveedor | `purchaseOrderId` |
 
 ---
@@ -77,22 +77,22 @@
 
 ### MVP (Fase 1)
 
-| Consumer Group | Servicio | Tópicos | Filtra por eventType |
-|---|---|---|---|
-| `inventory-service-group` | ms-inventory | `product-events`, `order-events` | `ProductCreated`, `OrderCancelled` |
+| Consumer Group               | Servicio         | Tópicos                            | Filtra por eventType                                                      |
+| ---------------------------- | ---------------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `inventory-service-group`    | ms-inventory     | `product-events`, `order-events`   | `ProductCreated`, `OrderCancelled`                                        |
 | `notification-service-group` | ms-notifications | `order-events`, `inventory-events` | `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`, `StockDepleted` |
 
 ### Ecosistema Completo
 
-| Consumer Group | Servicio | Tópicos |
-|---|---|---|
-| `inventory-service-group` | ms-inventory | `product-events`, `order-events` |
-| `order-service-group` | ms-order | `payment-events`, `shipping-events` |
+| Consumer Group               | Servicio         | Tópicos                                                                                 |
+| ---------------------------- | ---------------- | --------------------------------------------------------------------------------------- |
+| `inventory-service-group`    | ms-inventory     | `product-events`, `order-events`                                                        |
+| `order-service-group`        | ms-order         | `payment-events`, `shipping-events`                                                     |
 | `notification-service-group` | ms-notifications | `order-events`, `inventory-events`, `cart-events`, `shipping-events`, `provider-events` |
-| `payment-service-group` | ms-payment | `order-events` |
-| `shipping-service-group` | ms-shipping | `order-events` |
-| `provider-service-group` | ms-provider | `inventory-events` |
-| `reporter-service-group` | ms-reporter | **TODOS** (7 tópicos) |
+| `payment-service-group`      | ms-payment       | `order-events`                                                                          |
+| `shipping-service-group`     | ms-shipping      | `order-events`                                                                          |
+| `provider-service-group`     | ms-provider      | `inventory-events`                                                                      |
+| `reporter-service-group`     | ms-reporter      | **TODOS** (7 tópicos)                                                                   |
 
 ---
 

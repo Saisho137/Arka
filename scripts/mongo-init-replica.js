@@ -12,12 +12,12 @@
 // Idempotent: try/catch handles re-runs when the volume already has an
 // initialized replica set (e.g. docker compose down && docker compose up).
 try {
-    rs.status();
-    print("Replica set already initialized — skipping rs.initiate()");
+  rs.status();
+  print("Replica set already initialized — skipping rs.initiate()");
 } catch (e) {
-    rs.initiate({
-        _id: "rs0",
-        members: [{ _id: 0, host: "mongodb:27017" }]
-    });
-    print("Replica set rs0 initialized successfully");
+  rs.initiate({
+    _id: "rs0",
+    members: [{ _id: 0, host: "mongodb:27017" }],
+  });
+  print("Replica set rs0 initialized successfully");
 }

@@ -18,14 +18,14 @@ Plataforma e-commerce **B2B** para distribución de accesorios de PC en Colombia
 
 ## Sistemas Externos
 
-| Sistema | Microservicio | Relación |
-|---|---|---|
-| Pasarelas de pago (Stripe, Wompi, MercadoPago) | ms-payment (ACL) | Procesamiento de cobros |
-| Identity Provider (Entra ID / Cognito) | API Gateway | Autenticación JWT, Zero Trust |
-| Operadores logísticos (DHL, FedEx, legacy) | ms-shipping (ACL) | Cotización y despacho |
-| Proveedores externos | ms-provider (ACL) | Reabastecimiento vía email |
-| AWS SES | ms-notifications | Correos transaccionales |
-| AWS S3 | ms-reporter | Reportes pesados (hasta 500MB) |
+| Sistema                                        | Microservicio     | Relación                       |
+| ---------------------------------------------- | ----------------- | ------------------------------ |
+| Pasarelas de pago (Stripe, Wompi, MercadoPago) | ms-payment (ACL)  | Procesamiento de cobros        |
+| Identity Provider (Entra ID / Cognito)         | API Gateway       | Autenticación JWT, Zero Trust  |
+| Operadores logísticos (DHL, FedEx, legacy)     | ms-shipping (ACL) | Cotización y despacho          |
+| Proveedores externos                           | ms-provider (ACL) | Reabastecimiento vía email     |
+| AWS SES                                        | ms-notifications  | Correos transaccionales        |
+| AWS S3                                         | ms-reporter       | Reportes pesados (hasta 500MB) |
 
 ## Decisiones Estratégicas
 
@@ -37,13 +37,13 @@ Plataforma e-commerce **B2B** para distribución de accesorios de PC en Colombia
 
 ## Historias de Usuario
 
-| HU | Descripción | Servicio | Fase |
-|---|---|---|---|
-| HU1 | Registrar productos con validaciones y SKU único | ms-catalog | 1 |
-| HU2 | Actualizar stock con historial y lock pesimista | ms-inventory | 1 |
-| HU4 | Registrar orden con validación gRPC de stock | ms-order | 1 |
-| HU6 | Notificaciones por email ante cambios de estado | ms-notifications | 1 |
-| HU8 | Carritos abandonados con detección automática | ms-cart | 2 |
-| HU5 | Modificar orden antes de confirmación de pago | ms-order + ms-payment | 2 |
-| HU7 | Reportes de ventas semanales (CSV/PDF hasta 500MB) | ms-reporter | 3 |
-| HU3 | Alertas de stock bajo + órdenes automáticas a proveedores | ms-reporter + ms-provider | 3/4 |
+| HU  | Descripción                                               | Servicio                  | Fase |
+| --- | --------------------------------------------------------- | ------------------------- | ---- |
+| HU1 | Registrar productos con validaciones y SKU único          | ms-catalog                | 1    |
+| HU2 | Actualizar stock con historial y lock pesimista           | ms-inventory              | 1    |
+| HU4 | Registrar orden con validación gRPC de stock              | ms-order                  | 1    |
+| HU6 | Notificaciones por email ante cambios de estado           | ms-notifications          | 1    |
+| HU8 | Carritos abandonados con detección automática             | ms-cart                   | 2    |
+| HU5 | Modificar orden antes de confirmación de pago             | ms-order + ms-payment     | 2    |
+| HU7 | Reportes de ventas semanales (CSV/PDF hasta 500MB)        | ms-reporter               | 3    |
+| HU3 | Alertas de stock bajo + órdenes automáticas a proveedores | ms-reporter + ms-provider | 3/4  |

@@ -333,14 +333,14 @@ public interface InventoryClient {
 
 ### Capa de Dominio — Casos de Uso (`domain/usecase`)
 
-| Caso de Uso                    | Responsabilidad                                                                                                                                                                                                                                                | Ports Usados                                                                                                |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `CreateOrderUseCase`           | Valida items, invoca gRPC por cada item para reservar stock, persiste Order con estado CONFIRMADO, items con precios, historial PENDIENTE_RESERVA→CONFIRMADO, y evento OrderConfirmed en outbox. Todo en una transacción R2DBC.                                 | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient` |
-| `GetOrderUseCase`              | Consulta orden por ID con sus items. Valida acceso: CUSTOMER solo ve sus propias órdenes.                                                                                                                                                                      | `OrderRepository`, `OrderItemRepository`                                                                    |
-| `ListOrdersUseCase`            | Lista órdenes paginadas con filtros por status y customerId. CUSTOMER ve solo sus órdenes (filtro automático).                                                                                                                                                  | `OrderRepository`                                                                                           |
-| `ChangeOrderStatusUseCase`     | Valida transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO), actualiza orden, registra historial y emite OrderStatusChanged en outbox. Solo ADMIN.                                                                                              | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                   |
-| `CancelOrderUseCase`           | Valida que la orden esté en estado cancelable (CONFIRMADO), transiciona a CANCELADO con reason, registra historial y emite OrderCancelled en outbox. CUSTOMER y ADMIN (CUSTOMER solo sus propias órdenes).                                                       | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                   |
-| `ProcessExternalEventUseCase`  | Verifica idempotencia (processed_events), procesa eventos de payment-events y shipping-events (Fase 2+). Infraestructura base lista para extensión.                                                                                                             | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`       |
+| Caso de Uso                   | Responsabilidad                                                                                                                                                                                                                 | Ports Usados                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `CreateOrderUseCase`          | Valida items, invoca gRPC por cada item para reservar stock, persiste Order con estado CONFIRMADO, items con precios, historial PENDIENTE_RESERVA→CONFIRMADO, y evento OrderConfirmed en outbox. Todo en una transacción R2DBC. | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient` |
+| `GetOrderUseCase`             | Consulta orden por ID con sus items. Valida acceso: CUSTOMER solo ve sus propias órdenes.                                                                                                                                       | `OrderRepository`, `OrderItemRepository`                                                                            |
+| `ListOrdersUseCase`           | Lista órdenes paginadas con filtros por status y customerId. CUSTOMER ve solo sus órdenes (filtro automático).                                                                                                                  | `OrderRepository`                                                                                                   |
+| `ChangeOrderStatusUseCase`    | Valida transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO), actualiza orden, registra historial y emite OrderStatusChanged en outbox. Solo ADMIN.                                                              | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
+| `CancelOrderUseCase`          | Valida que la orden esté en estado cancelable (CONFIRMADO), transiciona a CANCELADO con reason, registra historial y emite OrderCancelled en outbox. CUSTOMER y ADMIN (CUSTOMER solo sus propias órdenes).                      | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
+| `ProcessExternalEventUseCase` | Verifica idempotencia (processed_events), procesa eventos de payment-events y shipping-events (Fase 2+). Infraestructura base lista para extensión.                                                                             | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`               |
 
 ### Capa de Infraestructura — Entry Points
 
@@ -423,35 +423,35 @@ public record ErrorResponse(String code, String message) {}
 
 #### Controlador REST
 
-| Endpoint                       | Método | Rol Requerido    | Retorno                                | Descripción                                |
-| ------------------------------ | ------ | ---------------- | -------------------------------------- | ------------------------------------------ |
-| `POST /orders`                 | POST   | CUSTOMER         | `Mono<OrderResponse>` (202 Accepted)   | Crear orden de compra                      |
-| `GET /orders/{id}`             | GET    | CUSTOMER, ADMIN  | `Mono<OrderResponse>` (200 OK)         | Consultar detalle de orden                 |
-| `GET /orders`                  | GET    | CUSTOMER, ADMIN  | `Flux<OrderSummaryResponse>` (200 OK)  | Listar órdenes con filtros                 |
-| `PUT /orders/{id}/status`      | PUT    | ADMIN            | `Mono<OrderResponse>` (200 OK)         | Cambiar estado (despacho, entrega)         |
-| `PUT /orders/{id}/cancel`      | PUT    | CUSTOMER, ADMIN  | `Mono<OrderResponse>` (200 OK)         | Cancelar orden                             |
+| Endpoint                  | Método | Rol Requerido   | Retorno                               | Descripción                        |
+| ------------------------- | ------ | --------------- | ------------------------------------- | ---------------------------------- |
+| `POST /orders`            | POST   | CUSTOMER        | `Mono<OrderResponse>` (202 Accepted)  | Crear orden de compra              |
+| `GET /orders/{id}`        | GET    | CUSTOMER, ADMIN | `Mono<OrderResponse>` (200 OK)        | Consultar detalle de orden         |
+| `GET /orders`             | GET    | CUSTOMER, ADMIN | `Flux<OrderSummaryResponse>` (200 OK) | Listar órdenes con filtros         |
+| `PUT /orders/{id}/status` | PUT    | ADMIN           | `Mono<OrderResponse>` (200 OK)        | Cambiar estado (despacho, entrega) |
+| `PUT /orders/{id}/cancel` | PUT    | CUSTOMER, ADMIN | `Mono<OrderResponse>` (200 OK)        | Cancelar orden                     |
 
 #### Consumidor Kafka
 
 > **Arquitectura (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Se usa `KafkaReceiver` de reactor-kafka directamente. Reutilizar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`: `KafkaConsumerConfig` (beans `KafkaReceiver` por tópico), `KafkaConsumerLifecycle` (`ApplicationReadyEvent` → `startConsuming()`), `KafkaEventConsumer` (switch eventType, per-msg acknowledge, retry backoff).
 
-| Consumer             | Tópicos Suscritos                      | Consumer Group        | Eventos Procesados (Fase 2+)                                | Tecnología |
-| -------------------- | -------------------------------------- | --------------------- | ----------------------------------------------------------- | ---------- |
-| `KafkaEventConsumer` | `payment-events`, `shipping-events`    | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched`   | `KafkaReceiver` (reactor-kafka §B.12) |
+| Consumer             | Tópicos Suscritos                   | Consumer Group        | Eventos Procesados (Fase 2+)                              | Tecnología                            |
+| -------------------- | ----------------------------------- | --------------------- | --------------------------------------------------------- | ------------------------------------- |
+| `KafkaEventConsumer` | `payment-events`, `shipping-events` | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched` | `KafkaReceiver` (reactor-kafka §B.12) |
 
 Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WARN. En Fase 1, la infraestructura base está lista pero no procesa eventos activamente.
 
 ### Capa de Infraestructura — Driven Adapters
 
-| Adapter                          | Implementa                     | Tecnología                              |
-| -------------------------------- | ------------------------------ | --------------------------------------- |
-| `R2dbcOrderAdapter`              | `OrderRepository`              | R2DBC DatabaseClient / `@Transactional` |
-| `R2dbcOrderItemAdapter`          | `OrderItemRepository`          | R2DBC DatabaseClient                    |
-| `R2dbcOrderStateHistoryAdapter`  | `OrderStateHistoryRepository`  | R2DBC DatabaseClient                    |
-| `R2dbcOutboxAdapter`             | `OutboxEventRepository`        | R2DBC DatabaseClient                    |
-| `R2dbcProcessedEventAdapter`     | `ProcessedEventRepository`     | R2DBC DatabaseClient                    |
-| `GrpcInventoryClient`            | `InventoryClient`              | gRPC Stub (Protobuf)                    |
-| `KafkaOutboxRelay`               | Scheduled relay (cada 5s)      | `KafkaSender` de `reactor-kafka` (§B.11) |
+| Adapter                         | Implementa                    | Tecnología                               |
+| ------------------------------- | ----------------------------- | ---------------------------------------- |
+| `R2dbcOrderAdapter`             | `OrderRepository`             | R2DBC DatabaseClient / `@Transactional`  |
+| `R2dbcOrderItemAdapter`         | `OrderItemRepository`         | R2DBC DatabaseClient                     |
+| `R2dbcOrderStateHistoryAdapter` | `OrderStateHistoryRepository` | R2DBC DatabaseClient                     |
+| `R2dbcOutboxAdapter`            | `OutboxEventRepository`       | R2DBC DatabaseClient                     |
+| `R2dbcProcessedEventAdapter`    | `ProcessedEventRepository`    | R2DBC DatabaseClient                     |
+| `GrpcInventoryClient`           | `InventoryClient`             | gRPC Stub (Protobuf)                     |
+| `KafkaOutboxRelay`              | Scheduled relay (cada 5s)     | `KafkaSender` de `reactor-kafka` (§B.11) |
 
 ### Excepciones de Dominio
 
@@ -904,16 +904,16 @@ DomainException (abstract)
 
 ### GlobalExceptionHandler (`@ControllerAdvice`)
 
-| Tipo de Excepción                            | HTTP Status    | Código de Error              | Comportamiento                                                 |
-| -------------------------------------------- | -------------- | ---------------------------- | -------------------------------------------------------------- |
-| `WebExchangeBindException` (Bean Validation) | 400            | `VALIDATION_ERROR`           | Retorna campos inválidos en el mensaje                         |
-| `InvalidOrderStatusException`                | 400            | `INVALID_ORDER_STATUS`       | Status proporcionado no es válido                              |
-| `AccessDeniedException`                      | 403            | `ACCESS_DENIED`              | Cliente intenta acceder a orden ajena                          |
-| `OrderNotFoundException`                     | 404            | `ORDER_NOT_FOUND`            | Orden no existe                                                |
-| `InvalidStateTransitionException`            | 409            | `INVALID_STATE_TRANSITION`   | Transición de estado no permitida                              |
-| `InsufficientStockException`                 | 409            | `INSUFFICIENT_STOCK`         | Stock insuficiente (detalle de SKUs)                           |
-| `InventoryServiceUnavailableException`       | 503            | `INVENTORY_UNAVAILABLE`      | ms-inventory no responde                                       |
-| `Exception` (inesperada)                     | 500            | `INTERNAL_ERROR`             | Log ERROR, mensaje genérico sin detalles internos              |
+| Tipo de Excepción                            | HTTP Status | Código de Error            | Comportamiento                                    |
+| -------------------------------------------- | ----------- | -------------------------- | ------------------------------------------------- |
+| `WebExchangeBindException` (Bean Validation) | 400         | `VALIDATION_ERROR`         | Retorna campos inválidos en el mensaje            |
+| `InvalidOrderStatusException`                | 400         | `INVALID_ORDER_STATUS`     | Status proporcionado no es válido                 |
+| `AccessDeniedException`                      | 403         | `ACCESS_DENIED`            | Cliente intenta acceder a orden ajena             |
+| `OrderNotFoundException`                     | 404         | `ORDER_NOT_FOUND`          | Orden no existe                                   |
+| `InvalidStateTransitionException`            | 409         | `INVALID_STATE_TRANSITION` | Transición de estado no permitida                 |
+| `InsufficientStockException`                 | 409         | `INSUFFICIENT_STOCK`       | Stock insuficiente (detalle de SKUs)              |
+| `InventoryServiceUnavailableException`       | 503         | `INVENTORY_UNAVAILABLE`    | ms-inventory no responde                          |
+| `Exception` (inesperada)                     | 500         | `INTERNAL_ERROR`           | Log ERROR, mensaje genérico sin detalles internos |
 
 ### Errores en Cadenas Reactivas
 
@@ -926,12 +926,12 @@ DomainException (abstract)
 
 El `GrpcInventoryClient` traduce respuestas y errores gRPC a tipos de dominio:
 
-| Respuesta gRPC                    | Acción en ms-order                                                    |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `success = true`                  | Continuar flujo, extraer unitPrice y reservationId                    |
-| `success = false` (stock insuf.)  | Acumular fallo, reportar todos los items fallidos al final            |
-| `UNAVAILABLE` / timeout           | Lanzar `InventoryServiceUnavailableException`                         |
-| Error inesperado                  | Lanzar `InventoryServiceUnavailableException` con detalle en log      |
+| Respuesta gRPC                   | Acción en ms-order                                               |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `success = true`                 | Continuar flujo, extraer unitPrice y reservationId               |
+| `success = false` (stock insuf.) | Acumular fallo, reportar todos los items fallidos al final       |
+| `UNAVAILABLE` / timeout          | Lanzar `InventoryServiceUnavailableException`                    |
+| Error inesperado                 | Lanzar `InventoryServiceUnavailableException` con detalle en log |
 
 ### Errores en Consumidores Kafka
 
@@ -981,23 +981,23 @@ Los tests unitarios se enfocan en:
 
 Cada propiedad de correctitud del documento de diseño se implementa como un **único test de propiedad** con jqwik:
 
-| Propiedad                                    | Test                                                                  | Generadores                                          |
-| -------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------- |
-| P1: Validación rechaza inválidos             | Generar requests con campos nulos/vacíos/inválidos                    | Strings vacíos, nulls, quantities <= 0, items vacíos |
-| P2: Creación exitosa produce artefactos      | Generar órdenes válidas con gRPC exitoso, verificar todos artefactos  | Items aleatorios, precios, cantidades                |
-| P3: Stock insuficiente aborta sin persistir  | Generar órdenes donde gRPC falla, verificar no-persistencia           | Items con stock insuficiente aleatorio               |
-| P4: Invariante total_amount                  | Generar items con precios y cantidades, verificar suma                | BigDecimals positivos, quantities positivos          |
-| P5: Respuestas campos completos              | Generar órdenes, consultar y verificar campos                         | Órdenes aleatorias                                   |
-| P6: gRPC error → 503                         | Simular errores gRPC variados, verificar 503                         | Tipos de error gRPC aleatorios                       |
-| P7: Máquina de estados                       | Generar pares (from, to), verificar aceptación/rechazo               | Todos los pares de estados posibles                  |
-| P8: Historial de auditoría                   | Generar transiciones válidas, verificar historial                     | Transiciones válidas aleatorias                      |
-| P9: Eventos outbox correctos                 | Generar transiciones válidas, verificar eventos                       | Transiciones válidas con datos aleatorios            |
-| P10: Control de acceso CUSTOMER              | Generar órdenes y customers distintos, verificar 403                  | Pares (orderId, customerId) no coincidentes          |
-| P11: Listado ordenado y filtrado             | Generar órdenes con timestamps y estados variados, verificar orden    | Timestamps, estados, customerIds aleatorios          |
-| P12: Transición outbox relay                 | Generar eventos PENDING, simular éxito/fallo                         | Eventos aleatorios                                   |
-| P13: Eventos desconocidos ignorados          | Generar eventos con eventTypes aleatorios no reconocidos              | Strings aleatorios como eventType                    |
-| P14: Idempotencia consumo                    | Generar eventos y procesarlos dos veces                               | Eventos con eventId fijo                             |
-| P15: Estructura ErrorResponse                | Generar excepciones de distintos tipos                                | DomainException, validation, unexpected              |
+| Propiedad                                   | Test                                                                 | Generadores                                          |
+| ------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| P1: Validación rechaza inválidos            | Generar requests con campos nulos/vacíos/inválidos                   | Strings vacíos, nulls, quantities <= 0, items vacíos |
+| P2: Creación exitosa produce artefactos     | Generar órdenes válidas con gRPC exitoso, verificar todos artefactos | Items aleatorios, precios, cantidades                |
+| P3: Stock insuficiente aborta sin persistir | Generar órdenes donde gRPC falla, verificar no-persistencia          | Items con stock insuficiente aleatorio               |
+| P4: Invariante total_amount                 | Generar items con precios y cantidades, verificar suma               | BigDecimals positivos, quantities positivos          |
+| P5: Respuestas campos completos             | Generar órdenes, consultar y verificar campos                        | Órdenes aleatorias                                   |
+| P6: gRPC error → 503                        | Simular errores gRPC variados, verificar 503                         | Tipos de error gRPC aleatorios                       |
+| P7: Máquina de estados                      | Generar pares (from, to), verificar aceptación/rechazo               | Todos los pares de estados posibles                  |
+| P8: Historial de auditoría                  | Generar transiciones válidas, verificar historial                    | Transiciones válidas aleatorias                      |
+| P9: Eventos outbox correctos                | Generar transiciones válidas, verificar eventos                      | Transiciones válidas con datos aleatorios            |
+| P10: Control de acceso CUSTOMER             | Generar órdenes y customers distintos, verificar 403                 | Pares (orderId, customerId) no coincidentes          |
+| P11: Listado ordenado y filtrado            | Generar órdenes con timestamps y estados variados, verificar orden   | Timestamps, estados, customerIds aleatorios          |
+| P12: Transición outbox relay                | Generar eventos PENDING, simular éxito/fallo                         | Eventos aleatorios                                   |
+| P13: Eventos desconocidos ignorados         | Generar eventos con eventTypes aleatorios no reconocidos             | Strings aleatorios como eventType                    |
+| P14: Idempotencia consumo                   | Generar eventos y procesarlos dos veces                              | Eventos con eventId fijo                             |
+| P15: Estructura ErrorResponse               | Generar excepciones de distintos tipos                               | DomainException, validation, unexpected              |
 
 ### Herramientas Adicionales
 

@@ -8,9 +8,9 @@ El microservicio `ms-notifications` es el motor pasivo de notificaciones transac
 
 - **Evento_De_Dominio**: Mensaje recibido desde un tópico de Kafka con el sobre estándar que contiene los campos eventId (UUID), eventType, timestamp, source, correlationId y payload
 - **Sobre_Estándar**: Formato unificado de todos los eventos del ecosistema Arka: { eventId, eventType, timestamp, source, correlationId, payload }
-- **Plantilla**: Documento almacenado en la colección `templates` de MongoDB con campos _id, eventType (índice único), subject (cadena con variables {{variable}}), bodyTemplate (HTML con variables {{variable}}), active y createdAt
+- **Plantilla**: Documento almacenado en la colección `templates` de MongoDB con campos \_id, eventType (índice único), subject (cadena con variables {{variable}}), bodyTemplate (HTML con variables {{variable}}), active y createdAt
 - **Variable_De_Plantilla**: Marcador con formato `{{nombreVariable}}` dentro del subject o bodyTemplate de una Plantilla que se sustituye por valores extraídos del payload del Evento_De_Dominio
-- **Historial_De_Notificación**: Documento almacenado en la colección `notification_history` de MongoDB con campos _id, eventId (índice único para idempotencia), eventType, orderId, customerEmail, status (SENT o FAILED), processedAt y createdAt
+- **Historial_De_Notificación**: Documento almacenado en la colección `notification_history` de MongoDB con campos \_id, eventId (índice único para idempotencia), eventType, orderId, customerEmail, status (SENT o FAILED), processedAt y createdAt
 - **Consumidor_Kafka**: Entry-point reactivo suscrito al consumer group `notification-service-group` que recibe eventos de los tópicos `order-events` e `inventory-events` (Fase 1), con extensibilidad para `cart-events`, `shipping-events` y `provider-events` (fases posteriores)
 - **Servicio_SES**: Componente de infraestructura (driven-adapter) que envuelve el SDK bloqueante de AWS SES con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` para enviar correos sin bloquear el EventLoop
 - **Backoff_Exponencial**: Estrategia de reintentos donde el tiempo de espera entre intentos crece exponencialmente (ejemplo: 1s, 2s, 4s) ante fallos transitorios del Servicio_SES

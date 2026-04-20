@@ -60,7 +60,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Mapa inmutable con `Map.of()`
     - _Requisitos: 4.2, 4.3, 4.4_
 
-  - [ ]* 2.3 Escribir test de propiedad para la máquina de estados (OrderStateTransition)
+  - [ ]\* 2.3 Escribir test de propiedad para la máquina de estados (OrderStateTransition)
     - **Propiedad 7: Máquina de estados acepta solo transiciones válidas**
     - Generar todos los pares (from, to) de estados posibles y verificar que solo las 5 transiciones válidas son aceptadas; el resto rechazadas. ENTREGADO y CANCELADO no tienen transiciones de salida.
     - **Valida: Requisitos 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 10.3**
@@ -68,7 +68,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Validaciones: `Objects.requireNonNull` para campos requeridos, `quantity > 0`, defaults para `status`, `createdAt`, `updatedAt`
     - Ubicar en `com.arka.model.order`
     - _Requisitos: 1.1, 1.5, 4.5_
-  - [ ]* 2.5 Escribir test de propiedad para la invariante de total_amount
+  - [ ]\* 2.5 Escribir test de propiedad para la invariante de total_amount
     - **Propiedad 4: Invariante de total_amount**
     - Generar listas de items con precios (BigDecimal positivos) y cantidades (int positivos) aleatorios, verificar que la suma de `quantity * unitPrice` por item es exactamente igual al `totalAmount` calculado.
     - **Valida: Requisitos 1.5**
@@ -102,11 +102,11 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Si gRPC falla por comunicación, lanzar `InventoryServiceUnavailableException`
     - _Requisitos: 1.2, 1.3, 1.4, 1.5, 1.7, 1.9, 9.1, 9.2, 9.3, 9.5, 9.6_
 
-  - [ ]* 4.2 Escribir test de propiedad para creación exitosa de orden
+  - [ ]\* 4.2 Escribir test de propiedad para creación exitosa de orden
     - **Propiedad 2: Creación exitosa produce todos los artefactos correctos**
     - Generar órdenes válidas con gRPC exitoso (mock), verificar que se persisten: Order con CONFIRMADO, N OrderItems con precios correctos, historial PENDIENTE_RESERVA→CONFIRMADO, evento OrderConfirmed en outbox con payload completo.
     - **Valida: Requisitos 1.2, 1.3, 1.7, 7.9, 9.1, 9.2**
-  - [ ]* 4.3 Escribir test de propiedad para stock insuficiente
+  - [ ]\* 4.3 Escribir test de propiedad para stock insuficiente
     - **Propiedad 3: Stock insuficiente aborta sin persistir**
     - Generar órdenes donde gRPC rechaza items aleatorios, verificar que no se persiste Order, ni items, ni historial, ni eventos outbox.
     - **Valida: Requisitos 1.4, 9.3, 9.6**
@@ -115,7 +115,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Lanzar `OrderNotFoundException` si no existe
     - Lanzar `AccessDeniedException` si CUSTOMER accede a orden ajena
     - _Requisitos: 2.1, 2.2, 2.3, 2.4_
-  - [ ]* 4.5 Escribir test de propiedad para control de acceso
+  - [ ]\* 4.5 Escribir test de propiedad para control de acceso
     - **Propiedad 10: Control de acceso para Cliente_B2B**
     - Generar pares (orden, customerId) donde customerId no coincide con el de la orden, verificar que consulta y cancelación retornan 403 sin modificar estado.
     - **Valida: Requisitos 2.4, 6.4, 10.8**
@@ -123,7 +123,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=ListOrders`
     - Validar que el status proporcionado sea un Estado_De_Orden válido, lanzar `InvalidOrderStatusException` si no
     - _Requisitos: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
-  - [ ]* 4.7 Escribir test de propiedad para listado ordenado y filtrado
+  - [ ]\* 4.7 Escribir test de propiedad para listado ordenado y filtrado
     - **Propiedad 11: Listado de órdenes ordenado y filtrado correctamente**
     - Generar órdenes con timestamps y estados variados, verificar orden descendente por `created_at` y que los filtros se aplican correctamente. CUSTOMER siempre filtrado por su customerId.
     - **Valida: Requisitos 3.1, 3.2, 3.3, 3.4**
@@ -138,11 +138,11 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Lanzar `AccessDeniedException` si CUSTOMER intenta cancelar orden ajena
     - Lanzar `OrderNotFoundException` si la orden no existe
     - _Requisitos: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
-  - [ ]* 4.10 Escribir test de propiedad para historial de auditoría en transiciones
+  - [ ]\* 4.10 Escribir test de propiedad para historial de auditoría en transiciones
     - **Propiedad 8: Transiciones válidas producen historial de auditoría completo**
     - Generar transiciones válidas aleatorias, verificar que se crea registro en historial con previous_status, new_status, changed_by y reason (si aplica).
     - **Valida: Requisitos 4.5, 6.7**
-  - [ ]* 4.11 Escribir test de propiedad para eventos outbox en transiciones
+  - [ ]\* 4.11 Escribir test de propiedad para eventos outbox en transiciones
     - **Propiedad 9: Transiciones válidas producen eventos outbox correctos**
     - Generar transiciones válidas, verificar que se crea evento en outbox con eventType correcto, status=PENDING, topic="order-events", partition_key=orderId y payload con campos requeridos.
     - **Valida: Requisitos 4.6, 5.6, 6.5, 7.2, 7.3, 7.8, 7.9, 7.10, 7.11**
@@ -176,7 +176,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Manejar `UNAVAILABLE`, timeout y errores inesperados
     - _Requisitos: 9.1, 9.4, 9.5_
 
-  - [ ]* 6.7 Escribir test de propiedad para error de comunicación gRPC
+  - [ ]\* 6.7 Escribir test de propiedad para error de comunicación gRPC
     - **Propiedad 6: Error de comunicación gRPC retorna 503**
     - Simular errores gRPC variados (timeout, conexión rechazada, UNAVAILABLE), verificar que se lanza `InventoryServiceUnavailableException` sin persistir datos.
     - **Valida: Requisitos 1.9, 9.4, 10.4**
@@ -203,11 +203,11 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Retornos `Mono`/`Flux`, `@Valid` en requests
     - Anotaciones Springdoc: `@Tag`, `@Operation`, `@ApiResponse` (§D.2)
     - _Requisitos: 1.1, 1.6, 2.1, 2.3, 3.1, 3.5, 5.5, 6.3_
-  - [ ]* 8.5 Escribir test de propiedad para validación de entrada
+  - [ ]\* 8.5 Escribir test de propiedad para validación de entrada
     - **Propiedad 1: Validación rechaza entrada inválida**
     - Generar requests con campos nulos, vacíos, items vacíos, quantity <= 0. Verificar que se rechaza con HTTP 400 sin invocar gRPC ni persistir datos.
     - **Valida: Requisitos 1.1, 1.8, 10.2**
-  - [ ]* 8.6 Escribir test de propiedad para campos completos en respuestas
+  - [ ]\* 8.6 Escribir test de propiedad para campos completos en respuestas
     - **Propiedad 5: Respuestas contienen todos los campos requeridos**
     - Generar órdenes aleatorias, consultar y verificar que la respuesta contiene todos los campos requeridos: orderId, customerId, status, totalAmount, shippingAddress, items (no vacía), createdAt.
     - **Valida: Requisitos 1.6, 2.1**
@@ -216,7 +216,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Agregar handlers específicos para las excepciones de ms-order
     - Manejar `WebExchangeBindException`, todas las `DomainException` y `Exception` genérica
     - _Requisitos: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8_
-  - [ ]* 8.8 Escribir test de propiedad para estructura de ErrorResponse
+  - [ ]\* 8.8 Escribir test de propiedad para estructura de ErrorResponse
     - **Propiedad 15: Respuestas de error tienen estructura correcta**
     - Generar excepciones de distintos tipos (validación, dominio, inesperada), verificar que la respuesta contiene `code` (no vacío) y `message` (no vacío) con el código HTTP correcto. Las 500 no exponen stack trace.
     - **Valida: Requisitos 10.5, 10.6**
@@ -235,7 +235,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Procesar en lotes (LIMIT 100 vía `OutboxRelayUseCase.BATCH_SIZE`)
     - _Requisitos: 7.3, 7.4, 7.5, 7.6_
     - _Estándar: §B.11 (reactor-kafka directo), §D.6 (Schedulers externalizados)_
-  - [ ]* 10.2 Escribir test de propiedad para transición del relay outbox
+  - [ ]\* 10.2 Escribir test de propiedad para transición del relay outbox
     - **Propiedad 12: Transición de estado del relay outbox**
     - Generar eventos PENDING, simular publicación exitosa y fallida, verificar que los exitosos transicionan a PUBLISHED y los fallidos permanecen PENDING.
     - **Valida: Requisitos 7.5, 7.6**
@@ -248,11 +248,11 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0 (Spring Boot 4.0.3). Usar `KafkaReceiver` de reactor-kafka directamente.
     - Infraestructura base lista para Fase 2+ (PaymentProcessed, PaymentFailed, ShippingDispatched)
     - _Requisitos: 8.1, 8.2, 8.6_
-  - [ ]* 10.4 Escribir test de propiedad para eventos con eventType desconocido
+  - [ ]\* 10.4 Escribir test de propiedad para eventos con eventType desconocido
     - **Propiedad 13: Eventos con eventType desconocido son ignorados**
     - Generar eventos con eventTypes aleatorios no reconocidos, verificar que se ignoran sin excepciones, sin modificar órdenes y sin insertar en processed_events.
     - **Valida: Requisitos 8.2**
-  - [ ]* 10.5 Escribir test de propiedad para idempotencia en consumo de eventos
+  - [ ]\* 10.5 Escribir test de propiedad para idempotencia en consumo de eventos
     - **Propiedad 14: Idempotencia en consumo de eventos**
     - Generar eventos, procesarlos una vez (registrar eventId en processed_events), enviar el mismo evento de nuevo, verificar que se descarta sin ejecutar lógica de negocio ni crear artefactos adicionales.
     - **Valida: Requisitos 8.4**

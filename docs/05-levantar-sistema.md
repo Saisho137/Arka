@@ -12,35 +12,35 @@
 
 ### Infraestructura Base
 
-| Servicio | Imagen | Puerto Host | Propósito |
-|---|---|---|---|
-| `postgres-orders` | postgres:17-alpine | 5432 | BD ms-order |
-| `postgres-inventory` | postgres:17-alpine | 5433 | BD ms-inventory |
-| `postgres-payment` | postgres:17-alpine | 5434 | BD ms-payment |
-| `postgres-reporter` | postgres:17-alpine | 5435 | BD ms-reporter |
-| `postgres-shipping` | postgres:17-alpine | 5436 | BD ms-shipping |
-| `postgres-provider` | postgres:17-alpine | 5437 | BD ms-provider |
-| `mongodb` | mongo:7-jammy | 27017 | BD ms-catalog, ms-cart, ms-notifications |
-| `mongo-init-replica` | mongo:7-jammy | — | Inicializa replica set (one-shot) |
-| `redis` | redis:7-alpine | 6379 | Caché ms-catalog |
-| `kafka` | confluentinc/cp-kafka:8.0.4 | 9092 | Message broker (KRaft) |
-| `kafka-init` | confluentinc/cp-kafka:8.0.4 | — | Crea los 7 tópicos (one-shot) |
-| `kafka-ui` | provectuslabs/kafka-ui | 8080 | UI para ver mensajes Kafka |
-| `localstack` | localstack/localstack | 4566 | AWS simulado (Secrets, S3, SES) |
+| Servicio             | Imagen                      | Puerto Host | Propósito                                |
+| -------------------- | --------------------------- | ----------- | ---------------------------------------- |
+| `postgres-orders`    | postgres:17-alpine          | 5432        | BD ms-order                              |
+| `postgres-inventory` | postgres:17-alpine          | 5433        | BD ms-inventory                          |
+| `postgres-payment`   | postgres:17-alpine          | 5434        | BD ms-payment                            |
+| `postgres-reporter`  | postgres:17-alpine          | 5435        | BD ms-reporter                           |
+| `postgres-shipping`  | postgres:17-alpine          | 5436        | BD ms-shipping                           |
+| `postgres-provider`  | postgres:17-alpine          | 5437        | BD ms-provider                           |
+| `mongodb`            | mongo:7-jammy               | 27017       | BD ms-catalog, ms-cart, ms-notifications |
+| `mongo-init-replica` | mongo:7-jammy               | —           | Inicializa replica set (one-shot)        |
+| `redis`              | redis:7-alpine              | 6379        | Caché ms-catalog                         |
+| `kafka`              | confluentinc/cp-kafka:8.0.4 | 9092        | Message broker (KRaft)                   |
+| `kafka-init`         | confluentinc/cp-kafka:8.0.4 | —           | Crea los 7 tópicos (one-shot)            |
+| `kafka-ui`           | provectuslabs/kafka-ui      | 8080        | UI para ver mensajes Kafka               |
+| `localstack`         | localstack/localstack       | 4566        | AWS simulado (Secrets, S3, SES)          |
 
 ### Microservicios
 
-| Servicio | Puerto | Dependencias |
-|---|---|---|
-| `ms-catalog` | 8084 | mongodb, mongo-init-replica, redis, localstack, kafka |
-| `ms-inventory` | 8082 | postgres-inventory, localstack, kafka |
-| `ms-order` | 8081 | postgres-orders, localstack, kafka, ms-inventory |
-| `ms-notifications` | 8085 | mongo-init-replica, localstack, kafka |
-| `ms-cart` | 8086 | mongo-init-replica, localstack, kafka, ms-catalog |
-| `ms-payment` | 8083 | postgres-payment, localstack, kafka |
-| `ms-reporter` | 8087 | postgres-reporter, localstack, kafka |
-| `ms-shipping` | 8088 | postgres-shipping, localstack, kafka |
-| `ms-provider` | 8089 | postgres-provider, localstack, kafka |
+| Servicio           | Puerto | Dependencias                                          |
+| ------------------ | ------ | ----------------------------------------------------- |
+| `ms-catalog`       | 8084   | mongodb, mongo-init-replica, redis, localstack, kafka |
+| `ms-inventory`     | 8082   | postgres-inventory, localstack, kafka                 |
+| `ms-order`         | 8081   | postgres-orders, localstack, kafka, ms-inventory      |
+| `ms-notifications` | 8085   | mongo-init-replica, localstack, kafka                 |
+| `ms-cart`          | 8086   | mongo-init-replica, localstack, kafka, ms-catalog     |
+| `ms-payment`       | 8083   | postgres-payment, localstack, kafka                   |
+| `ms-reporter`      | 8087   | postgres-reporter, localstack, kafka                  |
+| `ms-shipping`      | 8088   | postgres-shipping, localstack, kafka                  |
+| `ms-provider`      | 8089   | postgres-provider, localstack, kafka                  |
 
 ---
 
@@ -103,23 +103,23 @@ Esto levanta automáticamente toda la infraestructura necesaria (PostgreSQL, Mon
 
 ## Spring Profiles
 
-| Perfil | Activación | Host de BD | Puerto BD |
-|---|---|---|---|
-| `local` | Automático desde IDE (default) | `localhost` | Puerto mapeado (.env) |
-| `docker` | `SPRING_PROFILES_ACTIVE=docker` en compose | Hostname del contenedor | 5432 (interno) |
+| Perfil   | Activación                                 | Host de BD              | Puerto BD             |
+| -------- | ------------------------------------------ | ----------------------- | --------------------- |
+| `local`  | Automático desde IDE (default)             | `localhost`             | Puerto mapeado (.env) |
+| `docker` | `SPRING_PROFILES_ACTIVE=docker` en compose | Hostname del contenedor | 5432 (interno)        |
 
 ---
 
 ## URLs Útiles
 
-| Recurso | URL |
-|---|---|
-| Kafka UI | http://localhost:8080 |
-| LocalStack | http://localhost:4566 |
-| ms-catalog Swagger | http://localhost:8084/swagger-ui.html |
+| Recurso              | URL                                   |
+| -------------------- | ------------------------------------- |
+| Kafka UI             | http://localhost:8080                 |
+| LocalStack           | http://localhost:4566                 |
+| ms-catalog Swagger   | http://localhost:8084/swagger-ui.html |
 | ms-inventory Swagger | http://localhost:8082/swagger-ui.html |
-| ms-catalog Health | http://localhost:8084/actuator/health |
-| ms-inventory Health | http://localhost:8082/actuator/health |
+| ms-catalog Health    | http://localhost:8084/actuator/health |
+| ms-inventory Health  | http://localhost:8082/actuator/health |
 
 ---
 

@@ -95,12 +95,12 @@ sequenceDiagram
 
     Kafka->>Consumer: DomainEvent (sobre estándar)
     Consumer->>Consumer: Deserializar sobre, extraer eventType
-    
+
     alt eventType no relevante
         Consumer->>Consumer: Log WARN, ignorar
     else eventType relevante
         Consumer->>UseCase: execute(domainEvent)
-        
+
         rect rgb(235, 255, 235)
             Note over UseCase,Mongo: Verificación de idempotencia
             UseCase->>Mongo: findByEventId(eventId)
@@ -113,14 +113,14 @@ sequenceDiagram
                 Strategy-->>UseCase: NotificationContext(destinatario, variables)
                 UseCase->>Mongo: findActiveByEventType(eventType)
                 Mongo-->>UseCase: NotificationTemplate
-                
+
                 alt Plantilla no encontrada
                     UseCase->>Mongo: save(NotificationHistory status=FAILED)
                     UseCase-->>Consumer: Log ERROR
                 else Plantilla encontrada
                     UseCase->>UseCase: Resolver variables en subject y body
                     UseCase->>SES: sendEmail(to, subject, body)
-                    
+
                     alt Envío exitoso
                         UseCase->>Mongo: save(NotificationHistory status=SENT)
                     else Fallo transitorio (retry 3x: 1s, 2s, 4s)
@@ -139,7 +139,7 @@ sequenceDiagram
             end
         end
     end
-    
+
     Consumer-->>Kafka: ack
 ```
 
@@ -328,12 +328,12 @@ public class TemplateEngine {
 
 #### Estrategias de Procesamiento (Fase 1)
 
-| Estrategia                    | eventType            | Campos extraídos del payload                                          | Destinatario                     |
-| ----------------------------- | -------------------- | --------------------------------------------------------------------- | -------------------------------- |
-| `OrderConfirmedStrategy`      | `OrderConfirmed`     | orderId, customerId, customerEmail, items (sku, quantity, unitPrice), totalAmount | customerEmail del payload        |
-| `OrderStatusChangedStrategy`  | `OrderStatusChanged` | orderId, previousStatus, newStatus, customerEmail                     | customerEmail del payload        |
-| `OrderCancelledStrategy`      | `OrderCancelled`     | orderId, customerId, customerEmail, reason                            | customerEmail del payload        |
-| `StockDepletedStrategy`       | `StockDepleted`      | sku, productName, currentQuantity, threshold                          | Email admin (propiedad Spring Boot) |
+| Estrategia                   | eventType            | Campos extraídos del payload                                                      | Destinatario                        |
+| ---------------------------- | -------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| `OrderConfirmedStrategy`     | `OrderConfirmed`     | orderId, customerId, customerEmail, items (sku, quantity, unitPrice), totalAmount | customerEmail del payload           |
+| `OrderStatusChangedStrategy` | `OrderStatusChanged` | orderId, previousStatus, newStatus, customerEmail                                 | customerEmail del payload           |
+| `OrderCancelledStrategy`     | `OrderCancelled`     | orderId, customerId, customerEmail, reason                                        | customerEmail del payload           |
+| `StockDepletedStrategy`      | `StockDepleted`      | sku, productName, currentQuantity, threshold                                      | Email admin (propiedad Spring Boot) |
 
 ### Capa de Infraestructura — Entry Points
 
@@ -353,16 +353,16 @@ public class TemplateEngine {
 // eventTypes desconocidos: log WARN, ignorar (tolerancia a evolución)
 ```
 
-| Consumer                     | Tópicos                                  | Eventos Procesados                                                    | Tecnología |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------------------------------- | --------- |
-| `KafkaNotificationConsumer`  | `order-events`, `inventory-events`       | OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted     | `KafkaReceiver` (reactor-kafka §B.12) |
+| Consumer                    | Tópicos                            | Eventos Procesados                                                | Tecnología                            |
+| --------------------------- | ---------------------------------- | ----------------------------------------------------------------- | ------------------------------------- |
+| `KafkaNotificationConsumer` | `order-events`, `inventory-events` | OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted | `KafkaReceiver` (reactor-kafka §B.12) |
 
 ### Capa de Infraestructura — Driven Adapters
 
-| Adapter                | Implementa                       | Tecnología                                                                 |
-| ---------------------- | -------------------------------- | -------------------------------------------------------------------------- |
-| `MongoTemplateAdapter` | `NotificationTemplateRepository` | Reactive MongoDB Driver                                                    |
-| `MongoHistoryAdapter`  | `NotificationHistoryRepository`  | Reactive MongoDB Driver                                                    |
+| Adapter                | Implementa                       | Tecnología                                                                                              |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `MongoTemplateAdapter` | `NotificationTemplateRepository` | Reactive MongoDB Driver                                                                                 |
+| `MongoHistoryAdapter`  | `NotificationHistoryRepository`  | Reactive MongoDB Driver                                                                                 |
 | `SesEmailAdapter`      | `EmailSenderPort`                | AWS SES SDK (bloqueante) envuelto con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` |
 
 #### SesEmailAdapter — Detalle
@@ -428,17 +428,17 @@ public class EmailSendException extends DomainException {
 **Índices:**
 
 ```javascript
-db.templates.createIndex({ "eventType": 1 }, { unique: true });
+db.templates.createIndex({ eventType: 1 }, { unique: true });
 ```
 
 **Plantillas iniciales (Fase 1):**
 
-| eventType            | subject                                          | Variables en bodyTemplate                                    |
-| -------------------- | ------------------------------------------------ | ------------------------------------------------------------ |
-| `OrderConfirmed`     | `Pedido {{orderId}} - Confirmación`              | orderId, customerId, items (sku, quantity, unitPrice), totalAmount |
-| `OrderStatusChanged` | `Pedido {{orderId}} - Estado: {{newStatus}}`     | orderId, previousStatus, newStatus                           |
-| `OrderCancelled`     | `Pedido {{orderId}} - Cancelado`                 | orderId, reason                                              |
-| `StockDepleted`      | `Alerta Stock Bajo - SKU {{sku}}`                | sku, productName, currentQuantity, threshold                 |
+| eventType            | subject                                      | Variables en bodyTemplate                                          |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| `OrderConfirmed`     | `Pedido {{orderId}} - Confirmación`          | orderId, customerId, items (sku, quantity, unitPrice), totalAmount |
+| `OrderStatusChanged` | `Pedido {{orderId}} - Estado: {{newStatus}}` | orderId, previousStatus, newStatus                                 |
+| `OrderCancelled`     | `Pedido {{orderId}} - Cancelado`             | orderId, reason                                                    |
+| `StockDepleted`      | `Alerta Stock Bajo - SKU {{sku}}`            | sku, productName, currentQuantity, threshold                       |
 
 ### Colección: `notification_history`
 
@@ -459,12 +459,12 @@ db.templates.createIndex({ "eventType": 1 }, { unique: true });
 
 ```javascript
 // Índice único para idempotencia
-db.notification_history.createIndex({ "eventId": 1 }, { unique: true });
+db.notification_history.createIndex({ eventId: 1 }, { unique: true });
 
 // TTL Index — limpieza automática a 90 días
 db.notification_history.createIndex(
-  { "createdAt": 1 },
-  { expireAfterSeconds: 7776000 }
+  { createdAt: 1 },
+  { expireAfterSeconds: 7776000 },
 );
 ```
 
@@ -576,16 +576,16 @@ DomainException (abstract)
 
 ### Errores en el Consumidor Kafka
 
-| Escenario                                    | Comportamiento                                                                 |
-| -------------------------------------------- | ------------------------------------------------------------------------------ |
-| eventType desconocido                        | Ignorar, log WARN con eventType recibido                                       |
-| eventId duplicado (ya en notification_history) | Ignorar, log DEBUG "Evento duplicado descartado: {eventId}"                   |
-| Excepción de clave duplicada en MongoDB      | Capturar `DuplicateKeyException`, tratar como duplicado, no propagar           |
-| Plantilla no encontrada                      | Log ERROR, registrar historial FAILED, no propagar excepción                   |
-| Error transitorio de SES                     | Retry con backoff exponencial (1s, 2s, 4s), máximo 3 reintentos               |
-| Error permanente de SES                      | Registrar historial FAILED inmediatamente, log ERROR                           |
-| Error de deserialización del sobre           | Log ERROR, ignorar evento (no se puede extraer eventId para idempotencia)      |
-| Error inesperado                             | Log ERROR, registrar historial FAILED si es posible                            |
+| Escenario                                      | Comportamiento                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------- |
+| eventType desconocido                          | Ignorar, log WARN con eventType recibido                                  |
+| eventId duplicado (ya en notification_history) | Ignorar, log DEBUG "Evento duplicado descartado: {eventId}"               |
+| Excepción de clave duplicada en MongoDB        | Capturar `DuplicateKeyException`, tratar como duplicado, no propagar      |
+| Plantilla no encontrada                        | Log ERROR, registrar historial FAILED, no propagar excepción              |
+| Error transitorio de SES                       | Retry con backoff exponencial (1s, 2s, 4s), máximo 3 reintentos           |
+| Error permanente de SES                        | Registrar historial FAILED inmediatamente, log ERROR                      |
+| Error de deserialización del sobre             | Log ERROR, ignorar evento (no se puede extraer eventId para idempotencia) |
+| Error inesperado                               | Log ERROR, registrar historial FAILED si es posible                       |
 
 ### Errores en Cadenas Reactivas
 
@@ -617,13 +617,13 @@ historyRepository.save(history)
 
 ### Clasificación de Errores de SES
 
-| Tipo de Error SES                        | Clasificación | Acción                          |
-| ---------------------------------------- | ------------- | ------------------------------- |
-| `SdkClientException` (timeout de red)    | Transitorio   | Reintentar con backoff          |
-| `SesException` con HTTP 429 (throttling) | Transitorio   | Reintentar con backoff          |
-| `SesException` con HTTP 5xx              | Transitorio   | Reintentar con backoff          |
-| `MessageRejectedException`               | Permanente    | FAILED sin reintentar           |
-| `MailFromDomainNotVerifiedException`      | Permanente    | FAILED sin reintentar           |
+| Tipo de Error SES                        | Clasificación | Acción                 |
+| ---------------------------------------- | ------------- | ---------------------- |
+| `SdkClientException` (timeout de red)    | Transitorio   | Reintentar con backoff |
+| `SesException` con HTTP 429 (throttling) | Transitorio   | Reintentar con backoff |
+| `SesException` con HTTP 5xx              | Transitorio   | Reintentar con backoff |
+| `MessageRejectedException`               | Permanente    | FAILED sin reintentar  |
+| `MailFromDomainNotVerifiedException`     | Permanente    | FAILED sin reintentar  |
 
 ---
 
@@ -665,18 +665,18 @@ Los tests unitarios se enfocan en:
 
 Cada propiedad de correctitud del documento de diseño se implementa como un **único test de propiedad** con jqwik:
 
-| Propiedad                                  | Test                                                                  | Generadores                                          |
-| ------------------------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------- |
-| P1: Idempotencia                           | Generar eventos, procesarlos dos veces, verificar sin duplicados      | eventId, eventType aleatorios del conjunto relevante  |
-| P2: Filtrado de eventos desconocidos       | Generar eventTypes fuera del conjunto relevante                       | Strings aleatorios excluyendo los 4 tipos relevantes |
-| P3: Round-trip motor de plantillas         | Generar plantillas con N variables y mapas completos/parciales        | Templates con {{var}}, mapas de variables             |
-| P4: Estrategia extrae campos correctos     | Generar payloads válidos por tipo de evento                           | Payloads con campos requeridos por eventType          |
-| P5: Email resuelto contiene variables      | Generar eventos con plantilla y payload, verificar resultado          | Plantillas + payloads completos                      |
-| P6: Email al destinatario correcto         | Generar eventos de todos los tipos, verificar destinatario            | Emails aleatorios, eventTypes                        |
-| P7: Historial completo y correcto          | Generar eventos exitosos y fallidos, verificar campos del historial   | Eventos con resultados variados                      |
-| P8: Reintentos para errores transitorios   | Generar fallos transitorios, verificar número de reintentos y status  | Errores transitorios simulados                       |
-| P9: Errores permanentes sin reintentos     | Generar errores permanentes, verificar 1 sola invocación y FAILED    | Errores permanentes simulados                        |
-| P10: Búsqueda de plantilla activa          | Generar eventTypes con/sin plantilla activa, verificar comportamiento | eventTypes, estados de plantilla (active/inactive)   |
+| Propiedad                                | Test                                                                  | Generadores                                          |
+| ---------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------- |
+| P1: Idempotencia                         | Generar eventos, procesarlos dos veces, verificar sin duplicados      | eventId, eventType aleatorios del conjunto relevante |
+| P2: Filtrado de eventos desconocidos     | Generar eventTypes fuera del conjunto relevante                       | Strings aleatorios excluyendo los 4 tipos relevantes |
+| P3: Round-trip motor de plantillas       | Generar plantillas con N variables y mapas completos/parciales        | Templates con {{var}}, mapas de variables            |
+| P4: Estrategia extrae campos correctos   | Generar payloads válidos por tipo de evento                           | Payloads con campos requeridos por eventType         |
+| P5: Email resuelto contiene variables    | Generar eventos con plantilla y payload, verificar resultado          | Plantillas + payloads completos                      |
+| P6: Email al destinatario correcto       | Generar eventos de todos los tipos, verificar destinatario            | Emails aleatorios, eventTypes                        |
+| P7: Historial completo y correcto        | Generar eventos exitosos y fallidos, verificar campos del historial   | Eventos con resultados variados                      |
+| P8: Reintentos para errores transitorios | Generar fallos transitorios, verificar número de reintentos y status  | Errores transitorios simulados                       |
+| P9: Errores permanentes sin reintentos   | Generar errores permanentes, verificar 1 sola invocación y FAILED     | Errores permanentes simulados                        |
+| P10: Búsqueda de plantilla activa        | Generar eventTypes con/sin plantilla activa, verificar comportamiento | eventTypes, estados de plantilla (active/inactive)   |
 
 ### Herramientas Adicionales
 

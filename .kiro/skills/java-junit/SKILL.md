@@ -1,6 +1,6 @@
 ---
 name: java-junit
-description: 'Get best practices for JUnit 5 unit testing, including data-driven tests'
+description: "Get best practices for JUnit 5 unit testing, including data-driven tests"
 ---
 
 # JUnit 5+ Best Practices

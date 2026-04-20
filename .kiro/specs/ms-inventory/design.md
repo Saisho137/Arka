@@ -359,7 +359,7 @@ public record ErrorResponse(String code, String message) {}
 | Componente               | Responsabilidad                                                                      | Retorno                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `StockController`        | `PUT /inventory/{sku}/stock`, `GET /inventory/{sku}`, `GET /inventory/{sku}/history` | Delega a `StockHandler`                                              |
-| `StockHandler`           | Orquestación: UseCase → Mapper → `ResponseEntity` / `Flux`                          | `Mono<ResponseEntity<StockResponse>>`, `Flux<StockMovementResponse>` |
+| `StockHandler`           | Orquestación: UseCase → Mapper → `ResponseEntity` / `Flux`                           | `Mono<ResponseEntity<StockResponse>>`, `Flux<StockMovementResponse>` |
 | `GlobalExceptionHandler` | `@ControllerAdvice` — mapea excepciones a `ErrorResponse`                            | `Mono<ResponseEntity<ErrorResponse>>`                                |
 
 #### Servicio gRPC
