@@ -205,8 +205,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Configurar índices: `{ status: 1, createdAt: 1 }`, `{ eventId: 1 }` (unique)
     - _Requisitos: 7.1, 7.4_
 
-- [ ] 9. Implementar driven adapter — Redis (Cache-Aside)
-  - [ ] 9.1 Implementar `RedisCacheAdapter` que implementa `ProductCachePort`
+- [x] 9. Implementar driven adapter — Redis (Cache-Aside)
+  - [x] 9.1 Implementar `RedisCacheAdapter` que implementa `ProductCachePort`
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateDrivenAdapter --type=redis --mode=template`
     - Esto crea automáticamente la estructura en `infrastructure/driven-adapters/redis/` con `ReactiveRedisTemplate` y registra el módulo en `settings.gradle`
     - Renombrar el adapter generado a `RedisCacheAdapter` y configurar para implementar `ProductCachePort`
