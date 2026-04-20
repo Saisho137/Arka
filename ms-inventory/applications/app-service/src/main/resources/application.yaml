@@ -3,7 +3,7 @@ server:
 
 grpc:
   server:
-    port: "${GRPC_SERVER_PORT:9090}"
+    port: "${MS_INVENTORY_GRPC_PORT:9090}"
 
 spring:
   application:
