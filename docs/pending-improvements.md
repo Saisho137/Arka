@@ -29,10 +29,12 @@
 
 - [ ] **Falta versionamiento de API:** El `StockController` usa `@RequestMapping("/inventory")` sin prefijo `/api/v1`. Debería ser `/api/v1/inventory` para consistencia con ms-catalog y el diseño del API Gateway
 - [ ] **Falta validación en Handler:** El `StockHandler` no valida parámetros de entrada (ej. `sku` no vacío, `page`/`size` dentro de rango). Solo el `@Valid` en `UpdateStockRequest` está presente
+- [ ] **`EventType` usa `.name()` en vez de `value()` con PascalCase:** El enum `EventType` de ms-inventory usa `enum.name()` directamente (SCREAMING_SNAKE_CASE: `STOCK_RESERVED`) para serializar el `eventType` en el sobre Kafka. El estándar del monorepo (definido por ms-order) es usar un campo `value()` con PascalCase (`"StockReserved"`) que desacopla el nombre Java del contrato público Kafka. Alinear con el patrón de ms-order.
 
 ### ms-catalog
 
-- [ ] **Endpoint gRPC no implementado:** ms-catalog aún no expone el servicio gRPC que ms-cart consumirá en Fase 2 para obtener el precio actualizado antes del checkout. Solo tiene entry-points REST (WebFlux)
+- [ ] **`EventType` usa `.name()` en vez de `value()` con PascalCase:** Mismo problema que ms-inventory. El enum `EventType` de ms-catalog usa `PRODUCT_CREATED` en vez de un campo `value()` que retorne `"ProductCreated"`. Alinear con el patrón de ms-order.
+- [ ] **Endpoint gRPC no implementado:** ms-catalog aún no expone el servicio gRPC `CatalogService` que ms-order (precio autoritativo en creación de orden) y ms-cart (precio actual antes del checkout) consumirán. Solo tiene entry-points REST (WebFlux). Planificado como Task 15 en el spec de ms-catalog.
 
 ### ms-order
 

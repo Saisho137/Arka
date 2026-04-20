@@ -62,6 +62,7 @@ Paquete base: `com.arka`
 ### Llamadas gRPC
 
 - `ms-order` → `ms-inventory`: Reserva de stock inmediata (Fase 1 Saga)
+- `ms-order` → `ms-catalog`: Precio y nombre de producto autoritativo (Fase 1)
 - `ms-cart` → `ms-catalog`: Precio actualizado antes del checkout (Fase 2)
 
 ## Persistencia Políglota (Database per Service)

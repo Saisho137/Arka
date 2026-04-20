@@ -24,6 +24,7 @@
 - Gestión de categorías maestras
 - Reseñas como subdocumentos anidados en MongoDB
 - Cache-Aside con Redis (TTL 1h, 95% cache hit, <1ms)
+- Servidor gRPC (`CatalogService.GetProductInfo`) para consulta de precio y nombre por SKU desde ms-order y ms-cart
 - Eventos Kafka: `ProductCreated`, `ProductUpdated`, `PriceChanged`
 - Outbox Pattern adaptado a MongoDB (colección `outbox_events`)
 
@@ -40,7 +41,8 @@
 
 ### ms-order (HU4 — Registrar órdenes)
 
-- Creación de pedidos con validación síncrona de stock vía gRPC
+- Creación de pedidos con validación síncrona de stock vía gRPC a ms-inventory
+- Consulta de precio y nombre autoritativo vía gRPC a ms-catalog (fuente de verdad del precio, no el frontend)
 - Máquina de estados: `PENDIENTE_RESERVA` → `CONFIRMADO` → `EN_DESPACHO` → `ENTREGADO` | `CANCELADO`
 - Orquestador pasivo de Saga Secuencial
 - Outbox Pattern (PostgreSQL)

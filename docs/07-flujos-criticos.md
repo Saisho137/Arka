@@ -8,6 +8,11 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                           Valida request
                                                       │
                                           ═══ gRPC ═══▼
+                                                  ms-catalog
+                                          GetProductInfo(sku) por cada item
+                                          ← unitPrice, productName
+                                                      │
+                                          ═══ gRPC ═══▼
                                                   ms-inventory
                                                       │
                                           BEGIN TRANSACTION
@@ -20,6 +25,7 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                           gRPC Response: success ◄──
                                                       │
                                           Guarda orden CONFIRMADO
+                                          (items con precio de catálogo)
                                           Guarda OrderConfirmed en outbox
                                           ──▶ 202 Accepted al cliente
                                                       │
@@ -33,9 +39,11 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
 ## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment)
 
 ```text
+ms-order ──gRPC──▶ ms-catalog (precio y nombre por SKU)
+    │
 ms-order ──gRPC──▶ ms-inventory (stock reservado)
     │
-    Guarda orden PENDIENTE_PAGO
+    Guarda orden PENDIENTE_PAGO (items con precio de catálogo)
     Publica OrderCreated ──▶ Kafka
                                 │
                           ms-payment (consume)
@@ -114,17 +122,19 @@ Admin ──PUT /orders/{id}/status──▶ ms-order
 
 ## 7. Saga Secuencial
 
-### Fase 1 (2 pasos)
+### Fase 1 (3 pasos)
 
-| Paso | Servicio | Acción         | Mecanismo | Compensación             |
-| ---- | -------- | -------------- | --------- | ------------------------ |
-| 1    | ms-order | Reserva stock  | gRPC sync | Fail-fast (no hay stock) |
-| 2    | ms-order | Confirma orden | Local     | N/A                      |
+| Paso | Servicio   | Acción                              | Mecanismo | Compensación             |
+| ---- | ---------- | ----------------------------------- | --------- | ------------------------ |
+| 0    | ms-catalog | Consulta precio/nombre (gRPC)       | gRPC sync | Fail-fast (503)          |
+| 1    | ms-order   | Reserva stock (gRPC a ms-inventory) | gRPC sync | Fail-fast (no hay stock) |
+| 2    | ms-order   | Confirma orden (precio de catálogo) | Local     | N/A                      |
 
-### Fase 2 (3 pasos)
+### Fase 2 (4 pasos)
 
-| Paso | Servicio   | Acción                | Mecanismo   | Compensación          |
-| ---- | ---------- | --------------------- | ----------- | --------------------- |
-| 1    | ms-order   | Reserva stock         | gRPC sync   | Fail-fast             |
-| 2    | ms-order   | Guarda PENDIENTE_PAGO | Local       | N/A                   |
-| 3    | ms-payment | Procesa pago          | Kafka async | ReleaseStock si falla |
+| Paso | Servicio   | Acción                              | Mecanismo   | Compensación          |
+| ---- | ---------- | ----------------------------------- | ----------- | --------------------- |
+| 0    | ms-catalog | Consulta precio/nombre (gRPC)       | gRPC sync   | Fail-fast (503)       |
+| 1    | ms-order   | Reserva stock (gRPC a ms-inventory) | gRPC sync   | Fail-fast             |
+| 2    | ms-order   | Guarda PENDIENTE_PAGO               | Local       | N/A                   |
+| 3    | ms-payment | Procesa pago                        | Kafka async | ReleaseStock si falla |

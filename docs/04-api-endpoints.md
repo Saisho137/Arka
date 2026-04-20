@@ -57,6 +57,14 @@ Base path: `/inventory`
 
 ---
 
+### ms-catalog — gRPC (puerto 9091 local / 9090 docker)
+
+| Servicio         | Método           | Descripción                                              |
+| ---------------- | ---------------- | -------------------------------------------------------- |
+| `CatalogService` | `GetProductInfo` | Precio y nombre autoritativo por SKU (ms-order, ms-cart) |
+
+---
+
 ## Servicios sin endpoints REST implementados
 
 Los siguientes microservicios existen en el repositorio pero aún no tienen endpoints REST:

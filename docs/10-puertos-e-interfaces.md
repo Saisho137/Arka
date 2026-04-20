@@ -45,11 +45,12 @@ Todos los microservicios exponen el endpoint de Spring Actuator:
 
 ## gRPC
 
-| Servicio     | Puerto Host | Protocolo     | Descripción                                                                |
-| ------------ | ----------- | ------------- | -------------------------------------------------------------------------- |
-| ms-inventory | **9090**    | gRPC/Protobuf | `InventoryService.ReserveStock` — reserva síncrona de stock desde ms-order |
+| Servicio     | Puerto Host | Protocolo     | Descripción                                                                        |
+| ------------ | ----------- | ------------- | ---------------------------------------------------------------------------------- |
+| ms-inventory | **9090**    | gRPC/Protobuf | `InventoryService.ReserveStock` — reserva síncrona de stock desde ms-order         |
+| ms-catalog   | **9091**    | gRPC/Protobuf | `CatalogService.GetProductInfo` — precio y nombre por SKU desde ms-order y ms-cart |
 
-El puerto gRPC está mapeado al host y accesible tanto desde otros contenedores en `arka-network` como desde el IDE local en `localhost:9090`.
+ms-inventory usa puerto `9090` tanto en local como en docker. ms-catalog usa `9091` en local (evita colisión) y `9090` en docker (cada contenedor tiene su namespace).
 
 ---
 
@@ -173,5 +174,6 @@ kafka:29092
 | 8088   | ms-shipping               | Microservicio         |
 | 8089   | ms-provider               | Microservicio         |
 | 9090   | gRPC — ms-inventory       | Comunicación síncrona |
+| 9091   | gRPC — ms-catalog (local) | Comunicación síncrona |
 | 9092   | Kafka broker              | Mensajería            |
 | 27017  | MongoDB                   | Base de datos         |
