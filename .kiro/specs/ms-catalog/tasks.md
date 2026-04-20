@@ -242,14 +242,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Bean `KafkaSender<String, String>`: `ACKS_CONFIG = "all"`, `RETRIES_CONFIG = 3`
     - _Estándar: §B.11_
 
-- [ ] 11. Checkpoint — Verificar driven adapters
+- [x] 11. Checkpoint — Verificar driven adapters
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 12. Implementar entry points — DTOs, Mappers y Controladores REST
-  - [ ] 12.1 Crear DTOs de request y response con Bean Validation
-    - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateEntryPoint --type=webflux --router=false`
-    - Esto crea automáticamente la estructura en `infrastructure/entry-points/reactive-web/` con controladores REST y registra el módulo en `settings.gradle`
-    - Crear DTOs en el paquete de DTOs del módulo generado:
+- [x] 12. Implementar entry points — DTOs, Mappers y Controladores REST
+  - [x] 12.1 Crear DTOs de request y response con Bean Validation (Si ya existen, verificar que estén bien)
+    - Si NO existe, Generar módulo con Scaffold: `cd ms-catalog && ./gradlew generateEntryPoint --type=webflux --router=false`
+    - Crear DTOs en el paquete de DTOs del módulo generado, si YA existen, VERIFICARLOS:
     - `CreateProductRequest`: `@NotBlank` sku, name, currency; `@NotNull @Positive` cost, price; `@NotBlank` categoryId
     - `UpdateProductRequest`: `@NotBlank` name, currency; `@NotNull @Positive` cost, price; `@NotBlank` categoryId
     - `CreateCategoryRequest`: `@NotBlank` name; description opcional
@@ -258,13 +257,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Todos con `@Builder(toBuilder = true)`
     - _Requisitos: 1.2, 1.3, 1.4, 1.5, 3.3, 5.3, 6.2, 6.3, 6.5, 9.5_
 
-  - [ ] 12.2 Crear mappers estáticos: `ProductMapper`, `CategoryMapper`, `ReviewMapper`
+  - [x] 12.2 Crear mappers estáticos SI NO EXISTEN: `ProductMapper`, `CategoryMapper`, `ReviewMapper`
     - Crear en el paquete de mappers del módulo `reactive-web` generado en 12.1
     - Métodos estáticos para convertir request→comando/dominio y dominio→response
     - Usar `@Builder` al construir objetos destino
     - _Requisitos: 1.1, 2.1, 2.2_
 
-  - [ ] 12.3 Implementar `ProductController`
+  - [x] 12.3 Implementar `ProductController`
     - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1, reemplazando el controlador de ejemplo
     - `POST /products` → `ProductHandler.create()` → 201 Created
@@ -277,7 +276,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 1.1, 2.1, 2.2, 3.1, 4.1_
     - _Estándar: §4.2 (Controller → Handler), §D.2 (OpenAPI)_
 
-  - [ ] 12.4 Implementar `CategoryController`
+  - [x] 12.4 Implementar `CategoryController`
     - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /categories` → `CategoryHandler.create()` → 201 Created
@@ -286,7 +285,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 5.1, 5.4_
     - _Estándar: §4.2, §D.2_
 
-  - [ ] 12.5 Implementar `ReviewController`
+  - [x] 12.5 Implementar `ReviewController`
     - **OBLIGATORIO:** Seguir `reusability.md` componentes **#7** (Controller → Handler) y **#10** (Springdoc/OpenAPI)
     - Crear en el módulo `reactive-web` generado en 12.1
     - `POST /products/{id}/reviews` → `ProductHandler.addReview()` → 200 OK
@@ -294,7 +293,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - _Requisitos: 6.1, 6.4_
     - _Estándar: §4.2, §D.2_
 
-  - [ ] 12.6 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
+  - [x] 12.6 Implementar `GlobalExceptionHandler` con `@ControllerAdvice`
     - **OBLIGATORIO (reusability.md #8):** Copiar de `ms-inventory` y adaptar subclases de `DomainException`
     - Crear en el módulo `reactive-web` generado en 12.1
     - Manejar `WebExchangeBindException` → 400 con campos inválidos

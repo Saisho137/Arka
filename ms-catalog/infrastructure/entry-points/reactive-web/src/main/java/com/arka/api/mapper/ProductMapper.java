@@ -39,7 +39,12 @@ public final class ProductMapper {
     }
 
     public static Product toDomain(UpdateProductRequest request) {
+        // SKU is a placeholder here; ProductUseCase.update() overwrites it from the
+        // stored product via toBuilder().sku(existingProduct.sku()). The compact constructor
+        // requires a non-null/non-blank value, so we satisfy that constraint before the
+        // use-case replaces it with the real value.
         return Product.builder()
+                .sku("__UPDATE_COMMAND__")
                 .name(request.name())
                 .description(request.description())
                 .cost(Money.builder()
