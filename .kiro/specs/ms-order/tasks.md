@@ -166,30 +166,30 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [x] 5. Checkpoint — Verificar compilación y tests de casos de uso
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 6. Implementar adaptadores de infraestructura (`infrastructure/driven-adapters`)
-  - [ ] 6.1 Implementar `R2dbcOrderAdapter` (implementa `OrderRepository`): operaciones CRUD con `DatabaseClient` de R2DBC, incluyendo `findByFilters` con filtros dinámicos y paginación
+- [x] 6. Implementar adaptadores de infraestructura (`infrastructure/driven-adapters`)
+  - [x] 6.1 Implementar `R2dbcOrderAdapter` (implementa `OrderRepository`): operaciones CRUD con `DatabaseClient` de R2DBC, incluyendo `findByFilters` con filtros dinámicos y paginación
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateDrivenAdapter --type=r2dbc`
     - **Agregar dependencias en `r2dbc-postgresql/build.gradle`:** `spring-boot-starter-data-r2dbc`, `r2dbc-postgresql` (versiones del Spring BOM)
     - **OBLIGATORIO (reusability.md #4):** Copiar patrón DTO + Mapper + SpringDataRepository de `ms-inventory/infrastructure/driven-adapters/r2dbc-postgresql/.../stock/`
     - Mapeo manual de filas a records con `@Builder`
     - _Requisitos: 1.3, 2.1, 3.1, 5.1_
-  - [ ] 6.2 Implementar `R2dbcOrderItemAdapter` (implementa `OrderItemRepository`): `saveAll` batch y `findByOrderId`
+  - [x] 6.2 Implementar `R2dbcOrderItemAdapter` (implementa `OrderItemRepository`): `saveAll` batch y `findByOrderId`
     - _Requisitos: 1.3, 2.1_
-  - [ ] 6.3 Implementar `R2dbcOrderStateHistoryAdapter` (implementa `OrderStateHistoryRepository`): `save` y `findByOrderId`
+  - [x] 6.3 Implementar `R2dbcOrderStateHistoryAdapter` (implementa `OrderStateHistoryRepository`): `save` y `findByOrderId`
     - _Requisitos: 4.5_
-  - [ ] 6.4 Implementar `R2dbcOutboxAdapter` (implementa `OutboxEventRepository`): `save`, `findPending(limit)` y `markAsPublished(id)`
+  - [x] 6.4 Implementar `R2dbcOutboxAdapter` (implementa `OutboxEventRepository`): `save`, `findPending(limit)` y `markAsPublished(id)`
     - **OBLIGATORIO (reusability.md #4):** Copiar y adaptar `ms-inventory/infrastructure/driven-adapters/r2dbc-postgresql/.../outbox/`: `R2dbcOutboxAdapter`, `OutboxEventDTO`, `OutboxEventDTOMapper`, `SpringDataOutboxRepository`
     - `findPending` ordena por `created_at` ASC con LIMIT
     - _Requisitos: 7.1, 7.4, 7.5_
-  - [ ] 6.5 Implementar `R2dbcProcessedEventAdapter` (implementa `ProcessedEventRepository`): `exists(eventId)` y `save(eventId)`
+  - [x] 6.5 Implementar `R2dbcProcessedEventAdapter` (implementa `ProcessedEventRepository`): `exists(eventId)` y `save(eventId)`
     - **OBLIGATORIO (reusability.md #3):** Copiar `ms-inventory/.../processedevent/R2dbcProcessedEventAdapter.java` — usa `DatabaseClient` con INSERT explícito (NO `repository.save()`) porque el `event_id` viene de Kafka (siempre no nulo, §2.2 Excepción UUIDs de Fuentes Externas)
     - _Requisitos: 8.3, 8.4, 8.5_
-  - [ ] 6.6 Implementar `GrpcInventoryClient` (implementa `InventoryClient`): invocar `ReserveStock` de ms-inventory vía gRPC stub, traducir respuestas y errores gRPC a tipos de dominio (`ReserveStockResult`, `InventoryServiceUnavailableException`)
+  - [x] 6.6 Implementar `GrpcInventoryClient` (implementa `InventoryClient`): invocar `ReserveStock` de ms-inventory vía gRPC stub, traducir respuestas y errores gRPC a tipos de dominio (`ReserveStockResult`, `InventoryServiceUnavailableException`)
     - Integrar de forma reactiva sin bloquear EventLoop
     - Manejar `UNAVAILABLE`, timeout y errores inesperados
     - **Nota:** `ReserveStockResult` NO incluye `unitPrice` — alineado con el proto real de ms-inventory. El precio viene de `CatalogClient`
     - _Requisitos: 9.1, 9.4, 9.5_
-  - [ ] 6.7 Implementar `GrpcCatalogClient` (implementa `CatalogClient`): invocar `GetProductInfo` de ms-catalog vía gRPC stub, traducir respuesta a `ProductInfo(sku, productName, unitPrice)` de dominio
+  - [x] 6.7 Implementar `GrpcCatalogClient` (implementa `CatalogClient`): invocar `GetProductInfo` de ms-catalog vía gRPC stub, traducir respuesta a `ProductInfo(sku, productName, unitPrice)` de dominio
     - Crear módulo `grpc-catalog` en `infrastructure/driven-adapters/` (módulo manual, gRPC sin tipo Scaffold)
     - Copiar el `catalog.proto` de ms-catalog (`infrastructure/entry-points/grpc-catalog/src/main/proto/catalog.proto`) al directorio `src/main/proto/` del módulo
     - Configurar `build.gradle` con plugin `com.google.protobuf` (misma config que `grpc-inventory` de ms-inventory pero como client stub)
@@ -204,7 +204,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Simular errores gRPC variados (timeout, conexión rechazada, UNAVAILABLE), verificar que se lanza `InventoryServiceUnavailableException` sin persistir datos.
     - **Valida: Requisitos 1.9, 9.4, 10.4**
 
-- [ ] 7. Checkpoint — Verificar compilación y tests de adaptadores
+- [x] 7. Checkpoint — Verificar compilación y tests de adaptadores
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 - [ ] 8. Implementar entry-points (`infrastructure/entry-points`)
