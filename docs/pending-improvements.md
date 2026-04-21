@@ -39,6 +39,8 @@
 ### ms-order
 
 - [ ] **Endpoints REST no implementados:** El Saga orchestrator aún no tiene controllers REST (`POST /orders`, `GET /orders/{id}`, etc.). En desarrollo
+- [ ] **Tests de propiedades (jqwik) pendientes del MVP:** Tareas 2.3 (máquina de estados), 2.5 (invariante `totalAmount`), 4.2 (creación exitosa persiste todos los artefactos), 4.3 (stock insuficiente aborta sin persistir), 4.5 (control de acceso 403), 4.7 (listado paginado/filtrado/ordenado), 4.10 (historial de auditoría completo), 4.11 (eventos outbox con eventType/topic/payload correctos). Dependencia: `jqwik:1.9.2` ya en `testImplementation` de `main.gradle`
+- [ ] **Circuit Breaker en clientes gRPC:** Agregar `reactor-resilience4j` en `GrpcInventoryClient` y `GrpcCatalogClient`. Patrón CLOSED → OPEN (tras N errores consecutivos) → HALF_OPEN (sondeo periódico). Fallback: propagar `InventoryServiceUnavailableException` / `CatalogServiceUnavailableException`
 
 ### General
 

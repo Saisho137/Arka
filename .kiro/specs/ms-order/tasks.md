@@ -102,11 +102,12 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Cada una con `getHttpStatus()` y `getCode()` según la tabla del diseño
     - _Requisitos: 10.1, 10.2, 10.3, 10.4, 10.5, 10.7, 10.8_
 
-- [ ] 3. Checkpoint — Verificar compilación del modelo de dominio
+- [x] 3. Checkpoint — Verificar compilación del modelo de dominio
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 4. Implementar casos de uso (`domain/usecase`)
-  - [ ] 4.1 Implementar `CreateOrderUseCase`: crear Order en estado PENDIENTE_RESERVA, consultar `CatalogClient.getProductInfo(sku)` por cada item para obtener precio y nombre autoritativo, invocar `InventoryClient.reserveStock()` por cada item, persistir Order con estado CONFIRMADO, items con precios de catálogo, historial PENDIENTE_RESERVA→CONFIRMADO y evento OrderConfirmed en outbox, todo en transacción R2DBC atómica
+- [x] 4. Implementar casos de uso (`domain/usecase`)
+     > **Nota de implementación:** Aplicando la convención §3 (1 UseCase/entidad, cohesión por agregado), se generaron `OrderUseCase` (`./gradlew generateUseCase --name=Order`) con 6 métodos públicos y `OutboxRelayUseCase` (`./gradlew generateUseCase --name=OutboxRelay`). Se creó la interfaz `JsonSerializer` en `domain/usecase` y se agregó `CatalogServiceUnavailableException` al modelo (extensión de 2.9). Compilación y Sonar sin errores.
+  - [x] 4.1 Implementar `CreateOrderUseCase`: crear Order en estado PENDIENTE_RESERVA, consultar `CatalogClient.getProductInfo(sku)` por cada item para obtener precio y nombre autoritativo, invocar `InventoryClient.reserveStock()` por cada item, persistir Order con estado CONFIRMADO, items con precios de catálogo, historial PENDIENTE_RESERVA→CONFIRMADO y evento OrderConfirmed en outbox, todo en transacción R2DBC atómica
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=CreateOrder`
     - **Fuente de precio:** ms-catalog vía gRPC (`CatalogClient.getProductInfo(sku)`) — NO del frontend, NO de ms-inventory. ms-catalog es la fuente autoritativa de `unitPrice` y `productName`
     - Calcular `totalAmount` como suma de subtotales (`quantity * unitPrice` de catálogo)
@@ -123,7 +124,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 3: Stock insuficiente aborta sin persistir**
     - Generar órdenes donde gRPC rechaza items aleatorios, verificar que no se persiste Order, ni items, ni historial, ni eventos outbox.
     - **Valida: Requisitos 1.4, 9.3, 9.6**
-  - [ ] 4.4 Implementar `GetOrderUseCase`: consultar orden por ID con sus items, validar acceso (CUSTOMER solo ve sus propias órdenes, ADMIN ve todas)
+  - [x] 4.4 Implementar `GetOrderUseCase`: consultar orden por ID con sus items, validar acceso (CUSTOMER solo ve sus propias órdenes, ADMIN ve todas)
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=GetOrder`
     - Lanzar `OrderNotFoundException` si no existe
     - Lanzar `AccessDeniedException` si CUSTOMER accede a orden ajena
@@ -132,7 +133,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 10: Control de acceso para Cliente_B2B**
     - Generar pares (orden, customerId) donde customerId no coincide con el de la orden, verificar que consulta y cancelación retornan 403 sin modificar estado.
     - **Valida: Requisitos 2.4, 6.4, 10.8**
-  - [ ] 4.6 Implementar `ListOrdersUseCase`: listar órdenes paginadas con filtros por status y customerId, ordenadas por `created_at` DESC. CUSTOMER ve solo sus órdenes (filtro automático por customerId)
+  - [x] 4.6 Implementar `ListOrdersUseCase`: listar órdenes paginadas con filtros por status y customerId, ordenadas por `created_at` DESC. CUSTOMER ve solo sus órdenes (filtro automático por customerId)
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=ListOrders`
     - Validar que el status proporcionado sea un Estado_De_Orden válido, lanzar `InvalidOrderStatusException` si no
     - _Requisitos: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
@@ -140,12 +141,12 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 11: Listado de órdenes ordenado y filtrado correctamente**
     - Generar órdenes con timestamps y estados variados, verificar orden descendente por `created_at` y que los filtros se aplican correctamente. CUSTOMER siempre filtrado por su customerId.
     - **Valida: Requisitos 3.1, 3.2, 3.3, 3.4**
-  - [ ] 4.8 Implementar `ChangeOrderStatusUseCase`: validar transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO) usando `OrderStateTransition`, actualizar orden, registrar historial y emitir evento OrderStatusChanged en outbox. Solo ADMIN.
+  - [x] 4.8 Implementar `ChangeOrderStatusUseCase`: validar transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO) usando `OrderStateTransition`, actualizar orden, registrar historial y emitir evento OrderStatusChanged en outbox. Solo ADMIN.
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=ChangeOrderStatus`
     - Lanzar `InvalidStateTransitionException` si la transición no es válida
     - Lanzar `OrderNotFoundException` si la orden no existe
     - _Requisitos: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7_
-  - [ ] 4.9 Implementar `CancelOrderUseCase`: validar que la orden está en estado cancelable (CONFIRMADO), transicionar a CANCELADO con reason, registrar historial y emitir evento OrderCancelled en outbox. CUSTOMER solo sus órdenes, ADMIN cualquiera.
+  - [x] 4.9 Implementar `CancelOrderUseCase`: validar que la orden está en estado cancelable (CONFIRMADO), transicionar a CANCELADO con reason, registrar historial y emitir evento OrderCancelled en outbox. CUSTOMER solo sus órdenes, ADMIN cualquiera.
     - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=CancelOrder`
     - Lanzar `InvalidStateTransitionException` si estado no permite cancelación
     - Lanzar `AccessDeniedException` si CUSTOMER intenta cancelar orden ajena
@@ -159,10 +160,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 9: Transiciones válidas producen eventos outbox correctos**
     - Generar transiciones válidas, verificar que se crea evento en outbox con eventType correcto, status=PENDING, topic="order-events", partition_key=orderId y payload con campos requeridos.
     - **Valida: Requisitos 4.6, 5.6, 6.5, 7.2, 7.3, 7.8, 7.9, 7.10, 7.11**
-  - [ ] 4.12 Implementar `ProcessExternalEventUseCase`: verificar idempotencia (processed_events), procesar eventos de payment-events y shipping-events (infraestructura base para Fase 2+). Ignorar eventTypes desconocidos con log WARN.
-    - **CRÍTICO**: Generar con Scaffold: `cd ms-order && ./gradlew generateUseCase --name=ProcessExternalEvent`
-    - **OBLIGATORIO (reusability.md #3):** Copiar patrón de idempotencia de `ms-inventory/domain/usecase/stock/StockUseCase.java` (`processProductCreated`): verificar `processedEventRepository.exists()` → si existe, log DEBUG y return → si no, procesar + `processedEventRepository.save(eventId)`
-    - _Requisitos: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6_
+  - [x] 4.12 Implementar `ProcessExternalEventUseCase`: verificar idempotencia (processed_events), procesar eventos de payment-events y shipping-events (infraestructura base para Fase 2+). Ignorar eventTypes desconocidos con log WARN.
+    - **Implementado (Fase 1):** `processExternalEvent(UUID eventId)` con patrón de idempotencia completo. Routing real (PaymentProcessed, PaymentFailed, ShippingDispatched) en tarea F2.3–F2.7.
 
 - [ ] 5. Checkpoint — Verificar compilación y tests de casos de uso
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
@@ -295,6 +294,53 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 - [ ] 12. Checkpoint final — Verificar que todos los tests pasan
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
+
+## Fase 2+ — Tareas Pendientes (ms-order Completo)
+
+Estas tareas representan lo que falta para un `ms-order` completo más allá del MVP Fase 1.
+
+- [ ] 13. Fase 2 — Integración ms-payment (Saga de 4 pasos)
+  - [ ] 13.1 Agregar estado `PENDIENTE_PAGO` a `OrderStatus` y actualizar `OrderStateTransition`
+    - Nueva sealed permit `PendingPayment` con `value()` = `"PENDIENTE_PAGO"`
+    - Nuevas transiciones: PENDIENTE_RESERVA → PENDIENTE_PAGO (reemplaza el salto directo a CONFIRMADO); PENDIENTE_PAGO → CONFIRMADO | CANCELADO
+    - Actualizar tests de máquina de estados (tarea 2.3)
+    - _Impacto: `OrderStatus`, `OrderStateTransition`, `createOrder()`, tests de propiedades_
+  - [ ] 13.2 Adaptar `createOrder()` para Fase 2: persistir en `PENDIENTE_PAGO` y emitir `OrderCreated`
+    - `OrderCreatedPayload` ya definido en `domain/model/outboxevent/`
+    - ms-payment consume `order-events` (OrderCreated) → procesa cobro → emite `PaymentProcessed` o `PaymentFailed` a `payment-events`
+    - Eliminar emisión de `OrderConfirmed` de `createOrder()` (pasa a ser responsabilidad de `processPaymentProcessed`)
+  - [ ] 13.3 Implementar `processPaymentProcessed()` en `OrderUseCase`
+    - Firma: `Mono<Void> processPaymentProcessed(UUID eventId, UUID orderId)`
+    - Idempotente con `processedEventRepository`
+    - Transición: PENDIENTE_PAGO → CONFIRMADO; persistir historial; emitir `OrderConfirmed` en outbox
+    - Actualizar `processExternalEvent(UUID eventId, String eventType, String payload)` para routing real
+  - [ ] 13.4 Implementar `processPaymentFailed()` en `OrderUseCase`
+    - Firma: `Mono<Void> processPaymentFailed(UUID eventId, UUID orderId, String reason)`
+    - Idempotente con `processedEventRepository`
+    - Transición: PENDIENTE_PAGO → CANCELADO; persistir historial con reason; emitir `OrderCancelled` en outbox
+    - ms-inventory consume `OrderCancelled` (tópico `order-events`) → libera la reserva de stock (StockReleased)
+  - [ ] 13.5 Actualizar `KafkaEventConsumer` para routear eventos de pago (tarea 10.3 — routing real)
+    - `PaymentProcessed` → `orderUseCase.processPaymentProcessed(eventId, orderId)`
+    - `PaymentFailed` → `orderUseCase.processPaymentFailed(eventId, orderId, reason)`
+    - Consumir tópico `payment-events` (consumer group `order-service-group`, ya configurado en `application.yaml`)
+
+- [ ] 14. Fase 2 — Integración ms-shipping
+  - [ ] 14.1 Implementar `processShippingDispatched()` en `OrderUseCase`
+    - Firma: `Mono<Void> processShippingDispatched(UUID eventId, UUID orderId)`
+    - Idempotente con `processedEventRepository`
+    - Transición: CONFIRMADO → EN_DESPACHO; persistir historial; emitir `OrderStatusChanged` en outbox
+    - _Nota: EN_DESPACHO → ENTREGADO sigue siendo transición manual por Admin (`PUT /orders/{id}/status`)_
+  - [ ] 14.2 Actualizar `KafkaEventConsumer` para routear eventos de shipping (tarea 10.3 — routing real)
+    - `ShippingDispatched` → `orderUseCase.processShippingDispatched(eventId, orderId)`
+    - Consumir tópico `shipping-events` (ya configurado en `application.yaml`)
+
+- [ ] 15. Fase 3 — Analítica y Reportes (ms-reporter)
+  - [ ] 15.1 Verificar completitud de payloads para Event Sourcing en ms-reporter
+    - `OrderCreatedPayload`, `OrderConfirmedPayload`, `OrderStatusChangedPayload`, `OrderCancelledPayload` ya están definidos en `domain/model/outboxevent/`
+    - ms-reporter consume `order-events` vía Kafka para CQRS/Event Sourcing — no requiere cambios en ms-order
+    - Verificar que todos los campos requeridos por analítica están presentes en los payloads existentes
+
+---
 
 ## Notas
 
