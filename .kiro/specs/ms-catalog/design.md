@@ -2,7 +2,7 @@
 
 ## Visión General
 
-`ms-catalog` es el microservicio dueño del Bounded Context **Catálogo Maestro de Productos** dentro de la plataforma B2B Arka. Gestiona el ciclo de vida completo de productos y categorías, almacena reseñas como subdocumentos anidados en MongoDB, publica eventos de dominio al tópico `product-events` de Kafka mediante el Outbox Pattern con operaciones atómicas de MongoDB, y optimiza lecturas con Cache-Aside en Redis (TTL 1h).
+`ms-catalog` es el microservicio dueño del Bounded Context **Catálogo Maestro de Productos** dentro de la plataforma B2B Arka. Gestiona el ciclo de vida completo de productos y categorías, almacena reseñas como subdocumentos anidados en MongoDB, publica eventos de dominio al tópico `product-events` de Kafka mediante el Outbox Pattern con operaciones atómicas de MongoDB, optimiza lecturas con Cache-Aside en Redis (TTL 1h), y expone un servidor gRPC para consulta síncrona de información de productos desde ms-order y ms-cart (Fase 2).
 
 El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB como almacenamiento primario con drivers reactivos, y sigue estrictamente la Clean Architecture del Scaffold Bancolombia 4.2.0.
 
@@ -23,6 +23,7 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 13. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, configuración de reactor-kafka, Springdoc), se DEBE reutilizar la implementación ya probada de `ms-inventory` como referencia, adaptando únicamente los aspectos específicos del dominio (nombres de entidades, tópicos, payloads, constante `DomainEventEnvelope.MS_SOURCE`). Esto garantiza consistencia y reduce errores.
 14. **Versionado unificado de librerías**: Todas las librerías transversales (reactor-kafka, springdoc-openapi, jackson, etc.) DEBEN usar exactamente las mismas versiones en TODO el monorepo. Consultar `ms-inventory/build.gradle` como referencia canónica para versiones.
 15. **CRÍTICO — Generación de módulos con Scaffold Plugin**: TODOS los módulos nuevos (Model, UseCase, Driven Adapter, Entry Point, Helper) DEBEN generarse usando las tareas Gradle del plugin Bancolombia Scaffold (`./gradlew generateModel`, `generateUseCase`, `generateDrivenAdapter`, `generateEntryPoint`, `generateHelper`). La creación manual de estructura de módulos está PROHIBIDA. Esto garantiza consistencia arquitectónica, registro automático en `settings.gradle`, y validación con `./gradlew validateStructure`. Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos.
+16. **Servidor gRPC reactivo (Fase 2)**: Se expone un servidor gRPC con el servicio `CatalogService.GetProductInfo` para consulta síncrona de información de productos (SKU, nombre, precio) desde ms-order y ms-cart. El servidor usa gRPC con Project Reactor para mantener el paradigma reactivo. Las consultas gRPC consultan MongoDB directamente (no caché) para garantizar consistencia de precios durante checkout.
 
 ---
 
@@ -36,6 +37,7 @@ graph TB
         PC[ProductController]
         CC[CategoryController]
         RC[ReviewController]
+        GS[GrpcCatalogServer]
         GEH[GlobalExceptionHandler]
     end
 
@@ -75,9 +77,15 @@ graph TB
         Kafka[Apache Kafka - product-events]
     end
 
+    subgraph "External Clients"
+        MSOrder[ms-order]
+        MSCart[ms-cart]
+    end
+
     PC --> CPU & GPU & LPU & UPU & DPU
     CC --> CCU & LCU
     RC --> ARU
+    GS --> GPU
 
     CPU --> PR & CR & OER & CacheP
     GPU --> PR & CacheP
@@ -98,6 +106,9 @@ graph TB
     MOA --> MongoDB
     RCA --> Redis
     KRA --> Kafka & MOA
+
+    MSOrder -->|gRPC GetProductInfo| GS
+    MSCart -->|gRPC GetProductInfo| GS
 ```
 
 ### Flujo de Escritura con Outbox Pattern
@@ -153,6 +164,34 @@ sequenceDiagram
     Controller-->>Client: 200 OK
 ```
 
+### Flujo de Consulta gRPC desde ms-cart (Fase 2)
+
+```mermaid
+sequenceDiagram
+    participant MSCart as ms-cart
+    participant GrpcServer as GrpcCatalogServer
+    participant UseCase as ProductUseCase
+    participant MongoDB
+
+    MSCart->>GrpcServer: GetProductInfo(sku)
+    GrpcServer->>UseCase: findBySku(sku)
+    UseCase->>MongoDB: findOne({sku, active:true})
+    
+    alt Producto encontrado y activo
+        MongoDB-->>UseCase: product
+        UseCase-->>GrpcServer: Mono<Product>
+        GrpcServer-->>MSCart: ProductInfoResponse(sku, name, price)
+    else Producto no encontrado o inactivo
+        MongoDB-->>UseCase: empty
+        UseCase-->>GrpcServer: Mono.empty()
+        GrpcServer-->>MSCart: gRPC NOT_FOUND error
+    else Error de base de datos
+        MongoDB-->>UseCase: exception
+        UseCase-->>GrpcServer: Mono.error()
+        GrpcServer-->>MSCart: gRPC INTERNAL error
+    end
+```
+
 ---
 
 ## Componentes e Interfaces
@@ -205,6 +244,7 @@ public interface ProductCachePort {
 | -------------------- | ------------------------------ | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | `ProductUseCase`     | `create(cmd)`                  | Valida SKU único, verifica categoría, persiste + outbox, invalida caché  | `ProductRepository`, `CategoryRepository`, `OutboxEventRepository`, `ProductCachePort`, `JsonSerializer` |
 | `ProductUseCase`     | `getById(id)`                  | Cache-Aside: Redis → MongoDB → cache                                     | `ProductRepository`, `ProductCachePort`                                                                  |
+| `ProductUseCase`     | `findBySku(sku)`               | Consulta producto por SKU directamente desde MongoDB (sin caché, para gRPC) | `ProductRepository`                                                                                      |
 | `ProductUseCase`     | `listActive(page, size)`       | Lista paginada con Cache-Aside                                           | `ProductRepository`, `ProductCachePort`                                                                  |
 | `ProductUseCase`     | `update(id, cmd)`              | Actualiza, emite ProductUpdated + PriceChanged si aplica, invalida caché | `ProductRepository`, `OutboxEventRepository`, `ProductCachePort`, `JsonSerializer`                       |
 | `ProductUseCase`     | `deactivate(id)`               | Soft delete, emite ProductUpdated, invalida caché                        | `ProductRepository`, `OutboxEventRepository`, `ProductCachePort`, `JsonSerializer`                       |
@@ -314,6 +354,7 @@ public record ErrorResponse(String code, String message) {}
 | `CategoryHandler`        | Orquestación: UseCase → Mapper → `ResponseEntity` / `Flux`                                             | `Mono<ResponseEntity<CategoryResponse>>`, `Flux<CategoryResponse>` |
 | `ReviewController`       | `POST /products/{id}/reviews`                                                                          | Delega a `ProductHandler`                                          |
 | `GlobalExceptionHandler` | `@ControllerAdvice` — mapea excepciones a `ErrorResponse`                                              | `Mono<ResponseEntity<ErrorResponse>>`                              |
+| `GrpcCatalogServer`      | Servidor gRPC — expone `CatalogService.GetProductInfo(sku)` para ms-order y ms-cart (Fase 2)           | `Mono<ProductInfoResponse>` (gRPC reactivo)                        |
 
 **Ejemplo de implementación:**
 
@@ -363,6 +404,125 @@ public class ProductHandler {
 }
 ```
 
+### Servidor gRPC — CatalogService (Fase 2)
+
+El servidor gRPC expone el servicio `CatalogService` con el método `GetProductInfo` para consulta síncrona de información de productos desde ms-order y ms-cart. Este servicio garantiza que los precios consultados durante el checkout sean consistentes con la fuente de verdad del catálogo.
+
+#### Definición del Servicio (Protobuf)
+
+```protobuf
+syntax = "proto3";
+
+package com.arka.catalog;
+
+option java_multiple_files = true;
+option java_package = "com.arka.grpc.catalog";
+
+service CatalogService {
+  rpc GetProductInfo (GetProductInfoRequest) returns (ProductInfoResponse);
+}
+
+message GetProductInfoRequest {
+  string sku = 1;
+}
+
+message ProductInfoResponse {
+  string sku = 1;
+  string product_name = 2;
+  string unit_price = 3;  // BigDecimal serializado como string
+  string currency = 4;
+}
+```
+
+#### Implementación del Servidor gRPC
+
+```java
+@GrpcService
+@RequiredArgsConstructor
+@Slf4j
+public class GrpcCatalogServer extends CatalogServiceGrpc.CatalogServiceImplBase {
+
+    private final ProductUseCase productUseCase;
+
+    @Override
+    public void getProductInfo(GetProductInfoRequest request,
+                               StreamObserver<ProductInfoResponse> responseObserver) {
+        String sku = request.getSku();
+        log.info("gRPC GetProductInfo request for SKU: {}", sku);
+
+        productUseCase.findBySku(sku)
+                .map(this::toGrpcResponse)
+                .doOnNext(response -> {
+                    responseObserver.onNext(response);
+                    responseObserver.onCompleted();
+                })
+                .doOnError(ex -> {
+                    log.error("Error processing gRPC GetProductInfo for SKU {}: {}", sku, ex.getMessage());
+                    responseObserver.onError(Status.INTERNAL
+                            .withDescription("Internal error processing request")
+                            .asRuntimeException());
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Product not found or inactive for SKU: {}", sku);
+                    responseObserver.onError(Status.NOT_FOUND
+                            .withDescription("Product not found or inactive: " + sku)
+                            .asRuntimeException());
+                    return Mono.empty();
+                }))
+                .subscribe();
+    }
+
+    private ProductInfoResponse toGrpcResponse(Product product) {
+        return ProductInfoResponse.newBuilder()
+                .setSku(product.sku().value())
+                .setProductName(product.name())
+                .setUnitPrice(product.price().amount().toString())
+                .setCurrency(product.price().currency())
+                .build();
+    }
+}
+```
+
+#### Configuración del Servidor gRPC
+
+```yaml
+# application.yaml
+grpc:
+  server:
+    port: ${GRPC_PORT:9084}  # Puerto gRPC diferente al HTTP (8084)
+```
+
+**Puertos:**
+- HTTP REST: `8084`
+- gRPC: `9084`
+
+#### Dependencias Gradle
+
+```groovy
+// build.gradle del módulo grpc-server
+dependencies {
+    implementation project(':model')
+    implementation project(':usecase')
+    
+    // gRPC con soporte reactivo
+    implementation 'net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE'
+    implementation 'io.grpc:grpc-protobuf:1.65.1'
+    implementation 'io.grpc:grpc-stub:1.65.1'
+    implementation 'io.projectreactor:reactor-core'
+    
+    // Protobuf
+    implementation 'com.google.protobuf:protobuf-java:3.25.3'
+}
+```
+
+#### Características Clave
+
+1. **Consulta directa a MongoDB**: El método `findBySku()` consulta MongoDB directamente, sin pasar por el caché de Redis, para garantizar consistencia de precios durante checkout.
+2. **Reactivo**: Usa `Mono` de Project Reactor para mantener el paradigma reactivo del servicio.
+3. **Manejo de errores gRPC**: Retorna códigos de error gRPC estándar (`NOT_FOUND`, `INTERNAL`) con mensajes descriptivos.
+4. **Filtrado de productos inactivos**: Solo retorna productos con `active = true`. Productos desactivados se tratan como no encontrados.
+5. **Logging**: Registra todas las solicitudes gRPC y errores para trazabilidad.
+
 ### Capa de Infraestructura — Driven Adapters
 
 | Adapter                | Implementa              | Tecnología                                                                                   |
@@ -385,6 +545,14 @@ public class MongoProductAdapter implements ProductRepository {
     @Override
     public Mono<Product> save(Product product) {
         return mongoTemplate.save(ProductDocumentMapper.toDocument(product))
+                .map(ProductDocumentMapper::toDomain);
+    }
+
+    @Override
+    public Mono<Product> findBySku(String sku) {
+        // Consulta directa sin caché, usada por gRPC para garantizar consistencia
+        Query query = Query.query(Criteria.where("sku").is(sku).and("active").is(true));
+        return mongoTemplate.findOne(query, ProductDocument.class)
                 .map(ProductDocumentMapper::toDomain);
     }
 
@@ -1106,6 +1274,18 @@ _Para cualquier_ excepción (validación, dominio o inesperada), la respuesta de
 
 **Valida: Requisitos 9.2, 9.3, 9.4, 9.5**
 
+### Propiedad 19: Servidor gRPC retorna información correcta de productos activos
+
+_Para cualquier_ SKU de un producto activo existente en el catálogo, invocar `GetProductInfo` vía gRPC debe retornar un `ProductInfoResponse` con el SKU, nombre y precio correctos consultados directamente desde MongoDB (no caché). Para cualquier SKU inexistente o de producto inactivo, debe retornar error gRPC `NOT_FOUND`.
+
+**Valida: Requisitos 10.2, 10.3, 10.4, 10.7**
+
+### Propiedad 20: Servidor gRPC maneja errores de base de datos correctamente
+
+_Para cualquier_ error de base de datos durante la consulta gRPC (timeout, conexión perdida, etc.), el servidor debe retornar error gRPC `INTERNAL` con mensaje descriptivo y registrar el error con nivel ERROR en el log.
+
+**Valida: Requisitos 10.5**
+
 ---
 
 ## Manejo de Errores
@@ -1204,6 +1384,8 @@ Cada propiedad de correctitud del documento de diseño se implementa como un **�
 | P16: Transición outbox relay          | Generar eventos PENDING, simular éxito/fallo            | Eventos aleatorios                      |
 | P17: Fallback Redis→MongoDB           | Generar consultas con Redis caído                       | Productos aleatorios                    |
 | P18: Estructura ErrorResponse         | Generar excepciones de distintos tipos                  | DomainException, validation, unexpected |
+| P19: gRPC retorna info correcta       | Generar SKUs válidos e inválidos                        | SKUs aleatorios, productos activos/inactivos |
+| P20: gRPC maneja errores BD           | Simular errores de MongoDB durante consulta gRPC        | Timeouts, conexiones perdidas           |
 
 ### Herramientas Adicionales
 

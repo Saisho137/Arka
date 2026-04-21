@@ -2,7 +2,7 @@
 
 ## Introducción
 
-El microservicio `ms-notifications` es el motor pasivo de notificaciones transaccionales de la plataforma B2B Arka. Su responsabilidad exclusiva es consumir eventos de dominio desde múltiples tópicos de Apache Kafka, mapear los datos del evento a plantillas de email almacenadas en MongoDB, y enviar correos electrónicos transaccionales mediante AWS SES. Este servicio no expone endpoints REST — opera de forma puramente event-driven como consumidor "Catch-All". Implementa idempotencia garantizada mediante un índice único sobre `eventId` en la colección `notification_history` de MongoDB para evitar envío de correos duplicados por reintentos de Kafka (at-least-once delivery). Cubre la HU6 (Notificación de cambio de estado del pedido) de la Fase 1 (MVP). El SDK de AWS SES es bloqueante y se envuelve con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` para no bloquear el EventLoop de Netty. La colección `notification_history` tiene un TTL Index de 90 días para limpieza automática.
+El microservicio `ms-notifications` es el motor pasivo de notificaciones transaccionales de la plataforma B2B Arka. Su responsabilidad exclusiva es consumir eventos de dominio desde múltiples tópicos de Apache Kafka, mapear los datos del evento a plantillas de email almacenadas en MongoDB, y enviar correos electrónicos transaccionales mediante AWS SES. Este servicio no expone endpoints REST — opera de forma puramente event-driven como consumidor "Catch-All". Implementa idempotencia garantizada mediante un índice único sobre `eventId` en la colección `notification_history` de MongoDB para evitar envío de correos duplicados por reintentos de Kafka (at-least-once delivery). Cubre la HU6 (Notificación de cambio de estado del pedido) de la Fase 1 (MVP) y se extiende en Fase 2 para notificar resultados de pagos. El SDK de AWS SES es bloqueante y se envuelve con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())` para no bloquear el EventLoop de Netty. La colección `notification_history` tiene un TTL Index de 90 días para limpieza automática.
 
 ## Glosario
 
@@ -28,13 +28,13 @@ El microservicio `ms-notifications` es el motor pasivo de notificaciones transac
 
 #### Criterios de Aceptación
 
-1. THE Consumidor_Kafka SHALL suscribirse al consumer group `notification-service-group` y consumir eventos de los tópicos `order-events` e `inventory-events` en Fase 1
+1. THE Consumidor_Kafka SHALL suscribirse al consumer group `notification-service-group` y consumir eventos de los tópicos `order-events`, `inventory-events` (Fase 1) y `payment-events` (Fase 2)
 2. WHEN el Consumidor_Kafka recibe un Evento_De_Dominio, THE ms-notifications SHALL deserializar el Sobre_Estándar y extraer el campo eventType para determinar si el evento es relevante
 3. WHEN el Consumidor_Kafka recibe un Evento_De_Dominio con un eventType relevante, THE ms-notifications SHALL consultar la colección `notification_history` buscando un documento con el mismo eventId
 4. WHEN existe un documento en `notification_history` con el eventId recibido, THE ms-notifications SHALL descartar el evento sin enviar correo y registrar un log de nivel DEBUG con el mensaje "Evento duplicado descartado: {eventId}"
 5. WHEN no existe un documento en `notification_history` con el eventId recibido, THE ms-notifications SHALL proceder con el flujo de envío de notificación
 6. WHEN el Consumidor_Kafka recibe un Evento_De_Dominio con un eventType desconocido o no relevante, THE ms-notifications SHALL ignorar el evento y registrar un log de nivel WARN con el eventType recibido (tolerancia a evolución del esquema)
-7. THE ms-notifications SHALL filtrar los siguientes eventTypes como relevantes en Fase 1: OrderConfirmed, OrderStatusChanged, OrderCancelled y StockDepleted
+7. THE ms-notifications SHALL filtrar los siguientes eventTypes como relevantes: Fase 1 (OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted) y Fase 2 (PaymentProcessed, PaymentFailed)
 
 ### Requisito 2: Gestión de plantillas de email en MongoDB
 
@@ -136,7 +136,29 @@ El microservicio `ms-notifications` es el motor pasivo de notificaciones transac
 
 #### Criterios de Aceptación
 
-1. THE Consumidor_Kafka SHALL diseñarse con extensibilidad para suscribirse a los tópicos `cart-events` (Fase 2), `shipping-events` (Fase 3) y `provider-events` (Fase 4) sin modificar la lógica de consumo existente
+1. THE Consumidor_Kafka SHALL diseñarse con extensibilidad para suscribirse a los tópicos `payment-events` (Fase 2), `cart-events` (Fase 2), `shipping-events` (Fase 3) y `provider-events` (Fase 4) sin modificar la lógica de consumo existente
 2. THE ms-notifications SHALL resolver el procesamiento de cada eventType mediante el patrón Strategy + Factory, donde cada estrategia extrae los campos relevantes del payload y determina el destinatario del correo
 3. WHEN se agrega un nuevo eventType en una fase posterior, THE ms-notifications SHALL requerir únicamente la creación de una nueva estrategia de procesamiento y una nueva Plantilla en la colección `templates`, sin modificar el flujo principal de consumo ni la lógica de idempotencia
-4. THE ms-notifications SHALL soportar los siguientes eventTypes en fases posteriores: CartAbandoned (Fase 2, tópico `cart-events`, email recordatorio al Cliente_B2B), ShippingDispatched (Fase 3, tópico `shipping-events`, email con tracking al Cliente_B2B) y PurchaseOrderCreated (Fase 4, tópico `provider-events`, email de orden de compra al proveedor)
+4. THE ms-notifications SHALL soportar los siguientes eventTypes en fases posteriores: PaymentProcessed (Fase 2, tópico `payment-events`, email confirmación de pago al Cliente_B2B), PaymentFailed (Fase 2, tópico `payment-events`, email fallo de pago al Cliente_B2B), CartAbandoned (Fase 2, tópico `cart-events`, email recordatorio al Cliente_B2B), ShippingDispatched (Fase 3, tópico `shipping-events`, email con tracking al Cliente_B2B) y PurchaseOrderCreated (Fase 4, tópico `provider-events`, email de orden de compra al proveedor)
+
+### Requisito 11: Procesamiento de evento PaymentProcessed
+
+**Historia de Usuario:** Como Cliente_B2B, quiero recibir un correo electrónico cuando mi pago es procesado exitosamente para tener confirmación del cobro realizado.
+
+#### Criterios de Aceptación
+
+1. WHEN el Consumidor_Kafka recibe un Evento_De_Dominio con eventType PaymentProcessed del tópico `payment-events`, THE ms-notifications SHALL extraer del payload los campos orderId, customerId, customerEmail, amount, paymentMethod y transactionId
+2. WHEN el evento PaymentProcessed pasa la verificación de idempotencia, THE ms-notifications SHALL buscar la Plantilla activa con eventType "PaymentProcessed" y resolver las Variables_De_Plantilla con los datos del payload
+3. WHEN la Plantilla se resuelve exitosamente, THE Servicio_SES SHALL enviar el correo de confirmación de pago al customerEmail extraído del payload
+4. THE Plantilla de PaymentProcessed SHALL incluir en el subject el orderId y en el bodyTemplate el orderId, amount, paymentMethod y transactionId
+
+### Requisito 12: Procesamiento de evento PaymentFailed
+
+**Historia de Usuario:** Como Cliente_B2B, quiero recibir un correo electrónico cuando mi pago falla para conocer el motivo del rechazo y poder tomar acción.
+
+#### Criterios de Aceptación
+
+1. WHEN el Consumidor_Kafka recibe un Evento_De_Dominio con eventType PaymentFailed del tópico `payment-events`, THE ms-notifications SHALL extraer del payload los campos orderId, customerId, customerEmail, amount, paymentMethod y reason
+2. WHEN el evento PaymentFailed pasa la verificación de idempotencia, THE ms-notifications SHALL buscar la Plantilla activa con eventType "PaymentFailed" y resolver las Variables_De_Plantilla con los datos del payload
+3. WHEN la Plantilla se resuelve exitosamente, THE Servicio_SES SHALL enviar el correo de notificación de fallo al customerEmail extraído del payload
+4. THE Plantilla de PaymentFailed SHALL incluir en el subject el orderId y en el bodyTemplate el orderId, amount, paymentMethod y reason del fallo

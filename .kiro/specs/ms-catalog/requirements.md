@@ -4,7 +4,7 @@
 
 El microservicio `ms-catalog` es el dueño del Bounded Context **Catálogo Maestro de Productos** dentro de la plataforma B2B Arka. Su responsabilidad principal es gestionar el ciclo de vida completo de productos y categorías, almacenar reseñas como subdocumentos anidados en MongoDB, publicar eventos de dominio al tópico `product-events` de Kafka mediante el Outbox Pattern con operaciones atómicas de MongoDB, y optimizar lecturas con el patrón Cache-Aside usando Redis (TTL 1h). Este servicio cubre la HU1 (Registrar productos en el sistema) de la Fase 1 (MVP).
 
-El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB como almacenamiento primario con drivers reactivos, expone endpoints REST para administración y consulta, y sigue estrictamente la Clean Architecture del Scaffold Bancolombia 4.2.0.
+El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB como almacenamiento primario con drivers reactivos, expone endpoints REST para administración y consulta, expone un servidor gRPC para consulta síncrona de información de productos desde ms-order y ms-cart (Fase 2), y sigue estrictamente la Clean Architecture del Scaffold Bancolombia 4.2.0.
 
 ## Glosario
 
@@ -22,6 +22,8 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 - **Controlador_REST**: Entry-point `@RestController` con retornos `Mono`/`Flux` que expone los endpoints HTTP del servicio
 - **Relay_Outbox**: Proceso asíncrono que consulta la colección `outbox_events` cada 5 segundos y publica los eventos pendientes a Kafka usando `reactor-kafka` directo
 - **Evento_De_Dominio**: Mensaje publicado al tópico `product-events` de Kafka con sobre estándar (eventId, eventType, timestamp, source, correlationId, payload)
+- **Servidor_gRPC**: Entry-point que expone el servicio CatalogService con método GetProductInfo para consulta síncrona de información de productos desde otros microservicios (ms-order, ms-cart)
+- **CatalogService**: Servicio gRPC que permite consultar información de productos (SKU, nombre, precio) de forma síncrona para garantizar consistencia de precios durante checkout
 
 ## Requisitos
 
@@ -140,3 +142,18 @@ El servicio es 100% reactivo (Spring WebFlux + Project Reactor), usa MongoDB com
 3. WHEN ocurre una excepción de dominio (DomainException), THE Catálogo SHALL retornar el código HTTP correspondiente con un ErrorResponse estandarizado
 4. WHEN ocurre un error inesperado, THE Catálogo SHALL retornar código HTTP 500, registrar el error con nivel ERROR en el log y retornar un mensaje genérico sin exponer detalles internos
 5. THE ErrorResponse SHALL contener los campos: code (código de error) y message (descripción legible del error)
+
+### Requisito 10: Servidor gRPC para consulta de información de productos (Fase 2)
+
+**Historia de Usuario:** Como ms-cart, quiero consultar información actualizada de productos (SKU, nombre, precio) durante el checkout para garantizar que los precios mostrados al cliente sean consistentes con la fuente de verdad del catálogo.
+
+#### Criterios de Aceptación
+
+1. THE Catálogo SHALL exponer un servidor gRPC reactivo con el servicio CatalogService que implemente el método GetProductInfo
+2. WHEN ms-cart invoca GetProductInfo con un SKU válido, THE Catálogo SHALL consultar la base de datos MongoDB (no caché) y retornar un ProductInfoResponse con los campos: sku, productName y unitPrice
+3. WHEN ms-cart invoca GetProductInfo con un SKU que no existe en el catálogo, THE Catálogo SHALL retornar un error gRPC con código NOT_FOUND y un mensaje descriptivo indicando que el SKU no fue encontrado
+4. WHEN ms-cart invoca GetProductInfo con un SKU que corresponde a un producto desactivado (active=false), THE Catálogo SHALL retornar un error gRPC con código NOT_FOUND
+5. WHEN ocurre un error de base de datos durante la consulta, THE Catálogo SHALL retornar un error gRPC con código INTERNAL y registrar el error con nivel ERROR en el log
+6. THE servidor gRPC SHALL usar Project Reactor para implementar el método de forma reactiva, retornando Mono<ProductInfoResponse>
+7. THE servidor gRPC SHALL consultar el precio actual directamente desde MongoDB para garantizar consistencia, sin usar el caché de Redis
+8. THE servidor gRPC SHALL configurarse en un puerto diferente al puerto HTTP REST (puerto gRPC: 9084, puerto HTTP: 8084)

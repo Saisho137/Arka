@@ -172,3 +172,20 @@ El microservicio `ms-inventory` es el dueño del dominio de Disponibilidad Físi
 4. WHEN ocurre un error de constraint de base de datos por stock negativo, THE ms-inventory SHALL retornar código HTTP 409 (Conflict) con un ErrorResponse indicando la violación de stock
 5. WHEN ocurre un error inesperado, THE ms-inventory SHALL retornar código HTTP 500, registrar el error con nivel ERROR en el log y retornar un mensaje genérico sin exponer detalles internos
 6. THE ErrorResponse SHALL contener los campos: code (código de error) y message (descripción legible del error)
+
+### Requisito 12: Consumir evento OrderConfirmed para confirmar reservas de stock
+
+**Historia de Usuario:** Como ms-inventory, quiero reaccionar al evento OrderConfirmed publicado por ms-order para confirmar definitivamente las reservas de stock asociadas a la orden, de forma que el job de expiración no las libere incorrectamente.
+
+> **Contexto:** En Fase 1, ms-order publica `OrderConfirmed` inmediatamente tras la reserva exitosa (sin paso de pago intermedio). Sin este consumidor, todas las reservas de órdenes confirmadas permanecen en estado PENDING y el Scheduler_Expiración las destruye a los 15 minutos, liberando stock comprometido.
+
+#### Criterios de Aceptación
+
+1. WHEN ms-inventory recibe un evento de tipo OrderConfirmed del tópico `order-events`, THE ms-inventory SHALL buscar todas las Reservas con status PENDING asociadas al orderId del payload
+2. WHEN existen Reservas PENDING para el orderId, THE ms-inventory SHALL cambiar el status de cada Reserva a CONFIRMED, impidiendo que el Scheduler_Expiración las procese (el scheduler solo procesa reservas con status PENDING cuyo expires_at sea anterior al momento actual)
+3. WHEN se confirma una Reserva, THE ms-inventory SHALL registrar un Movimiento_De_Stock de tipo ORDER_CONFIRM por cada reserva confirmada, con la cantidad confirmada y el orderId como reference_id
+4. WHEN no existen Reservas PENDING para el orderId del evento OrderConfirmed, THE ms-inventory SHALL ignorar el evento y registrar un log de nivel WARN indicando el orderId (escenario de confirmaciones tardías o duplicadas después de expiración)
+5. WHEN ms-inventory recibe un evento OrderConfirmed, THE ms-inventory SHALL verificar en la tabla Processed_Events si el eventId ya fue procesado antes de ejecutar la lógica de negocio (idempotencia)
+6. WHEN el eventId ya existe en Processed_Events, THE ms-inventory SHALL ignorar el evento sin error y registrar un log de nivel DEBUG
+7. THE ms-inventory SHALL confirmar todas las Reservas PENDING del orderId e insertar el eventId en Processed_Events dentro de una única transacción R2DBC
+8. THE confirmación de una Reserva NO modifica las cantidades de stock (quantity ni reserved_quantity en la tabla `stock`) — el stock ya fue contabilizado durante la reserva; el movimiento ORDER_CONFIRM es exclusivamente de auditoría con quantityChange = 0

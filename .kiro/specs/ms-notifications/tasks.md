@@ -16,27 +16,58 @@ Implementación incremental del microservicio `ms-notifications` siguiendo Clean
 
 Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comandos.
 
-**REUTILIZACIÓN Y VERSIONADO:** Antes de implementar patrones transversales o agregar dependencias, consultar **`.kiro/steering/reusability.md`**. Define los componentes reutilizables de `ms-inventory` (Kafka Consumer con `KafkaReceiver`, GlobalExceptionHandler, Spring Profiles), las versiones exactas de todas las librerías y qué adaptar por dominio. Incluye advertencias §B.11/§B.12 sobre APIs eliminadas en spring-kafka 4.0.
+**REUTILIZACIÓN OBLIGATORIA — COPIAR Y ADAPTAR:** Este microservicio DEBE reutilizar componentes probados de `ms-inventory`. Consultar **`.kiro/steering/reusability.md`** (tabla de 11 componentes) ANTES de implementar cualquier patrón transversal. Los componentes críticos para ms-notifications son:
+
+- **#6 Kafka Consumer** (KafkaConsumerConfig + KafkaConsumerLifecycle + KafkaEventConsumer) — arquitectura completa con `KafkaReceiver` de reactor-kafka (§B.12: `ReactiveKafkaConsumerTemplate` eliminado en spring-kafka 4.0)
+- **#9 Spring Profiles** (3 YAMLs: application.yaml, -local.yaml, -docker.yaml) — cambio automático entre MongoDB/Kafka local y contenedores
+- **#11 Índices MongoDB** (CommandLineRunner + ReactiveMongoTemplate.indexOps()) — creación de índices únicos y TTL al inicio
+- **#3 ProcessedEvents (idempotencia)** — aunque ms-notifications usa `notification_history.eventId` para idempotencia, el patrón de verificación `exists()` antes de procesar es el mismo
+
+**VERSIONADO UNIFICADO:** Todas las dependencias DEBEN usar las versiones exactas de la tabla "Versionado Unificado" en `reusability.md`. Referencia canónica: `ms-inventory/build.gradle` + `ms-inventory/main.gradle`.
 
 ## Tareas
 
+### Checklist de Reutilización (Verificar ANTES de implementar)
+
+Antes de comenzar la implementación, verificar que se han consultado estos componentes de `reusability.md`:
+
+- [ ] **#6 Kafka Consumer** — Copiar 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/` (Config + Lifecycle + Consumer)
+- [ ] **#9 Spring Profiles** — Copiar estructura de 3 YAMLs de `ms-inventory/applications/app-service/src/main/resources/`
+- [ ] **#11 Índices MongoDB** — Implementar patrón `@Configuration` + `CommandLineRunner` + `ReactiveMongoTemplate.indexOps()`
+- [ ] **#3 ProcessedEvents (idempotencia)** — Aplicar patrón `exists()` antes de procesar (adaptado a `notification_history.eventId`)
+- [ ] **Versionado Unificado** — Verificar todas las versiones contra tabla en `reusability.md`
+
+### Implementación
+
 - [ ] 1. Configurar estructura del proyecto y dependencias
   - [ ] 1.1 Configurar `build.gradle` con dependencias: Spring WebFlux, Reactive MongoDB Driver, Spring Kafka, AWS SES SDK, jqwik, reactor-test, Lombok, BlockHound
-    - **OBLIGATORIO:** Seguir tabla de **Versionado Unificado** en `reusability.md` para todas las versiones
+    - **OBLIGATORIO (reusability.md — Versionado Unificado):** Seguir tabla de versiones exactas
+      - `io.projectreactor.kafka:reactor-kafka:1.3.25`
+      - `net.jqwik:jqwik:1.9.2` (testImplementation)
+      - `io.projectreactor.tools:blockhound-junit-platform:1.0.16.RELEASE` (testImplementation)
+      - `org.projectlombok:lombok:1.18.42`
+      - Spring Boot starters: `4.0.3` (del BOM)
+      - Dependencias del Spring BOM (reactor-core, reactor-test, mockito-core, spring-kafka, jackson-databind): NO especificar versión
     - Verificar compatibilidad con Spring Boot 4.0.3 y Scaffold 4.2.0
-    - Agregar `net.jqwik:jqwik:1.9.2` en testImplementation
+    - **REFERENCIA:** `ms-inventory/build.gradle` + `ms-inventory/main.gradle` como fuente canónica
     - _Requisitos: transversal_
-  - [ ] 1.2 Configurar `application.yml` con conexión Reactive MongoDB (`notifications_db`), propiedades de Kafka (bootstrap-servers, consumer group `notification-service-group`, tópicos `order-events` e `inventory-events`), dirección de remitente SES (`notification.from-address`), email de administrador (`notification.admin-email`) y configuración de reintentos (`notification.retry.*`)
+  - [ ] 1.2 Configurar `application.yml` con conexión Reactive MongoDB (`notifications_db`), propiedades de Kafka (bootstrap-servers, consumer group `notification-service-group`, tópicos `order-events`, `inventory-events` y `payment-events`), dirección de remitente SES (`notification.from-address`), email de administrador (`notification.admin-email`) y configuración de reintentos (`notification.retry.*`)
     - Configurar perfiles `default` y `local`
     - _Requisitos: 1.1, 3.6, 3.7, 7.3, 9.2_
   - [ ] 1.3 Crear script de inicialización de MongoDB con los índices de las colecciones `templates` (índice único sobre `eventType`) y `notification_history` (índice único sobre `eventId`, TTL Index de 90 días sobre `createdAt` con `expireAfterSeconds: 7776000`)
-    - Ubicar en `ms-notifications/applications/app-service/src/main/resources/`
+    - **OBLIGATORIO (reusability.md #11):** Implementar como `@Configuration` + `CommandLineRunner` + `ReactiveMongoTemplate.indexOps().ensureIndex().then()`
+    - Ubicar en `ms-notifications/applications/app-service/src/main/java/com/arka/config/MongoIndexConfig.java`
     - _Requisitos: 2.1, 8.2, 8.3_
   - [ ] 1.4 Configurar Spring Profiles (local/docker)
-    - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados (MongoDB, Kafka)
-    - Crear `application-docker.yaml` con hostnames de contenedores (`arka-mongodb`, `arka-kafka`) y puertos internos
-    - Configurar `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}` en `application.yaml`
-    - **OBLIGATORIO (reusability.md #9):** Copiar estructura de `ms-inventory/applications/app-service/src/main/resources/`
+    - **OBLIGATORIO (reusability.md #9):** Copiar estructura exacta de `ms-inventory/applications/app-service/src/main/resources/`
+    - Crear `application.yaml` base con `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}`
+    - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados:
+      - MongoDB: `localhost:27017`
+      - Kafka: `localhost:9092`
+    - Crear `application-docker.yaml` con hostnames de contenedores y puertos internos:
+      - MongoDB: `arka-mongodb:27017`
+      - Kafka: `arka-kafka:9092`
+    - NO incluir defaults inline en schedulers — externalizar a profiles
     - _Estándar: §B.10 (Spring Profiles)_
 
 - [ ] 2. Implementar modelo de dominio (`domain/model`)
@@ -69,17 +100,17 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
   - [ ] 3.3 Implementar la interfaz funcional `EventStrategy` con método `extractContext(Map<String, Object> payload)` que retorna `NotificationContext`
     - Ubicar en `com.arka.usecase.strategy`
     - _Requisitos: 10.2_
-  - [ ] 3.4 Implementar las 4 estrategias de Fase 1: `OrderConfirmedStrategy` (extrae orderId, customerId, customerEmail, items, totalAmount → destinatario: customerEmail), `OrderStatusChangedStrategy` (extrae orderId, previousStatus, newStatus, customerEmail → destinatario: customerEmail), `OrderCancelledStrategy` (extrae orderId, customerId, customerEmail, reason → destinatario: customerEmail), `StockDepletedStrategy` (extrae sku, productName, currentQuantity, threshold → destinatario: email admin configurable via propiedad Spring Boot)
+  - [ ] 3.4 Implementar las 6 estrategias (4 de Fase 1 + 2 de Fase 2): `OrderConfirmedStrategy` (extrae orderId, customerId, customerEmail, items, totalAmount → destinatario: customerEmail), `OrderStatusChangedStrategy` (extrae orderId, previousStatus, newStatus, customerEmail → destinatario: customerEmail), `OrderCancelledStrategy` (extrae orderId, customerId, customerEmail, reason → destinatario: customerEmail), `StockDepletedStrategy` (extrae sku, productName, currentQuantity, threshold → destinatario: email admin configurable via propiedad Spring Boot), `PaymentProcessedStrategy` (extrae orderId, customerId, customerEmail, amount, paymentMethod, transactionId → destinatario: customerEmail), `PaymentFailedStrategy` (extrae orderId, customerId, customerEmail, amount, paymentMethod, reason → destinatario: customerEmail)
     - Cada estrategia construye `NotificationContext` con `recipientEmail` y `templateVariables`
     - `StockDepletedStrategy` recibe el email del administrador por constructor
-    - _Requisitos: 4.1, 4.2, 5.1, 5.2, 6.1, 6.2, 7.1, 7.2_
+    - _Requisitos: 4.1, 4.2, 5.1, 5.2, 6.1, 6.2, 7.1, 7.2, 11.1, 11.2, 12.1, 12.2_
 
   - [ ]\* 3.5 Escribir test de propiedad para extracción de campos por estrategia
     - **Propiedad 4: Estrategia extrae campos correctos por tipo de evento**
-    - Generar payloads válidos por tipo de evento con valores aleatorios. Verificar que la estrategia correspondiente produce un `NotificationContext` con `recipientEmail` no vacío y `templateVariables` conteniendo todas las claves esperadas (OrderConfirmed: orderId, customerId, customerEmail, items, totalAmount; OrderStatusChanged: orderId, previousStatus, newStatus; OrderCancelled: orderId, reason; StockDepleted: sku, productName, currentQuantity, threshold).
-    - **Valida: Requisitos 4.1, 5.1, 6.1, 7.1**
+    - Generar payloads válidos por tipo de evento con valores aleatorios. Verificar que la estrategia correspondiente produce un `NotificationContext` con `recipientEmail` no vacío y `templateVariables` conteniendo todas las claves esperadas (OrderConfirmed: orderId, customerId, customerEmail, items, totalAmount; OrderStatusChanged: orderId, previousStatus, newStatus; OrderCancelled: orderId, reason; StockDepleted: sku, productName, currentQuantity, threshold; PaymentProcessed: orderId, amount, paymentMethod, transactionId; PaymentFailed: orderId, amount, paymentMethod, reason).
+    - **Valida: Requisitos 4.1, 5.1, 6.1, 7.1, 11.1, 12.1**
 
-  - [ ] 3.6 Implementar `EventStrategyFactory`: factory con `Map<String, Supplier<EventStrategy>>` inmutable. Método `resolve(String eventType)` retorna `Optional<EventStrategy>`. Registrar las 4 estrategias de Fase 1 (OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted).
+  - [ ] 3.6 Implementar `EventStrategyFactory`: factory con `Map<String, Supplier<EventStrategy>>` inmutable. Método `resolve(String eventType)` retorna `Optional<EventStrategy>`. Registrar las 6 estrategias (4 de Fase 1 + 2 de Fase 2): OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted, PaymentProcessed, PaymentFailed.
     - `Optional` es válido aquí porque es método utilitario puro sin I/O fuera de cadena reactiva
     - _Requisitos: 10.2, 10.3_
 
@@ -96,8 +127,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
   - [ ]\* 4.3 Escribir test de propiedad para email al destinatario correcto
     - **Propiedad 6: Email enviado al destinatario correcto**
-    - Generar eventos de tipo OrderConfirmed, OrderStatusChanged y OrderCancelled con customerEmail aleatorio, y eventos StockDepleted. Verificar que para los primeros 3 tipos el email se envía al customerEmail del payload, y para StockDepleted se envía al email del administrador configurado.
-    - **Valida: Requisitos 3.2, 4.3, 5.3, 6.3, 7.3**
+    - Generar eventos de tipo OrderConfirmed, OrderStatusChanged, OrderCancelled, PaymentProcessed y PaymentFailed con customerEmail aleatorio, y eventos StockDepleted. Verificar que para los primeros 5 tipos el email se envía al customerEmail del payload, y para StockDepleted se envía al email del administrador configurado.
+    - **Valida: Requisitos 3.2, 4.3, 5.3, 6.3, 7.3, 11.3, 12.3**
 
   - [ ]\* 4.4 Escribir test de propiedad para historial completo y correcto
     - **Propiedad 7: Historial de notificación completo y correcto**
@@ -125,40 +156,69 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [ ] 6. Implementar adaptadores driven (`infrastructure/driven-adapters`)
   - [ ] 6.1 Implementar `MongoTemplateAdapter` (implementa `NotificationTemplateRepository`): consulta a la colección `templates` filtrando por `eventType` y `active = true` usando Reactive MongoDB Driver. Mapeo manual de documento MongoDB a record `NotificationTemplate` con `@Builder`.
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-notifications && ./gradlew generateDrivenAdapter --type=mongodb`
+    - Crear DTO `NotificationTemplateData` con campos del documento MongoDB
+    - Crear mapper estático `NotificationTemplateMapper` con métodos `toEntity()` y `toData()`
+    - Usar `ReactiveMongoTemplate` para consultas (NO Spring Data Repository — mayor control sobre queries)
     - _Requisitos: 2.1, 2.2_
   - [ ] 6.2 Implementar `MongoHistoryAdapter` (implementa `NotificationHistoryRepository`): operaciones `existsByEventId` (consulta por eventId, retorna `Mono<Boolean>`) y `save` (inserta documento en `notification_history`). Capturar `DuplicateKeyException` en `save` y tratarla como evento duplicado sin propagar error.
+    - **PATRÓN DE IDEMPOTENCIA (reusability.md #3):** Aunque ms-notifications usa `notification_history.eventId` en lugar de tabla `processed_events`, el patrón de verificación es el mismo:
+      1. `existsByEventId()` antes de procesar
+      2. Si existe → descartar (log DEBUG)
+      3. Si no existe → procesar y guardar
+      4. Capturar `DuplicateKeyException` como safety net (race condition)
+    - Crear DTO `NotificationHistoryData` con campos del documento MongoDB
+    - Crear mapper estático `NotificationHistoryMapper`
     - _Requisitos: 1.3, 8.1, 8.2, 8.4_
   - [ ] 6.3 Implementar `SesEmailAdapter` (implementa `EmailSenderPort`): envolver llamada al SDK bloqueante de AWS SES con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`. Construir `SendEmailRequest` con source (from-address configurable), destination (to), subject y body HTML. Clasificar errores de SES: `SdkClientException` (timeout) → transitorio, `SesException` HTTP 429/5xx → transitorio, `MessageRejectedException` → permanente, `MailFromDomainNotVerifiedException` → permanente. Lanzar `EmailSendException` con flag `transient` según clasificación.
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-notifications && ./gradlew generateDrivenAdapter --type=generic --name=ses-adapter`
-    - Obtener credenciales de AWS SES desde AWS Secrets Manager
+    - **PATRÓN BLOQUEANTE → REACTIVO:** Envolver SDK bloqueante con `Mono.fromCallable(() -> { /* llamada bloqueante */ }).subscribeOn(Schedulers.boundedElastic()).then()`
+    - Obtener credenciales de AWS SES desde AWS Secrets Manager (usar driven-adapter `secrets` si es necesario)
+    - Crear excepción `EmailSendException extends DomainException` con campo `boolean transient`
     - _Requisitos: 3.1, 3.2, 3.6, 9.5_
 
 - [ ] 7. Implementar entry-point Kafka (`infrastructure/entry-points`)
   - [ ] 7.1 Implementar `KafkaNotificationConsumer`, `KafkaConsumerConfig` y `KafkaConsumerLifecycle`
-    - **CRÍTICO**: Crear módulo manualmente como `kafka-consumer` en `infrastructure/entry-points/` (o con Scaffold: `cd ms-notifications && ./gradlew generateEntryPoint --type=generic --name=kafka-consumer`)
-    - Agregar dependencia: `reactor-kafka:1.3.25` (misma versión que ms-inventory)
-    - **OBLIGATORIO (reusability.md #6):** Copiar y adaptar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`:
-      - `KafkaConsumerConfig.java` → crear beans `KafkaReceiver<String, String>` por tópico (`orderEventsReceiver`, `inventoryEventsReceiver`) con consumer group `notification-service-group` y sufijos por tópico
-      - `KafkaConsumerLifecycle.java` → copiar tal cual: `@EventListener(ApplicationReadyEvent.class)` que invoca `kafkaNotificationConsumer.startConsuming()`
-      - `KafkaEventConsumer.java` → adaptar como `KafkaNotificationConsumer`: `startConsuming()`, switch por eventType relevante (OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted), per-message `acknowledge()`, `onErrorResume` para errores irrecuperables, retry con backoff exponencial
-    - **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Usar `KafkaReceiver` de reactor-kafka directamente.
-    - Filtrar por eventType relevante (Fase 1: OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted), delegar a `ProcessNotificationUseCase.execute()`
-    - eventTypes desconocidos: log WARN e ignorar (tolerancia a evolución del esquema)
-    - Manejar errores de deserialización con log ERROR e ignorar evento
+    - **CRÍTICO — COPIAR Y ADAPTAR (reusability.md #6):** Este es el componente más importante para reutilizar
+    - **PASO 1:** Crear módulo `kafka-consumer` en `infrastructure/entry-points/` con Scaffold:
+      ```bash
+      cd ms-notifications && ./gradlew generateEntryPoint --type=generic --name=kafka-consumer
+      ```
+    - **PASO 2:** Agregar dependencia `io.projectreactor.kafka:reactor-kafka:1.3.25` al `build.gradle` del módulo
+    - **PASO 3:** Copiar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`:
+      1. **`KafkaConsumerConfig.java`** → Adaptar:
+         - Crear beans `KafkaReceiver<String, String>` por tópico: `orderEventsReceiver`, `inventoryEventsReceiver` y `paymentEventsReceiver`
+         - Consumer group: `notification-service-group`
+         - Sufijos por tópico en consumer group para evitar conflictos (e.g., `notification-service-group-order`, `notification-service-group-inventory`, `notification-service-group-payment`)
+         - Configurar `ReceiverOptions` con deserializers String/String
+      2. **`KafkaConsumerLifecycle.java`** → Copiar tal cual:
+         - `@Component` con `@EventListener(ApplicationReadyEvent.class)`
+         - Invoca `kafkaNotificationConsumer.startConsuming()` al arrancar la aplicación
+         - Inyecta `KafkaNotificationConsumer` por constructor
+      3. **`KafkaEventConsumer.java`** → Renombrar a `KafkaNotificationConsumer.java` y adaptar:
+         - Método `startConsuming()` que suscribe a los 3 receivers (order-events, inventory-events, payment-events)
+         - Deserializar sobre estándar (JSON → `DomainEvent`)
+         - Switch por `eventType` relevante (6 tipos: OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted, PaymentProcessed, PaymentFailed)
+         - Delegar a `ProcessNotificationUseCase.execute(domainEvent)`
+         - Per-message `acknowledge()` tras procesamiento exitoso
+         - `onErrorResume()` para errores irrecuperables (log ERROR + continuar)
+         - Retry con backoff exponencial para errores transitorios
+         - eventTypes desconocidos: log WARN e ignorar (tolerancia a evolución)
+    - **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Usar `KafkaReceiver` de reactor-kafka directamente (ya implementado en ms-inventory)
+    - **NO REINVENTAR:** La arquitectura de 3 archivos (Config + Lifecycle + Consumer) es un patrón probado. Solo adaptar tópicos, consumer group y lógica de routing por eventType
     - _Requisitos: 1.1, 1.2, 1.6, 1.7_
 
   - [ ]\* 7.2 Escribir test de propiedad para filtrado de eventos desconocidos
     - **Propiedad 2: Filtrado de eventos desconocidos**
-    - Generar eventos con eventTypes aleatorios que no pertenezcan al conjunto relevante (excluyendo OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted). Verificar que no se invoca `ProcessNotificationUseCase`, no se crea registro en `notification_history` y no se lanza excepción.
+    - Generar eventos con eventTypes aleatorios que no pertenezcan al conjunto relevante (excluyendo los 6 tipos: OrderConfirmed, OrderStatusChanged, OrderCancelled, StockDepleted, PaymentProcessed, PaymentFailed). Verificar que no se invoca `ProcessNotificationUseCase`, no se crea registro en `notification_history` y no se lanza excepción.
     - **Valida: Requisitos 1.6, 1.7**
 
   - [ ]\* 7.3 Escribir test de propiedad para email resuelto con variables completas
     - **Propiedad 5: Email resuelto contiene todas las variables requeridas**
-    - Generar eventos de cada tipo relevante con plantilla activa y payload completo. Verificar que el subject y bodyTemplate resueltos contienen los valores de todas las variables especificadas para ese tipo de evento y no queda ningún marcador `{{...}}` sin resolver.
-    - **Valida: Requisitos 4.4, 5.4, 6.4, 7.4**
+    - Generar eventos de cada tipo relevante (6 tipos) con plantilla activa y payload completo. Verificar que el subject y bodyTemplate resueltos contienen los valores de todas las variables especificadas para ese tipo de evento y no queda ningún marcador `{{...}}` sin resolver.
+    - **Valida: Requisitos 4.4, 5.4, 6.4, 7.4, 11.4, 12.4**
 
 - [ ] 8. Integración final y configuración de Spring
-  - [ ] 8.1 Configurar beans de Spring en `app-service`: inyección de dependencias para `ProcessNotificationUseCase`, `TemplateEngine`, `EventStrategyFactory` (con las 4 estrategias registradas), adaptadores MongoDB (`MongoTemplateAdapter`, `MongoHistoryAdapter`), `SesEmailAdapter` y `KafkaNotificationConsumer`. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio ("=== ms-notifications iniciado correctamente ===").
+  - [ ] 8.1 Configurar beans de Spring en `app-service`: inyección de dependencias para `ProcessNotificationUseCase`, `TemplateEngine`, `EventStrategyFactory` (con las 6 estrategias registradas: 4 de Fase 1 + 2 de Fase 2), adaptadores MongoDB (`MongoTemplateAdapter`, `MongoHistoryAdapter`), `SesEmailAdapter` y `KafkaNotificationConsumer`. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio ("=== ms-notifications iniciado correctamente ===").
     - Inyectar `notification.from-address` y `notification.admin-email` desde propiedades
     - _Requisitos: transversal_
 
@@ -168,10 +228,13 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 ## Notas
 
 - **CRÍTICO**: Todos los módulos DEBEN generarse con el plugin Scaffold de Bancolombia. La creación manual está PROHIBIDA. Después de cada generación, ejecutar `./gradlew validateStructure`.
+- **REUTILIZACIÓN OBLIGATORIA**: Consultar `.kiro/steering/reusability.md` ANTES de implementar cualquier patrón transversal. Los componentes #6 (Kafka Consumer), #9 (Spring Profiles) y #11 (Índices MongoDB) son CRÍTICOS para ms-notifications.
+- **VERSIONADO**: Todas las dependencias DEBEN usar las versiones exactas de la tabla "Versionado Unificado" en `reusability.md`. Referencia canónica: `ms-inventory/build.gradle` + `ms-inventory/main.gradle`.
+- **COPIAR Y ADAPTAR**: La arquitectura de Kafka Consumer (3 archivos: Config + Lifecycle + Consumer) es un patrón probado de ms-inventory. Solo adaptar tópicos, consumer group y lógica de routing por eventType. NO reinventar.
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido
 - Cada tarea referencia requisitos específicos para trazabilidad
 - Los checkpoints aseguran validación incremental
 - Los tests de propiedades validan propiedades universales de correctitud (jqwik, mínimo 100 iteraciones)
 - Los tests unitarios validan ejemplos específicos y edge cases (JUnit 5 + Mockito + StepVerifier)
 - Este microservicio no expone endpoints REST — el único entry-point es el consumidor Kafka
-- Para patrones transversales y versiones de dependencias, consultar `.kiro/steering/reusability.md`
+- §B.12: `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Usar `KafkaReceiver` de reactor-kafka (ya implementado en ms-inventory)

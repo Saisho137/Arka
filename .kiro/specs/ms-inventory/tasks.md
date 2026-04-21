@@ -414,6 +414,70 @@ Implementación incremental del microservicio de Gestión de Stock y Reservas pa
 - [x] 15. Checkpoint final — Verificar integración completa
   - Asegurar que todos los tests pasan (unitarios y de propiedades), ejecutar `./gradlew build` desde `ms-inventory/`, preguntar al usuario si surgen dudas.
 
+- [ ] 16. Corrección de bugs en consumo de eventos Kafka: OrderConfirmed y OrderCancelled
+  > **Contexto de los bugs:**
+  >
+  > **Bug A — OrderConfirmed no procesado:** En Fase 1, ms-order publica `OrderConfirmed` inmediatamente al confirmar la orden (sin paso de pago intermedio). ms-inventory no tiene `case "OrderConfirmed"` en su consumer → cae en el `default` branch con log WARN y se ignora. Resultado: todas las reservas quedan en status PENDING y el Scheduler_Expiración las destruye a los 15 minutos, liberando stock de órdenes ya confirmadas.
+  >
+  > **Bug B — OrderCancelled nunca libera stock:** `OrderCancelledPayload` (publicado por ms-order) no contiene campo `sku` — solo tiene `orderId`, `customerId`, `customerEmail`, `reason`. El consumer de ms-inventory lee `payload.path("sku").asText()` que retorna `""` (string vacío). Luego llama a `findBySkuAndOrderIdAndStatus("", orderId, PENDING)` que nunca encuentra nada. Resultado: ningún evento `OrderCancelled` libera stock reservado jamás.
+
+  - [ ] 16.1 Añadir factory method `orderConfirm()` al record `StockMovement` en `domain/model`
+    - Añadir `public static StockMovement orderConfirm(String sku, int confirmedQuantity, UUID orderId)` con:
+      - `movementType = MovementType.ORDER_CONFIRM`
+      - `quantityChange = 0` (la confirmación no altera cantidades físicas de stock)
+      - `previousQuantity = confirmedQuantity`, `newQuantity = confirmedQuantity` (satisface la invariante `prev + change == new`: `confirmedQty + 0 == confirmedQty`)
+      - `orderId = orderId`
+      - `reason = "Reservation confirmed for order"`
+    - `ORDER_CONFIRM` ya existe en el enum `MovementType`; el factory method es el único elemento faltante
+    - _Requisitos: 12.3_
+
+  - [ ] 16.2 Añadir `findAllByOrderIdAndStatus()` a `StockReservationRepository` y su implementación R2DBC
+    - Añadir en la interfaz de dominio `StockReservationRepository`:
+      `Flux<StockReservation> findAllByOrderIdAndStatus(UUID orderId, ReservationStatus status);`
+    - Implementar en `SpringDataStockReservationRepository` con query explícita:
+      `@Query("SELECT * FROM stock_reservations WHERE order_id = :orderId AND status = :status::reservation_status")`
+    - Implementar delegación en `R2dbcStockReservationAdapter`:
+      `return repository.findAllByOrderIdAndStatus(orderId, status).map(StockReservationDTOMapper::toDomain);`
+    - Este método es necesario tanto para Bug A (`processOrderConfirmed`) como para el fix del Bug B (`processOrderCancelled`), ya que ambos necesitan todas las reservas de un pedido sin filtrar por SKU
+    - _Requisitos: 12.1, 7.1_
+
+  - [ ] 16.3 Implementar `processOrderConfirmed(UUID eventId, UUID orderId)` en `StockReservationUseCase`
+    - Verificar idempotencia: `processedEventRepository.exists(eventId)` — si ya existe, retornar `Mono.empty()` con log DEBUG
+    - Consultar todas las reservas PENDING del pedido: `stockReservationRepository.findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING)`
+    - Si el `Flux` es vacío: log WARN `"No PENDING reservations found for orderId: {}"` y completar sin error
+    - Por cada reserva: `stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.CONFIRMED)` + `stockMovementRepository.save(StockMovement.orderConfirm(reservation.sku(), reservation.quantity(), orderId))`
+    - Insertar `eventId` en `processedEventRepository` al finalizar el `Flux`
+    - Toda la operación (confirmaciones + movimientos + idempotencia) dentro de una única transacción via `transactionalGateway.executeInTransaction(pipeline)`
+    - _Requisitos: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8_
+
+  - [ ] 16.4 Corregir `processOrderCancelled()` en `StockReservationUseCase` — eliminar dependencia de `sku`
+    - **Causa raíz:** `OrderCancelledPayload` no tiene campo `sku`; el consumer pasa `sku = ""` y `findBySkuAndOrderIdAndStatus("", orderId, PENDING)` nunca retorna resultados
+    - Cambiar firma: `processOrderCancelled(UUID eventId, UUID orderId, String sku)` → `processOrderCancelled(UUID eventId, UUID orderId)`
+    - Reemplazar `stockReservationRepository.findBySkuAndOrderIdAndStatus(sku, orderId, PENDING).flatMap(...)` por `stockReservationRepository.findAllByOrderIdAndStatus(orderId, PENDING).flatMap(reservation -> releaseReservation(reservation, "ORDER_CANCELLED"))`
+    - El método privado `releaseReservation(StockReservation, String)` ya existe y maneja la liberación de un ítem; reutilizarlo con `flatMap` sobre el `Flux`
+    - Mantener comportamiento para caso sin reservas: si `Flux.empty()` — log WARN, completar sin error
+    - Mantener idempotencia: verificar `processedEventRepository.exists(eventId)` antes de liberar
+    - _Requisitos: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+
+  - [ ] 16.5 Actualizar `KafkaEventConsumer.handleOrderEvent()` — añadir `OrderConfirmed`, corregir `OrderCancelled`
+    - **Añadir `case "OrderConfirmed"`:** en el switch de `handleOrderEvent()`, antes del `default`:
+      ```java
+      case "OrderConfirmed" -> processOrderConfirmed(envelope)
+              .retryWhen(retrySpec("OrderConfirmed"));
+      ```
+    - **Añadir método privado `processOrderConfirmed(JsonNode envelope)`:**
+      - Extraer `eventId` del sobre (`envelope.path("eventId")`)
+      - Extraer `orderId` del payload (`envelope.path("payload").path("orderId")`)
+      - Delegar a `stockReservationUseCase.processOrderConfirmed(eventId, orderId)`
+    - **Corregir `processOrderCancelled(JsonNode envelope)`:** eliminar la línea `String sku = payload.path("sku").asText();` y actualizar la llamada a `stockReservationUseCase.processOrderCancelled(eventId, orderId)` (sin `sku`)
+    - _Requisitos: 12.1, 12.5, 7.1, 7.5, 9.5_
+
+  - [ ] 16.6 Actualizar `docs/03-kafka-eventos.md` — tabla Consumer Groups MVP Fase 1
+    - En la fila de `inventory-service-group`, añadir `OrderConfirmed` a la columna "Filtra por eventType":
+      - Antes: `ProductCreated`, `OrderCancelled`
+      - Después: `ProductCreated`, `OrderCancelled`, `OrderConfirmed`
+    - _Fuente de verdad: docs/03-kafka-eventos.md_
+
 ## Notas
 
 - Las tareas marcadas con `*` son opcionales y pueden omitirse para un MVP más rápido

@@ -2,14 +2,14 @@
 
 ## Visión General
 
-`ms-order` es el microservicio dueño del Bounded Context **Gestión de Pedidos** y orquestador pasivo de la Saga Secuencial dentro de la plataforma B2B Arka. Su misión es gestionar el ciclo de vida completo de las órdenes de compra: creación con múltiples productos, validación síncrona de stock vía gRPC contra `ms-inventory`, máquina de estados del pedido (sealed interface con pattern matching en Java 21), auditoría de transiciones y publicación de eventos de dominio al tópico `order-events` de Kafka mediante el Transactional Outbox Pattern. Cubre la HU4 (Registrar una orden de compra) de la Fase 1 (MVP).
+`ms-order` es el microservicio dueño del Bounded Context **Gestión de Pedidos** y orquestador pasivo de la Saga Secuencial dentro de la plataforma B2B Arka. Su misión es gestionar el ciclo de vida completo de las órdenes de compra: creación con múltiples productos, validación síncrona de stock vía gRPC contra `ms-inventory`, consulta de precio autoritativo vía gRPC contra `ms-catalog`, máquina de estados del pedido (sealed interface con pattern matching en Java 21), auditoría de transiciones y publicación de eventos de dominio al tópico `order-events` de Kafka mediante el Transactional Outbox Pattern. Cubre la HU4 (Registrar una orden de compra) de la Fase 1 (MVP) y se extiende en Fase 2 para integrar el procesamiento de pagos con `ms-payment`.
 
-En Fase 1, el pago se gestiona como proceso externo B2B (facturación diferida a 30-60 días), por lo que las órdenes con stock reservado transicionan automáticamente a CONFIRMADO. La respuesta al cliente es `202 Accepted` dado que los procesos asíncronos posteriores (notificaciones, eventos) aún están en cola.
+En Fase 1, el pago se gestiona como proceso externo B2B (facturación diferida a 30-60 días), por lo que las órdenes con stock reservado transicionan automáticamente a CONFIRMADO. En Fase 2, se introduce el estado PENDIENTE_PAGO: después de reservar stock exitosamente, la orden queda en PENDIENTE_PAGO y se emite un evento OrderCreated. El microservicio `ms-payment` procesa el pago y emite PaymentProcessed o PaymentFailed. `ms-order` consume estos eventos y transiciona la orden a CONFIRMADO (pago exitoso) o CANCELADO (pago fallido). La respuesta al cliente es `202 Accepted` dado que los procesos asíncronos posteriores (pago, notificaciones, eventos) aún están en cola.
 
 ### Decisiones de Diseño Clave
 
-1. **Sealed interface para estados**: `OrderStatus` modela los estados como sealed interface con records, habilitando pattern matching exhaustivo en compile-time (Java 21). Extensible para Fase 2 (`PendingPayment`) sin modificar estados existentes.
-2. **Máquina de estados en dominio**: Las transiciones válidas se validan a nivel de dominio, no en infraestructura. Transiciones inválidas lanzan `InvalidStateTransitionException`.
+1. **Sealed interface para estados**: `OrderStatus` modela los estados como sealed interface con records, habilitando pattern matching exhaustivo en compile-time (Java 21). Incluye PendingPayment para Fase 2.
+2. **Máquina de estados en dominio**: Las transiciones válidas se validan a nivel de dominio, no en infraestructura. Transiciones inválidas lanzan `InvalidStateTransitionException`. Fase 2 agrega transiciones: PENDIENTE_RESERVA→PENDIENTE_PAGO, PENDIENTE_PAGO→CONFIRMADO, PENDIENTE_PAGO→CANCELADO.
 3. **gRPC client fail-fast**: La reserva de stock es síncrona vía gRPC. Si `ms-inventory` rechaza o no responde, la orden no se persiste (fail-fast sin ensuciar Kafka).
 4. **Transactional Outbox Pattern**: Los eventos de dominio se insertan en `outbox_events` dentro de la misma transacción R2DBC que la escritura de negocio. Un relay asíncrono (poll cada 5s) los publica a Kafka.
 5. **Idempotencia en consumidores**: La tabla `processed_events` con `event_id` como PK garantiza procesamiento exactamente-una-vez de eventos Kafka.
@@ -20,6 +20,7 @@ En Fase 1, el pago se gestiona como proceso externo B2B (facturación diferida a
 10. **Patrón Controller → Handler → UseCase (§4.2)**: El `OrderController` es thin (solo HTTP concerns), el `OrderHandler` (`@Component`) orquesta UseCase + mapeo + `ResponseEntity`/`Flux`. Reutilizar patrón de `ms-inventory` (`StockController` → `StockHandler` → `StockUseCase`).
 11. **Reutilización de implementaciones probadas**: Para patrones transversales (Outbox Relay, Kafka Producer/Consumer, ProcessedEvents, GlobalExceptionHandler, Controller→Handler), se DEBE reutilizar la implementación ya probada de `ms-inventory` adaptando solo lo específico del dominio.
 12. **IMPORTANTE (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0 (Spring Boot 4.0.3). El consumidor Kafka usa `KafkaReceiver` de reactor-kafka directamente, con `KafkaConsumerConfig` (beans por tópico) y `KafkaConsumerLifecycle` (`ApplicationReadyEvent`).
+13. **Fase 2 — Integración con ms-payment**: Después de reserva exitosa, la orden queda en PENDIENTE_PAGO y se emite OrderCreated. `ms-payment` procesa el pago y emite PaymentProcessed/PaymentFailed. `ms-order` consume estos eventos y transiciona a CONFIRMADO o CANCELADO.
 
 ---
 
@@ -106,7 +107,7 @@ graph TB
     KC --> Kafka
 ```
 
-### Flujo de Creación de Orden (Camino Crítico — Happy Path)
+### Flujo de Creación de Orden (Camino Crítico — Happy Path Fase 2)
 
 ```mermaid
 sequenceDiagram
@@ -119,6 +120,8 @@ sequenceDiagram
     participant Inventory as ms-inventory
     participant PG as PostgreSQL 17
     participant Outbox as outbox_events
+    participant Kafka as Apache Kafka
+    participant Payment as ms-payment
 
     Client->>Controller: POST /orders (customerId, items[{productId, sku, quantity}], shippingAddress)
     Controller->>Controller: Bean Validation (@Valid)
@@ -138,16 +141,45 @@ sequenceDiagram
         gRPC-->>UseCase: ReserveStockResult
     end
 
-    alt Todos los items reservados exitosamente
+    alt Todos los items reservados exitosamente (Fase 2)
         rect rgb(235, 255, 235)
             Note over UseCase,PG: Transacción R2DBC atómica
-            UseCase->>PG: INSERT INTO orders (status=CONFIRMADO, total_amount)
+            UseCase->>PG: INSERT INTO orders (status=PENDIENTE_PAGO, total_amount)
             UseCase->>PG: INSERT INTO order_items (por cada item con unitPrice de catálogo, subtotal)
-            UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_RESERVA→CONFIRMADO)
-            UseCase->>Outbox: INSERT OrderConfirmed event (PENDING)
+            UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_RESERVA→PENDIENTE_PAGO)
+            UseCase->>Outbox: INSERT OrderCreated event (PENDING)
         end
-        UseCase-->>Controller: Order confirmada
-        Controller-->>Client: 202 Accepted (orderId, status, items, totalAmount)
+        UseCase-->>Controller: Order en PENDIENTE_PAGO
+        Controller-->>Client: 202 Accepted (orderId, status=PENDIENTE_PAGO, items, totalAmount)
+        
+        Note over Outbox,Kafka: Relay publica OrderCreated
+        Outbox->>Kafka: Publish OrderCreated to order-events
+        Kafka->>Payment: OrderCreated event
+        Payment->>Payment: Procesar pago
+        
+        alt Pago exitoso
+            Payment->>Kafka: Publish PaymentProcessed to payment-events
+            Kafka->>Controller: PaymentProcessed event
+            Controller->>UseCase: ProcessExternalEventUseCase
+            rect rgb(235, 245, 255)
+                Note over UseCase,PG: Transacción R2DBC atómica
+                UseCase->>PG: UPDATE orders SET status = CONFIRMADO
+                UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_PAGO→CONFIRMADO)
+                UseCase->>Outbox: INSERT OrderConfirmed event (PENDING)
+                UseCase->>PG: INSERT INTO processed_events (eventId)
+            end
+        else Pago fallido
+            Payment->>Kafka: Publish PaymentFailed to payment-events
+            Kafka->>Controller: PaymentFailed event
+            Controller->>UseCase: ProcessExternalEventUseCase
+            rect rgb(255, 235, 235)
+                Note over UseCase,PG: Transacción R2DBC atómica
+                UseCase->>PG: UPDATE orders SET status = CANCELADO
+                UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_PAGO→CANCELADO, reason)
+                UseCase->>Outbox: INSERT OrderCancelled event (PENDING)
+                UseCase->>PG: INSERT INTO processed_events (eventId)
+            end
+        end
     else Algún item sin stock suficiente
         UseCase-->>Controller: Error stock insuficiente
         Controller-->>Client: 409 Conflict (SKU, cantidad disponible)
@@ -241,7 +273,7 @@ sequenceDiagram
     end
 ```
 
-### Flujo de Consumo de Eventos Kafka (Idempotente — Extensibilidad Fase 2+)
+### Flujo de Consumo de Eventos Kafka (Idempotente — Fase 2)
 
 ```mermaid
 sequenceDiagram
@@ -253,16 +285,43 @@ sequenceDiagram
     Kafka->>Consumer: Evento (payment-events / shipping-events)
     Consumer->>Consumer: Deserializar sobre, leer eventType
 
-    alt eventType conocido (Fase 2+)
-        Consumer->>UseCase: execute(event)
+    alt eventType = PaymentProcessed
+        Consumer->>UseCase: execute(PaymentProcessedEvent)
         rect rgb(235, 255, 235)
             Note over UseCase,PG: Transacción R2DBC
             UseCase->>PG: SELECT FROM processed_events WHERE event_id = ?
             alt Ya procesado
                 UseCase-->>Consumer: Ignorar (log DEBUG)
             else Nuevo evento
-                UseCase->>PG: Procesar lógica de negocio
-                UseCase->>PG: INSERT INTO processed_events (event_id)
+                UseCase->>PG: SELECT FROM orders WHERE id = orderId
+                alt Orden en PENDIENTE_PAGO
+                    UseCase->>PG: UPDATE orders SET status = CONFIRMADO
+                    UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_PAGO→CONFIRMADO)
+                    UseCase->>PG: INSERT INTO outbox_events (OrderConfirmed)
+                    UseCase->>PG: INSERT INTO processed_events (event_id)
+                else Orden en otro estado
+                    UseCase-->>Consumer: Ignorar (log WARN)
+                end
+            end
+        end
+        Consumer-->>Kafka: ack
+    else eventType = PaymentFailed
+        Consumer->>UseCase: execute(PaymentFailedEvent)
+        rect rgb(255, 235, 235)
+            Note over UseCase,PG: Transacción R2DBC
+            UseCase->>PG: SELECT FROM processed_events WHERE event_id = ?
+            alt Ya procesado
+                UseCase-->>Consumer: Ignorar (log DEBUG)
+            else Nuevo evento
+                UseCase->>PG: SELECT FROM orders WHERE id = orderId
+                alt Orden en PENDIENTE_PAGO
+                    UseCase->>PG: UPDATE orders SET status = CANCELADO
+                    UseCase->>PG: INSERT INTO order_state_history (PENDIENTE_PAGO→CANCELADO, reason)
+                    UseCase->>PG: INSERT INTO outbox_events (OrderCancelled)
+                    UseCase->>PG: INSERT INTO processed_events (event_id)
+                else Orden en otro estado
+                    UseCase-->>Consumer: Ignorar (log WARN)
+                end
             end
         end
         Consumer-->>Kafka: ack
@@ -278,8 +337,12 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> PENDIENTE_RESERVA: POST /orders
 
-    PENDIENTE_RESERVA --> CONFIRMADO: gRPC exitoso (stock reservado)
+    PENDIENTE_RESERVA --> PENDIENTE_PAGO: gRPC exitoso (Fase 2)
+    PENDIENTE_RESERVA --> CONFIRMADO: gRPC exitoso (Fase 1)
     PENDIENTE_RESERVA --> CANCELADO: Stock insuficiente (fail-fast)
+
+    PENDIENTE_PAGO --> CONFIRMADO: PaymentProcessed (Fase 2)
+    PENDIENTE_PAGO --> CANCELADO: PaymentFailed (Fase 2)
 
     CONFIRMADO --> EN_DESPACHO: Admin PUT /orders/{id}/status
     CONFIRMADO --> CANCELADO: Admin o Cliente PUT /orders/{id}/cancel
@@ -290,7 +353,8 @@ stateDiagram-v2
     CANCELADO --> [*]
 
     note right of PENDIENTE_RESERVA: Estado efímero en memoria
-    note right of CONFIRMADO: Pago B2B offline (Fase 1)
+    note right of PENDIENTE_PAGO: Fase 2: esperando confirmación de pago
+    note right of CONFIRMADO: Fase 1: pago B2B offline<br/>Fase 2: pago confirmado
     note right of CANCELADO: Estado terminal
     note right of ENTREGADO: Estado terminal
 ```
@@ -352,12 +416,12 @@ public interface CatalogClient {
 
 | Caso de Uso                   | Responsabilidad                                                                                                                                                                                                                 | Ports Usados                                                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `CreateOrderUseCase`          | Consulta precio autoritativo por SKU vía `CatalogClient.getProductInfo()`, invoca gRPC a ms-inventory para reservar stock, persiste Order con estado CONFIRMADO, items con precios de catálogo, historial PENDIENTE_RESERVA→CONFIRMADO, y evento OrderConfirmed en outbox. Todo en una transacción R2DBC. | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient`, `CatalogClient` |
+| `CreateOrderUseCase`          | Consulta precio autoritativo por SKU vía `CatalogClient.getProductInfo()`, invoca gRPC a ms-inventory para reservar stock, persiste Order con estado PENDIENTE_PAGO (Fase 2) o CONFIRMADO (Fase 1), items con precios de catálogo, historial PENDIENTE_RESERVA→PENDIENTE_PAGO (Fase 2) o PENDIENTE_RESERVA→CONFIRMADO (Fase 1), y evento OrderCreated en outbox. Todo en una transacción R2DBC. | `OrderRepository`, `OrderItemRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `InventoryClient`, `CatalogClient` |
 | `GetOrderUseCase`             | Consulta orden por ID con sus items. Valida acceso: CUSTOMER solo ve sus propias órdenes.                                                                                                                                       | `OrderRepository`, `OrderItemRepository`                                                                            |
 | `ListOrdersUseCase`           | Lista órdenes paginadas con filtros por status y customerId. CUSTOMER ve solo sus órdenes (filtro automático).                                                                                                                  | `OrderRepository`                                                                                                   |
 | `ChangeOrderStatusUseCase`    | Valida transición de estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO), actualiza orden, registra historial y emite OrderStatusChanged en outbox. Solo ADMIN.                                                              | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
-| `CancelOrderUseCase`          | Valida que la orden esté en estado cancelable (CONFIRMADO), transiciona a CANCELADO con reason, registra historial y emite OrderCancelled en outbox. CUSTOMER y ADMIN (CUSTOMER solo sus propias órdenes).                      | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
-| `ProcessExternalEventUseCase` | Verifica idempotencia (processed_events), procesa eventos de payment-events y shipping-events (Fase 2+). Infraestructura base lista para extensión.                                                                             | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`               |
+| `CancelOrderUseCase`          | Valida que la orden esté en estado cancelable (CONFIRMADO, PENDIENTE_PAGO en Fase 2), transiciona a CANCELADO con reason, registra historial y emite OrderCancelled en outbox. CUSTOMER y ADMIN (CUSTOMER solo sus propias órdenes).                      | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`                                           |
+| `ProcessExternalEventUseCase` | Verifica idempotencia (processed_events), procesa eventos PaymentProcessed (PENDIENTE_PAGO→CONFIRMADO) y PaymentFailed (PENDIENTE_PAGO→CANCELADO) de payment-events (Fase 2). Ignora eventos si la orden no está en PENDIENTE_PAGO.                                                                             | `OrderRepository`, `OrderStateHistoryRepository`, `OutboxEventRepository`, `ProcessedEventRepository`               |
 
 ### Capa de Infraestructura — Entry Points
 
@@ -452,11 +516,11 @@ public record ErrorResponse(String code, String message) {}
 
 > **Arquitectura (§B.12):** `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Se usa `KafkaReceiver` de reactor-kafka directamente. Reutilizar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`: `KafkaConsumerConfig` (beans `KafkaReceiver` por tópico), `KafkaConsumerLifecycle` (`ApplicationReadyEvent` → `startConsuming()`), `KafkaEventConsumer` (switch eventType, per-msg acknowledge, retry backoff).
 
-| Consumer             | Tópicos Suscritos                   | Consumer Group        | Eventos Procesados (Fase 2+)                              | Tecnología                            |
+| Consumer             | Tópicos Suscritos                   | Consumer Group        | Eventos Procesados (Fase 2)                              | Tecnología                            |
 | -------------------- | ----------------------------------- | --------------------- | --------------------------------------------------------- | ------------------------------------- |
-| `KafkaEventConsumer` | `payment-events`, `shipping-events` | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched` | `KafkaReceiver` (reactor-kafka §B.12) |
+| `KafkaEventConsumer` | `payment-events`, `shipping-events` | `order-service-group` | `PaymentProcessed`, `PaymentFailed`, `ShippingDispatched` (Fase 3) | `KafkaReceiver` (reactor-kafka §B.12) |
 
-Filtra por `eventType` del sobre estándar. Ignora tipos desconocidos con log WARN. En Fase 1, la infraestructura base está lista pero no procesa eventos activamente.
+Filtra por `eventType` del sobre estándar. En Fase 2, procesa activamente `PaymentProcessed` (PENDIENTE_PAGO→CONFIRMADO) y `PaymentFailed` (PENDIENTE_PAGO→CANCELADO). Ignora eventos si la orden no está en PENDIENTE_PAGO (log WARN). Ignora tipos desconocidos con log WARN.
 
 ### Capa de Infraestructura — Driven Adapters
 
@@ -549,6 +613,7 @@ public record OrderItem(
 // compatibilidad directa con R2DBC VARCHAR.
 public sealed interface OrderStatus permits
         OrderStatus.PendingReserve,
+        OrderStatus.PendingPayment,
         OrderStatus.Confirmed,
         OrderStatus.InShipment,
         OrderStatus.Delivered,
@@ -560,6 +625,7 @@ public sealed interface OrderStatus permits
     static OrderStatus fromValue(String value) {
         return switch (value) {
             case "PENDIENTE_RESERVA" -> new PendingReserve();
+            case "PENDIENTE_PAGO"    -> new PendingPayment();
             case "CONFIRMADO"        -> new Confirmed();
             case "EN_DESPACHO"       -> new InShipment();
             case "ENTREGADO"         -> new Delivered();
@@ -570,6 +636,9 @@ public sealed interface OrderStatus permits
 
     record PendingReserve() implements OrderStatus {
         public String value() { return "PENDIENTE_RESERVA"; }
+    }
+    record PendingPayment() implements OrderStatus {
+        public String value() { return "PENDIENTE_PAGO"; }
     }
     record Confirmed() implements OrderStatus {
         public String value() { return "CONFIRMADO"; }
@@ -592,7 +661,8 @@ public final class OrderStateTransition {
     private OrderStateTransition() {}
 
     private static final Map<String, Set<String>> VALID_TRANSITIONS = Map.of(
-        "PENDIENTE_RESERVA", Set.of("CONFIRMADO", "CANCELADO"),
+        "PENDIENTE_RESERVA", Set.of("PENDIENTE_PAGO", "CONFIRMADO", "CANCELADO"),
+        "PENDIENTE_PAGO", Set.of("CONFIRMADO", "CANCELADO"),
         "CONFIRMADO", Set.of("EN_DESPACHO", "CANCELADO"),
         "EN_DESPACHO", Set.of("ENTREGADO")
     );
@@ -682,7 +752,8 @@ public enum EventType {
     ORDER_CREATED("OrderCreated"),
     ORDER_CONFIRMED("OrderConfirmed"),
     ORDER_STATUS_CHANGED("OrderStatusChanged"),
-    ORDER_CANCELLED("OrderCancelled");
+    ORDER_CANCELLED("OrderCancelled"),
+    PAYMENT_REQUESTED("PaymentRequested");  // Fase 2
 
     private final String value;
     EventType(String value) { this.value = value; }
@@ -753,6 +824,15 @@ public record OrderItemPayload(
     String sku,
     int quantity,
     BigDecimal unitPrice
+) {}
+
+// Payload para PaymentRequested (Fase 2)
+@Builder(toBuilder = true)
+public record PaymentRequestedPayload(
+    UUID orderId,
+    UUID customerId,
+    BigDecimal totalAmount,
+    String paymentMethod
 ) {}
 ```
 
@@ -849,11 +929,11 @@ _Para cualquier_ solicitud de creación de orden donde algún campo requerido (c
 
 **Valida: Requisitos 1.1, 1.8, 10.2**
 
-### Propiedad 2: Creación exitosa produce todos los artefactos correctos
+### Propiedad 2: Creación exitosa produce todos los artefactos correctos (Fase 2)
 
-_Para cualquier_ solicitud de creación de orden válida donde ms-inventory confirma la reserva de todos los items vía gRPC, el sistema debe persistir: (a) una Orden con estado CONFIRMADO, (b) un OrderItem por cada item con unitPrice y subtotal correctos, (c) un registro en order_state_history con transición PENDIENTE_RESERVA→CONFIRMADO, y (d) un evento OrderConfirmed en outbox_events con payload conteniendo orderId, customerId, customerEmail, items (sku, quantity, unitPrice) y totalAmount.
+_Para cualquier_ solicitud de creación de orden válida donde ms-inventory confirma la reserva de todos los items vía gRPC, el sistema debe persistir: (a) una Orden con estado PENDIENTE_PAGO (Fase 2) o CONFIRMADO (Fase 1), (b) un OrderItem por cada item con unitPrice y subtotal correctos, (c) un registro en order_state_history con transición PENDIENTE_RESERVA→PENDIENTE_PAGO (Fase 2) o PENDIENTE_RESERVA→CONFIRMADO (Fase 1), y (d) un evento OrderCreated en outbox_events con payload conteniendo orderId, customerId, customerEmail, items (sku, quantity, unitPrice) y totalAmount.
 
-**Valida: Requisitos 1.2, 1.3, 1.7, 7.9, 9.1, 9.2**
+**Valida: Requisitos 1.2, 1.3, 1.7, 7.8, 9.1, 9.2**
 
 ### Propiedad 3: Stock insuficiente aborta sin persistir
 
@@ -879,9 +959,9 @@ _Para cualquier_ solicitud de creación de orden donde el Cliente_gRPC no puede 
 
 **Valida: Requisitos 1.9, 9.4, 10.4**
 
-### Propiedad 7: Máquina de estados acepta solo transiciones válidas
+### Propiedad 7: Máquina de estados acepta solo transiciones válidas (Fase 2)
 
-_Para cualquier_ par de estados (from, to), la transición debe ser aceptada si y solo si pertenece al conjunto de transiciones válidas: {PENDIENTE_RESERVA→CONFIRMADO, PENDIENTE_RESERVA→CANCELADO, CONFIRMADO→EN_DESPACHO, CONFIRMADO→CANCELADO, EN_DESPACHO→ENTREGADO}. Cualquier transición fuera de este conjunto debe ser rechazada con código HTTP 409. ENTREGADO y CANCELADO son estados terminales sin transiciones de salida.
+_Para cualquier_ par de estados (from, to), la transición debe ser aceptada si y solo si pertenece al conjunto de transiciones válidas: {PENDIENTE_RESERVA→PENDIENTE_PAGO, PENDIENTE_RESERVA→CONFIRMADO, PENDIENTE_RESERVA→CANCELADO, PENDIENTE_PAGO→CONFIRMADO, PENDIENTE_PAGO→CANCELADO, CONFIRMADO→EN_DESPACHO, CONFIRMADO→CANCELADO, EN_DESPACHO→ENTREGADO}. Cualquier transición fuera de este conjunto debe ser rechazada con código HTTP 409. ENTREGADO y CANCELADO son estados terminales sin transiciones de salida.
 
 **Valida: Requisitos 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 10.3**
 
@@ -891,9 +971,9 @@ _Para cualquier_ transición de estado exitosa, debe existir un registro en `ord
 
 **Valida: Requisitos 4.5, 6.7**
 
-### Propiedad 9: Transiciones válidas producen eventos outbox correctos
+### Propiedad 9: Transiciones válidas producen eventos outbox correctos (Fase 2)
 
-_Para cualquier_ transición de estado exitosa, debe existir un evento en `outbox_events` con: eventType correspondiente al tipo de transición (OrderConfirmed, OrderStatusChanged, OrderCancelled), status = PENDING, topic = "order-events", partition_key = orderId, y payload conteniendo todos los campos requeridos para su tipo específico. El sobre del evento debe incluir eventId (UUID), eventType, timestamp, source = "ms-order" y correlationId.
+_Para cualquier_ transición de estado exitosa, debe existir un evento en `outbox_events` con: eventType correspondiente al tipo de transición (OrderCreated, OrderConfirmed, OrderStatusChanged, OrderCancelled), status = PENDING, topic = "order-events", partition_key = orderId, y payload conteniendo todos los campos requeridos para su tipo específico. El sobre del evento debe incluir eventId (UUID), eventType, timestamp, source = "ms-order" y correlationId.
 
 **Valida: Requisitos 4.6, 5.6, 6.5, 7.2, 7.3, 7.8, 7.9, 7.10, 7.11**
 
@@ -932,6 +1012,24 @@ _Para cualquier_ evento Kafka procesado exitosamente (eventId registrado en proc
 _Para cualquier_ excepción (validación, dominio o inesperada), la respuesta debe contener un `ErrorResponse` con los campos `code` (no vacío) y `message` (no vacío). El código HTTP debe corresponder al tipo: 400 para validación, 403 para acceso denegado, 404 para no encontrado, 409 para transición inválida/stock insuficiente, 503 para servicio no disponible, y 500 para inesperadas. Las respuestas 500 no deben exponer detalles internos (stack trace, nombres de clase).
 
 **Valida: Requisitos 10.5, 10.6**
+
+### Propiedad 16: Procesamiento de PaymentProcessed transiciona correctamente (Fase 2)
+
+_Para cualquier_ evento PaymentProcessed recibido de payment-events con un orderId válido, si la orden está en estado PENDIENTE_PAGO y el eventId no existe en processed_events, el sistema debe: (a) transicionar la orden a CONFIRMADO, (b) registrar un Historial_De_Estados con transición PENDIENTE_PAGO→CONFIRMADO, (c) insertar un evento OrderConfirmed en outbox_events, y (d) insertar el eventId en processed_events, todo dentro de la misma transacción R2DBC.
+
+**Valida: Requisitos 8.2, 8.5, 8.7**
+
+### Propiedad 17: Procesamiento de PaymentFailed transiciona correctamente (Fase 2)
+
+_Para cualquier_ evento PaymentFailed recibido de payment-events con un orderId válido, si la orden está en estado PENDIENTE_PAGO y el eventId no existe en processed_events, el sistema debe: (a) transicionar la orden a CANCELADO, (b) registrar un Historial_De_Estados con transición PENDIENTE_PAGO→CANCELADO incluyendo el reason del fallo de pago, (c) insertar un evento OrderCancelled en outbox_events, y (d) insertar el eventId en processed_events, todo dentro de la misma transacción R2DBC.
+
+**Valida: Requisitos 8.3, 8.5, 8.7**
+
+### Propiedad 18: Eventos de pago para órdenes en estado incorrecto son ignorados (Fase 2)
+
+_Para cualquier_ evento PaymentProcessed o PaymentFailed recibido de payment-events donde la orden identificada por orderId no está en estado PENDIENTE_PAGO, el sistema debe ignorar el evento sin modificar la orden, sin crear historial, sin emitir eventos outbox, y debe registrar un log de nivel WARN indicando el estado actual de la orden.
+
+**Valida: Requisitos 8.8**
 
 ---
 
@@ -1036,15 +1134,18 @@ Cada propiedad de correctitud del documento de diseño se implementa como un **�
 | P4: Invariante total_amount                 | Generar items con precios y cantidades, verificar suma               | BigDecimals positivos, quantities positivos          |
 | P5: Respuestas campos completos             | Generar órdenes, consultar y verificar campos                        | Órdenes aleatorias                                   |
 | P6: gRPC error → 503                        | Simular errores gRPC variados, verificar 503                         | Tipos de error gRPC aleatorios                       |
-| P7: Máquina de estados                      | Generar pares (from, to), verificar aceptación/rechazo               | Todos los pares de estados posibles                  |
+| P7: Máquina de estados                      | Generar pares (from, to), verificar aceptación/rechazo               | Todos los pares de estados posibles (incluye PENDIENTE_PAGO) |
 | P8: Historial de auditoría                  | Generar transiciones válidas, verificar historial                    | Transiciones válidas aleatorias                      |
 | P9: Eventos outbox correctos                | Generar transiciones válidas, verificar eventos                      | Transiciones válidas con datos aleatorios            |
 | P10: Control de acceso CUSTOMER             | Generar órdenes y customers distintos, verificar 403                 | Pares (orderId, customerId) no coincidentes          |
-| P11: Listado ordenado y filtrado            | Generar órdenes con timestamps y estados variados, verificar orden   | Timestamps, estados, customerIds aleatorios          |
+| P11: Listado ordenado y filtrado            | Generar órdenes con timestamps y estados variados, verificar orden   | Timestamps, estados (incluye PENDIENTE_PAGO), customerIds aleatorios |
 | P12: Transición outbox relay                | Generar eventos PENDING, simular éxito/fallo                         | Eventos aleatorios                                   |
 | P13: Eventos desconocidos ignorados         | Generar eventos con eventTypes aleatorios no reconocidos             | Strings aleatorios como eventType                    |
 | P14: Idempotencia consumo                   | Generar eventos y procesarlos dos veces                              | Eventos con eventId fijo                             |
 | P15: Estructura ErrorResponse               | Generar excepciones de distintos tipos                               | DomainException, validation, unexpected              |
+| P16: PaymentProcessed transiciona correctamente | Generar eventos PaymentProcessed, verificar transición PENDIENTE_PAGO→CONFIRMADO | Eventos PaymentProcessed con orderIds aleatorios |
+| P17: PaymentFailed transiciona correctamente | Generar eventos PaymentFailed, verificar transición PENDIENTE_PAGO→CANCELADO | Eventos PaymentFailed con orderIds y reasons aleatorios |
+| P18: Eventos de pago en estado incorrecto ignorados | Generar eventos PaymentProcessed/Failed para órdenes no en PENDIENTE_PAGO | Pares (evento, orden en estado incorrecto) |
 
 ### Herramientas Adicionales
 
