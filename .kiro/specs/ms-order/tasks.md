@@ -282,17 +282,17 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Generar eventos, procesarlos una vez (registrar eventId en processed_events), enviar el mismo evento de nuevo, verificar que se descarta sin ejecutar lógica de negocio ni crear artefactos adicionales.
     - **Valida: Requisitos 8.4**
 
-- [ ] 11. Integración final y configuración de Spring
-  - [ ] 11.1 Configurar beans de Spring en `app-service`: inyección de dependencias para todos los UseCases, adaptadores R2DBC, cliente gRPC, relay outbox y consumidor Kafka. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio.
+- [x] 11. Integración final y configuración de Spring
+  - [x] 11.1 Configurar beans de Spring en `app-service`: inyección de dependencias para todos los UseCases, adaptadores R2DBC, cliente gRPC, relay outbox y consumidor Kafka. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio.
     - **Actualizar `app-service/build.gradle`:** Agregar referencias a los módulos de infraestructura creados: `implementation project(':reactive-web')`, `implementation project(':r2dbc-postgresql')`, `implementation project(':kafka-producer')`, `implementation project(':kafka-consumer')`, `implementation project(':grpc-inventory')`, `implementation project(':grpc-catalog')` (si existen)
     - Crear `OpenApiConfig` con metadata del servicio (`@Bean OpenAPI`) — **OBLIGATORIO (reusability.md #10):** copiar patrón de `ms-inventory` (§D.2)
     - _Requisitos: transversal_
-  - [ ] 11.2 Inyectar `TransactionalGateway` en los UseCases que requieren atomicidad (CreateOrderUseCase, ChangeOrderStatusUseCase, CancelOrderUseCase, ProcessExternalEventUseCase) y envolver el pipeline reactivo con `transactionalGateway.executeInTransaction(pipeline)` para garantizar que escritura de negocio + outbox + historial ocurren en la misma transacción R2DBC
+  - [x] 11.2 Inyectar `TransactionalGateway` en los UseCases que requieren atomicidad (CreateOrderUseCase, ChangeOrderStatusUseCase, CancelOrderUseCase, ProcessExternalEventUseCase) y envolver el pipeline reactivo con `transactionalGateway.executeInTransaction(pipeline)` para garantizar que escritura de negocio + outbox + historial ocurren en la misma transacción R2DBC
     - **OBLIGATORIO (reusability.md #1):** Copiar patrón de `ms-inventory` `StockUseCase.java` — usar `TransactionalGateway.executeInTransaction()`, NO `@Transactional` (Spring annotation no pertenece a la capa de dominio según Clean Architecture)
     - `TransactionalGateway` port ya está en `com.arka.model.commons.gateways.TransactionalGateway`
     - _Requisitos: 1.3, 4.5, 4.6, 7.1_
 
-- [ ] 12. Checkpoint final — Verificar que todos los tests pasan
+- [x] 12. Checkpoint final — Verificar que todos los tests pasan
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 ## Fase 2+ — Tareas Pendientes (ms-order Completo)

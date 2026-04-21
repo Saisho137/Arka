@@ -20,8 +20,11 @@ import java.util.UUID;
 @Component
 public class GrpcInventoryClient implements InventoryClient {
 
-    @GrpcClient("ms-inventory")
-    private InventoryServiceGrpc.InventoryServiceStub inventoryStub;
+    private final InventoryServiceGrpc.InventoryServiceStub inventoryStub;
+
+    public GrpcInventoryClient(@GrpcClient("ms-inventory") InventoryServiceGrpc.InventoryServiceStub inventoryStub) {
+        this.inventoryStub = inventoryStub;
+    }
 
     @Override
     public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) {

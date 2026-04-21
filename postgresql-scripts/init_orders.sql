@@ -115,3 +115,170 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order_id   ON order_items (order_id);
 CREATE INDEX IF NOT EXISTS idx_state_history_order_id ON order_state_history (order_id);
 
 CREATE INDEX IF NOT EXISTS idx_outbox_status_created  ON outbox_events (status, created_at);
+
+-- ─── Mock Data (desarrollo / pruebas) ─────────────
+-- Emails de prueba y sus UUIDs derivados por ms-order (UUID.nameUUIDFromBytes):
+--   admin@arka.com        → 2d66e954-4482-3e67-973c-7142c931083e
+--   customer1@arka.com    → 482eae01-3840-3d80-9a3b-17333e6b32d5
+--   customer2@arka.com    → 3e6c5f4e-ae19-32f9-a254-ba18570e280e
+
+INSERT INTO orders (id, customer_id, customer_email, shipping_address, notes, status, total_amount, created_at, updated_at)
+VALUES
+    -- Orden 1: customer1, CONFIRMADO — listo para cambiar a EN_DESPACHO o cancelar
+    ('550e8400-e29b-41d4-a716-446655440000',
+     '482eae01-3840-3d80-9a3b-17333e6b32d5',
+     'customer1@arka.com',
+     'Calle 123 #45-67, Bogotá, Colombia',
+     'Entregar en horario de oficina',
+     'CONFIRMADO',
+     1290000.00,
+     now() - interval '2 days',
+     now() - interval '2 days'),
+
+    -- Orden 2: customer1, EN_DESPACHO — listo para cambiar a ENTREGADO
+    ('550e8400-e29b-41d4-a716-446655440001',
+     '482eae01-3840-3d80-9a3b-17333e6b32d5',
+     'customer1@arka.com',
+     'Carrera 7 #71-21, Bogotá, Colombia',
+     NULL,
+     'EN_DESPACHO',
+     450000.00,
+     now() - interval '5 days',
+     now() - interval '1 day'),
+
+    -- Orden 3: customer2, ENTREGADO — estado terminal
+    ('550e8400-e29b-41d4-a716-446655440002',
+     '3e6c5f4e-ae19-32f9-a254-ba18570e280e',
+     'customer2@arka.com',
+     'Avenida El Dorado #69-76, Bogotá, Colombia',
+     'Producto frágil',
+     'ENTREGADO',
+     840000.00,
+     now() - interval '10 days',
+     now() - interval '3 days'),
+
+    -- Orden 4: customer1, CANCELADO — estado terminal
+    ('550e8400-e29b-41d4-a716-446655440003',
+     '482eae01-3840-3d80-9a3b-17333e6b32d5',
+     'customer1@arka.com',
+     'Transversal 93 #50-23, Bogotá, Colombia',
+     NULL,
+     'CANCELADO',
+     210000.00,
+     now() - interval '7 days',
+     now() - interval '6 days'),
+
+    -- Orden 5: admin creando orden, CONFIRMADO con múltiples ítems
+    ('550e8400-e29b-41d4-a716-446655440004',
+     '2d66e954-4482-3e67-973c-7142c931083e',
+     'admin@arka.com',
+     'Calle 93 #14-20, Bogotá, Colombia',
+     'Pedido de prueba con múltiples referencias',
+     'CONFIRMADO',
+     3750000.00,
+     now() - interval '1 day',
+     now() - interval '1 day')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO order_items (id, order_id, product_id, sku, product_name, quantity, unit_price)
+VALUES
+    -- Items orden 1
+    ('a1b2c3d4-0000-0000-0000-000000000001',
+     '550e8400-e29b-41d4-a716-446655440000',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d001',
+     'KB-MECH-001', 'Teclado Mecánico RGB Pro', 3, 290000.00),
+    ('a1b2c3d4-0000-0000-0000-000000000002',
+     '550e8400-e29b-41d4-a716-446655440000',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d002',
+     'MS-OPT-002', 'Mouse Óptico Inalámbrico', 3, 140000.00),
+
+    -- Items orden 2
+    ('a1b2c3d4-0000-0000-0000-000000000003',
+     '550e8400-e29b-41d4-a716-446655440001',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d003',
+     'MNT-27-001', 'Monitor 27 pulgadas 4K', 1, 450000.00),
+
+    -- Items orden 3
+    ('a1b2c3d4-0000-0000-0000-000000000004',
+     '550e8400-e29b-41d4-a716-446655440002',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d004',
+     'HDS-BT-003', 'Audífonos Bluetooth NC', 2, 420000.00),
+
+    -- Items orden 4
+    ('a1b2c3d4-0000-0000-0000-000000000005',
+     '550e8400-e29b-41d4-a716-446655440003',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d005',
+     'USB-HB-004', 'Hub USB-C 7 puertos', 3, 70000.00),
+
+    -- Items orden 5 (múltiples referencias)
+    ('a1b2c3d4-0000-0000-0000-000000000006',
+     '550e8400-e29b-41d4-a716-446655440004',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d001',
+     'KB-MECH-001', 'Teclado Mecánico RGB Pro', 5, 290000.00),
+    ('a1b2c3d4-0000-0000-0000-000000000007',
+     '550e8400-e29b-41d4-a716-446655440004',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d003',
+     'MNT-27-001', 'Monitor 27 pulgadas 4K', 2, 450000.00),
+    ('a1b2c3d4-0000-0000-0000-000000000008',
+     '550e8400-e29b-41d4-a716-446655440004',
+     'f47ac10b-58cc-4372-a567-0e02b2c3d002',
+     'MS-OPT-002', 'Mouse Óptico Inalámbrico', 5, 140000.00)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO order_state_history (id, order_id, previous_status, new_status, changed_by, reason, created_at)
+VALUES
+    -- Historial orden 1: PENDIENTE_RESERVA → CONFIRMADO (sistema)
+    ('b2c3d4e5-0000-0000-0000-000000000001',
+     '550e8400-e29b-41d4-a716-446655440000',
+     'PENDIENTE_RESERVA', 'CONFIRMADO',
+     NULL, 'Stock reservado exitosamente',
+     now() - interval '2 days'),
+
+    -- Historial orden 2: PENDIENTE_RESERVA → CONFIRMADO → EN_DESPACHO
+    ('b2c3d4e5-0000-0000-0000-000000000002',
+     '550e8400-e29b-41d4-a716-446655440001',
+     'PENDIENTE_RESERVA', 'CONFIRMADO',
+     NULL, 'Stock reservado exitosamente',
+     now() - interval '5 days'),
+    ('b2c3d4e5-0000-0000-0000-000000000003',
+     '550e8400-e29b-41d4-a716-446655440001',
+     'CONFIRMADO', 'EN_DESPACHO',
+     '2d66e954-4482-3e67-973c-7142c931083e', 'Entregado a transportista DHL',
+     now() - interval '1 day'),
+
+    -- Historial orden 3: PENDIENTE_RESERVA → CONFIRMADO → EN_DESPACHO → ENTREGADO
+    ('b2c3d4e5-0000-0000-0000-000000000004',
+     '550e8400-e29b-41d4-a716-446655440002',
+     'PENDIENTE_RESERVA', 'CONFIRMADO',
+     NULL, 'Stock reservado exitosamente',
+     now() - interval '10 days'),
+    ('b2c3d4e5-0000-0000-0000-000000000005',
+     '550e8400-e29b-41d4-a716-446655440002',
+     'CONFIRMADO', 'EN_DESPACHO',
+     '2d66e954-4482-3e67-973c-7142c931083e', 'Entregado a transportista',
+     now() - interval '7 days'),
+    ('b2c3d4e5-0000-0000-0000-000000000006',
+     '550e8400-e29b-41d4-a716-446655440002',
+     'EN_DESPACHO', 'ENTREGADO',
+     '2d66e954-4482-3e67-973c-7142c931083e', 'Entrega confirmada por destinatario',
+     now() - interval '3 days'),
+
+    -- Historial orden 4: PENDIENTE_RESERVA → CONFIRMADO → CANCELADO
+    ('b2c3d4e5-0000-0000-0000-000000000007',
+     '550e8400-e29b-41d4-a716-446655440003',
+     'PENDIENTE_RESERVA', 'CONFIRMADO',
+     NULL, 'Stock reservado exitosamente',
+     now() - interval '7 days'),
+    ('b2c3d4e5-0000-0000-0000-000000000008',
+     '550e8400-e29b-41d4-a716-446655440003',
+     'CONFIRMADO', 'CANCELADO',
+     '482eae01-3840-3d80-9a3b-17333e6b32d5', 'Cliente canceló: cambio de proveedor',
+     now() - interval '6 days'),
+
+    -- Historial orden 5
+    ('b2c3d4e5-0000-0000-0000-000000000009',
+     '550e8400-e29b-41d4-a716-446655440004',
+     'PENDIENTE_RESERVA', 'CONFIRMADO',
+     NULL, 'Stock reservado exitosamente',
+     now() - interval '1 day')
+ON CONFLICT (id) DO NOTHING;

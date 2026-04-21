@@ -20,8 +20,11 @@ import java.math.BigDecimal;
 @Component
 public class GrpcCatalogClient implements CatalogClient {
 
-    @GrpcClient("ms-catalog")
-    private CatalogServiceGrpc.CatalogServiceStub catalogStub;
+    private final CatalogServiceGrpc.CatalogServiceStub catalogStub;
+
+    public GrpcCatalogClient(@GrpcClient("ms-catalog") CatalogServiceGrpc.CatalogServiceStub catalogStub) {
+        this.catalogStub = catalogStub;
+    }
 
     @Override
     public Mono<ProductInfo> getProductInfo(String sku) {

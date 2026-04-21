@@ -21,8 +21,36 @@ public class R2dbcOrderAdapter implements OrderRepository {
 
     @Override
     public Mono<Order> save(Order order) {
-        return repository.save(OrderDTOMapper.toDTO(order))
-                .map(OrderDTOMapper::toDomain);
+        // Use DatabaseClient with explicit CAST because OrderStatus is a sealed interface,
+        // not a Java enum, so Spring Data's generated SQL cannot bind it to the order_status PG enum.
+        DatabaseClient.GenericExecuteSpec spec = client.sql("""
+                        INSERT INTO orders
+                            (id, customer_id, customer_email, shipping_address, notes,
+                             status, total_amount, created_at, updated_at)
+                        VALUES
+                            (:id, :customerId, :customerEmail, :shippingAddress, :notes,
+                             CAST(:status AS order_status), :totalAmount, :createdAt, :updatedAt)
+                        ON CONFLICT (id) DO UPDATE SET
+                            status       = CAST(EXCLUDED.status AS order_status),
+                            total_amount = EXCLUDED.total_amount,
+                            updated_at   = EXCLUDED.updated_at
+                        """)
+                .bind("id", order.id())
+                .bind("customerId", order.customerId())
+                .bind("customerEmail", order.customerEmail())
+                .bind("shippingAddress", order.shippingAddress())
+                .bind("status", order.status().value())
+                .bind("totalAmount", order.totalAmount())
+                .bind("createdAt", order.createdAt())
+                .bind("updatedAt", order.updatedAt());
+
+        if (order.notes() != null) {
+            spec = spec.bind("notes", order.notes());
+        } else {
+            spec = spec.bindNull("notes", String.class);
+        }
+
+        return spec.then().then(findById(order.id()));
     }
 
     @Override
@@ -33,7 +61,7 @@ public class R2dbcOrderAdapter implements OrderRepository {
 
     @Override
     public Mono<Order> updateStatus(UUID id, OrderStatus newStatus) {
-        return client.sql("UPDATE orders SET status = :status, updated_at = :updatedAt " +
+        return client.sql("UPDATE orders SET status = CAST(:status AS order_status), updated_at = :updatedAt " +
                         "WHERE id = :id")
                 .bind("status", newStatus.value())
                 .bind("updatedAt", Instant.now())
@@ -50,7 +78,7 @@ public class R2dbcOrderAdapter implements OrderRepository {
                 "FROM orders WHERE 1=1");
 
         if (status != null) {
-            sql.append(" AND status = :status");
+            sql.append(" AND status = CAST(:status AS order_status)");
         }
         if (customerId != null) {
             sql.append(" AND customer_id = :customerId");
@@ -90,7 +118,7 @@ public class R2dbcOrderAdapter implements OrderRepository {
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM orders WHERE 1=1");
 
         if (status != null) {
-            sql.append(" AND status = :status");
+            sql.append(" AND status = CAST(:status AS order_status)");
         }
         if (customerId != null) {
             sql.append(" AND customer_id = :customerId");
