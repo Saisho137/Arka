@@ -7,10 +7,11 @@ dependencies {
     
     // Infrastructure modules
     implementation project(':reactive-web')
-    // implementation project(':r2dbc-postgresql')
-    // implementation project(':kafka-producer')
-    // implementation project(':kafka-consumer')
-    // implementation project(':grpc-inventory')
+    implementation project(':r2dbc-postgresql')
+    implementation project(':kafka-producer')
+    implementation project(':kafka-consumer')
+    implementation project(':grpc-inventory')
+    implementation project(':grpc-catalog')
     
     // Spring Boot starter (minimal)
     implementation 'org.springframework.boot:spring-boot-starter'

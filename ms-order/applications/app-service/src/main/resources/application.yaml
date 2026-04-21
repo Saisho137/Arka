@@ -5,6 +5,9 @@ grpc:
     ms-inventory:
       address: "static://${MS_INVENTORY_GRPC_HOST:localhost}:${MS_INVENTORY_GRPC_PORT:9090}"
       negotiationType: "plaintext"
+    ms-catalog:
+      address: "static://${MS_CATALOG_GRPC_HOST:localhost}:${MS_CATALOG_GRPC_PORT:9091}"
+      negotiationType: "plaintext"
 spring:
   application:
     name: "ms-order"

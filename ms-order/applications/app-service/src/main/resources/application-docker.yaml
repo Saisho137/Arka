@@ -13,6 +13,8 @@ grpc:
   client:
     ms-inventory:
       address: "static://arka-ms-inventory:9090"
+    ms-catalog:
+      address: "static://ms-catalog:9091"
 
 logging:
   level:

@@ -248,8 +248,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [x] 9. Checkpoint — Verificar compilación y tests de entry-points
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 10. Implementar Outbox Relay y consumidor Kafka
-  - [ ] 10.1 Implementar `KafkaOutboxRelay`: proceso scheduled (cada 5s) que consulta `outbox_events` con status PENDING, publica a Kafka (tópico `order-events`, partition key = orderId) y marca como PUBLISHED. Si falla la publicación, mantener PENDING para reintento.
+- [x] 10. Implementar Outbox Relay y consumidor Kafka
+  - [x] 10.1 Implementar `KafkaOutboxRelay`: proceso scheduled (cada 5s) que consulta `outbox_events` con status PENDING, publica a Kafka (tópico `order-events`, partition key = orderId) y marca como PUBLISHED. Si falla la publicación, mantener PENDING para reintento.
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer`
     - Agregar dependencias: `reactor-kafka:1.3.25`, `spring-kafka`, `jackson-databind` (mismas versiones que ms-inventory)
     - **OBLIGATORIO (reusability.md #5):** Copiar y adaptar los 2 archivos de `ms-inventory/infrastructure/driven-adapters/kafka-producer/`:
@@ -263,7 +263,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 12: Transición de estado del relay outbox**
     - Generar eventos PENDING, simular publicación exitosa y fallida, verificar que los exitosos transicionan a PUBLISHED y los fallidos permanecen PENDING.
     - **Valida: Requisitos 7.5, 7.6**
-  - [ ] 10.3 Implementar `KafkaEventConsumer`: consumer suscrito a `payment-events` y `shipping-events` (consumer group `order-service-group`). Deserializar sobre estándar, filtrar por eventType. Ignorar tipos desconocidos con log WARN. Delegar a `ProcessExternalEventUseCase`.
+  - [x] 10.3 Implementar `KafkaEventConsumer`: consumer suscrito a `payment-events` y `shipping-events` (consumer group `order-service-group`). Deserializar sobre estándar, filtrar por eventType. Ignorar tipos desconocidos con log WARN. Delegar a `ProcessExternalEventUseCase`.
     - **CRÍTICO**: Generar módulo manualmente como `kafka-consumer` en `infrastructure/entry-points/` (o con Scaffold: `cd ms-order && ./gradlew generateEntryPoint --type=generic --name=kafka-consumer`)
     - **Agregar dependencias en `kafka-consumer/build.gradle`:** `spring-kafka`, `reactor-kafka:1.3.25`, `jackson-databind` (mismas versiones que ms-inventory)
     - **OBLIGATORIO (reusability.md #6):** Copiar y adaptar los 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/`:

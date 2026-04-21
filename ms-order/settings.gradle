@@ -27,3 +27,7 @@ include ':grpc-catalog'
 project(':grpc-catalog').projectDir = file('./infrastructure/driven-adapters/grpc-catalog')
 include ':reactive-web'
 project(':reactive-web').projectDir = file('./infrastructure/entry-points/reactive-web')
+include ':kafka-producer'
+project(':kafka-producer').projectDir = file('./infrastructure/driven-adapters/kafka-producer')
+include ':kafka-consumer'
+project(':kafka-consumer').projectDir = file('./infrastructure/entry-points/kafka-consumer')
