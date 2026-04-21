@@ -97,4 +97,16 @@ public record StockMovement(
                 .reason("Initial stock from product creation")
                 .build();
     }
+
+    public static StockMovement orderConfirm(String sku, int confirmedQuantity, UUID orderId) {
+        return StockMovement.builder()
+                .sku(sku)
+                .movementType(MovementType.ORDER_CONFIRM)
+                .quantityChange(0)
+                .previousQuantity(confirmedQuantity)
+                .newQuantity(confirmedQuantity)
+                .orderId(orderId)
+                .reason("Reservation confirmed for order")
+                .build();
+    }
 }

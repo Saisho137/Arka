@@ -132,8 +132,8 @@ class StockReservationUseCaseTest {
             Stock stock = buildStock(100, 30);
 
             when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(false));
-            when(stockReservationRepository.findBySkuAndOrderIdAndStatus(SKU, orderId, ReservationStatus.PENDING))
-                    .thenReturn(Mono.just(reservation));
+            when(stockReservationRepository.findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING))
+                    .thenReturn(Flux.just(reservation));
             when(stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.RELEASED))
                     .thenReturn(Mono.just(reservation.release()));
             when(stockRepository.findBySku(SKU)).thenReturn(Mono.just(stock));
@@ -143,7 +143,7 @@ class StockReservationUseCaseTest {
             when(outboxEventRepository.save(any())).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
             when(processedEventRepository.save(eventId)).thenReturn(Mono.empty());
 
-            StepVerifier.create(useCase.processOrderCancelled(eventId, orderId, SKU))
+            StepVerifier.create(useCase.processOrderCancelled(eventId, orderId))
                     .verifyComplete();
 
             verify(stockReservationRepository).updateStatus(reservation.id(), ReservationStatus.RELEASED);
@@ -156,10 +156,10 @@ class StockReservationUseCaseTest {
             UUID eventId = UUID.randomUUID();
             when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(true));
 
-            StepVerifier.create(useCase.processOrderCancelled(eventId, UUID.randomUUID(), SKU))
+            StepVerifier.create(useCase.processOrderCancelled(eventId, UUID.randomUUID()))
                     .verifyComplete();
 
-            verify(stockReservationRepository, never()).findBySkuAndOrderIdAndStatus(anyString(), any(UUID.class), any(ReservationStatus.class));
+            verify(stockReservationRepository, never()).findAllByOrderIdAndStatus(any(UUID.class), any(ReservationStatus.class));
         }
 
         @Test
@@ -169,14 +169,74 @@ class StockReservationUseCaseTest {
             UUID orderId = UUID.randomUUID();
 
             when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(false));
-            when(stockReservationRepository.findBySkuAndOrderIdAndStatus(SKU, orderId, ReservationStatus.PENDING))
-                    .thenReturn(Mono.empty());
+            when(stockReservationRepository.findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING))
+                    .thenReturn(Flux.empty());
             when(processedEventRepository.save(eventId)).thenReturn(Mono.empty());
 
-            StepVerifier.create(useCase.processOrderCancelled(eventId, orderId, SKU))
+            StepVerifier.create(useCase.processOrderCancelled(eventId, orderId))
                     .verifyComplete();
 
             verify(stockRepository, never()).updateReservedQuantity(anyString(), anyInt());
+        }
+    }
+
+    @Nested
+    @DisplayName("processOrderConfirmed")
+    class ProcessOrderConfirmed {
+
+        @Test
+        @DisplayName("Should confirm pending reservations for an order")
+        void shouldConfirmReservations() {
+            UUID eventId = UUID.randomUUID();
+            UUID orderId = UUID.randomUUID();
+            StockReservation reservation = StockReservation.builder()
+                    .id(UUID.randomUUID()).sku(SKU).orderId(orderId).quantity(5)
+                    .build();
+
+            when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(false));
+            when(stockReservationRepository.findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING))
+                    .thenReturn(Flux.just(reservation));
+            when(stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.CONFIRMED))
+                    .thenReturn(Mono.just(reservation.confirm()));
+            when(stockMovementRepository.save(any(StockMovement.class)))
+                    .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+            when(processedEventRepository.save(eventId)).thenReturn(Mono.empty());
+
+            StepVerifier.create(useCase.processOrderConfirmed(eventId, orderId))
+                    .verifyComplete();
+
+            verify(stockReservationRepository).updateStatus(reservation.id(), ReservationStatus.CONFIRMED);
+            verify(stockMovementRepository).save(any());
+            verify(processedEventRepository).save(eventId);
+        }
+
+        @Test
+        @DisplayName("Should skip already processed event")
+        void shouldSkipDuplicate() {
+            UUID eventId = UUID.randomUUID();
+            when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(true));
+
+            StepVerifier.create(useCase.processOrderConfirmed(eventId, UUID.randomUUID()))
+                    .verifyComplete();
+
+            verify(stockReservationRepository, never()).findAllByOrderIdAndStatus(any(UUID.class), any(ReservationStatus.class));
+        }
+
+        @Test
+        @DisplayName("Should do nothing when no pending reservations found")
+        void shouldCompleteWhenNoPendingReservations() {
+            UUID eventId = UUID.randomUUID();
+            UUID orderId = UUID.randomUUID();
+
+            when(processedEventRepository.exists(eventId)).thenReturn(Mono.just(false));
+            when(stockReservationRepository.findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING))
+                    .thenReturn(Flux.empty());
+            when(processedEventRepository.save(eventId)).thenReturn(Mono.empty());
+
+            StepVerifier.create(useCase.processOrderConfirmed(eventId, orderId))
+                    .verifyComplete();
+
+            verify(stockReservationRepository, never()).updateStatus(any(UUID.class), any(ReservationStatus.class));
         }
     }
 }

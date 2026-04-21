@@ -14,6 +14,8 @@ public interface StockReservationRepository {
 
     Mono<StockReservation> findBySkuAndOrderIdAndStatus(String sku, UUID orderId, ReservationStatus status);
 
+    Flux<StockReservation> findAllByOrderIdAndStatus(UUID orderId, ReservationStatus status);
+
     Flux<StockReservation> findExpiredPending(Instant now);
 
     Mono<StockReservation> updateStatus(UUID id, ReservationStatus status);

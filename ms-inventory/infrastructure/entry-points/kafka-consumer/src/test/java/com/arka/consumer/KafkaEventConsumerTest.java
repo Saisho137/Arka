@@ -74,7 +74,6 @@ class KafkaEventConsumerTest {
     void handleOrderEvent_OrderCancelled_delegatesToStockReservationUseCase() {
         UUID eventId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        String sku = "SKU-002";
 
         String rawValue = """
                 {
@@ -82,18 +81,43 @@ class KafkaEventConsumerTest {
                   "eventType": "OrderCancelled",
                   "payload": {
                     "orderId": "%s",
-                    "sku": "%s"
+                    "customerId": "abc",
+                    "reason": "customer request"
                   }
                 }
-                """.formatted(eventId, orderId, sku);
+                """.formatted(eventId, orderId);
 
-        when(stockReservationUseCase.processOrderCancelled(eventId, orderId, sku))
+        when(stockReservationUseCase.processOrderCancelled(eventId, orderId))
                 .thenReturn(Mono.empty());
 
         StepVerifier.create(consumer.handleOrderEvent(rawValue))
                 .verifyComplete();
 
-        verify(stockReservationUseCase).processOrderCancelled(eventId, orderId, sku);
+        verify(stockReservationUseCase).processOrderCancelled(eventId, orderId);
+    }
+
+    @Test
+    void handleOrderEvent_OrderConfirmed_delegatesToStockReservationUseCase() {
+        UUID eventId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+
+        String rawValue = """
+                {
+                  "eventId": "%s",
+                  "eventType": "OrderConfirmed",
+                  "payload": {
+                    "orderId": "%s"
+                  }
+                }
+                """.formatted(eventId, orderId);
+
+        when(stockReservationUseCase.processOrderConfirmed(eventId, orderId))
+                .thenReturn(Mono.empty());
+
+        StepVerifier.create(consumer.handleOrderEvent(rawValue))
+                .verifyComplete();
+
+        verify(stockReservationUseCase).processOrderConfirmed(eventId, orderId);
     }
 
     @Test

@@ -33,6 +33,12 @@ public class R2dbcStockReservationAdapter implements StockReservationRepository 
     }
 
     @Override
+    public Flux<StockReservation> findAllByOrderIdAndStatus(UUID orderId, ReservationStatus status) {
+        return repository.findAllByOrderIdAndStatus(orderId, status)
+                .map(StockReservationDTOMapper::toDomain);
+    }
+
+    @Override
     public Flux<StockReservation> findExpiredPending(Instant now) {
         return repository.findExpiredPending(now)
                 .map(StockReservationDTOMapper::toDomain);

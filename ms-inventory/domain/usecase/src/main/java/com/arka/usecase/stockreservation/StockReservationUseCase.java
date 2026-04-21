@@ -14,6 +14,7 @@ import com.arka.model.stockreservation.StockReservation;
 import com.arka.model.stockreservation.gateways.StockReservationRepository;
 import com.arka.usecase.stock.JsonSerializer;
 import lombok.RequiredArgsConstructor;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -70,16 +71,39 @@ public class StockReservationUseCase {
         return transactionalGateway.executeInTransaction(pipeline);
     }
 
-    // --- Consumidor Kafka: OrderCancelled (Caso B: TransactionalGateway) ---
+    // --- Consumidor Kafka: OrderConfirmed (Caso B: TransactionalGateway) ---
 
-    public Mono<Void> processOrderCancelled(UUID eventId, UUID orderId, String sku) {
+    public Mono<Void> processOrderConfirmed(UUID eventId, UUID orderId) {
         Mono<Void> pipeline = processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {
                     if (Boolean.TRUE.equals(alreadyProcessed)) {
                         return Mono.empty();
                     }
                     return stockReservationRepository
-                            .findBySkuAndOrderIdAndStatus(sku, orderId, ReservationStatus.PENDING)
+                            .findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING)
+                            .switchIfEmpty(Flux.empty())
+                            .flatMap(reservation ->
+                                    stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.CONFIRMED)
+                                            .then(stockMovementRepository.save(
+                                                    StockMovement.orderConfirm(reservation.sku(), reservation.quantity(), orderId)))
+                            )
+                            .then(processedEventRepository.save(eventId));
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
+    // --- Consumidor Kafka: OrderCancelled (Caso B: TransactionalGateway) ---
+
+    public Mono<Void> processOrderCancelled(UUID eventId, UUID orderId) {
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return Mono.empty();
+                    }
+                    return stockReservationRepository
+                            .findAllByOrderIdAndStatus(orderId, ReservationStatus.PENDING)
+                            .switchIfEmpty(Flux.empty())
                             .flatMap(reservation -> releaseReservation(reservation, "ORDER_CANCELLED"))
                             .then(processedEventRepository.save(eventId));
                 });

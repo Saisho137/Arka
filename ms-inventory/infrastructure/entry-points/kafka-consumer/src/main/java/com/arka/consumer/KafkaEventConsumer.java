@@ -108,6 +108,8 @@ public class KafkaEventConsumer {
                 .flatMap(envelope -> {
                     String eventType = envelope.path("eventType").asText();
                     return switch (eventType) {
+                        case "OrderConfirmed" -> processOrderConfirmed(envelope)
+                                .retryWhen(retrySpec("OrderConfirmed"));
                         case "OrderCancelled" -> processOrderCancelled(envelope)
                                 .retryWhen(retrySpec("OrderCancelled"));
                         default -> {
@@ -131,15 +133,20 @@ public class KafkaEventConsumer {
         return stockUseCase.processProductCreated(eventId, sku, productId, initialStock, depletionThreshold);
     }
 
+    private Mono<Void> processOrderConfirmed(JsonNode envelope) {
+        UUID eventId = UUID.fromString(envelope.path("eventId").asText());
+        UUID orderId = UUID.fromString(envelope.path("payload").path("orderId").asText());
+
+        log.debug("Processing OrderConfirmed eventId={} orderId={}", eventId, orderId);
+        return stockReservationUseCase.processOrderConfirmed(eventId, orderId);
+    }
+
     private Mono<Void> processOrderCancelled(JsonNode envelope) {
         UUID eventId = UUID.fromString(envelope.path("eventId").asText());
-        JsonNode payload = envelope.path("payload");
-
-        UUID orderId = UUID.fromString(payload.path("orderId").asText());
-        String sku = payload.path("sku").asText();
+        UUID orderId = UUID.fromString(envelope.path("payload").path("orderId").asText());
 
         log.debug("Processing OrderCancelled eventId={} orderId={}", eventId, orderId);
-        return stockReservationUseCase.processOrderCancelled(eventId, orderId, sku);
+        return stockReservationUseCase.processOrderCancelled(eventId, orderId);
     }
 
     private Retry retrySpec(String eventType) {

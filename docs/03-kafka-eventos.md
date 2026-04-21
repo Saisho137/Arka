@@ -89,7 +89,7 @@
 
 | Consumer Group               | Servicio         | Tópicos                            | Filtra por eventType                                                      |
 | ---------------------------- | ---------------- | ---------------------------------- | ------------------------------------------------------------------------- |
-| `inventory-service-group`    | ms-inventory     | `product-events`, `order-events`   | `ProductCreated`, `OrderCancelled`                                        |
+| `inventory-service-group`    | ms-inventory     | `product-events`, `order-events`   | `ProductCreated`, `OrderCancelled`, `OrderConfirmed`                      |
 | `notification-service-group` | ms-notifications | `order-events`, `inventory-events` | `OrderConfirmed`, `OrderStatusChanged`, `OrderCancelled`, `StockDepleted` |
 
 ### Ecosistema Completo
