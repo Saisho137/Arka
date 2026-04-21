@@ -5,8 +5,8 @@ dependencies {
     implementation project(':model')
     implementation project(':usecase')
     
-    // Infrastructure modules (will be added as they are created with Scaffold)
-    // implementation project(':reactive-web')
+    // Infrastructure modules
+    implementation project(':reactive-web')
     // implementation project(':r2dbc-postgresql')
     // implementation project(':kafka-producer')
     // implementation project(':kafka-consumer')
@@ -44,4 +44,3 @@ bootJar {
     // Sets output jar name
     archiveFileName = "${project.getParent().getName()}.${archiveExtension.get()}"
 }
-

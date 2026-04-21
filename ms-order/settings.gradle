@@ -25,3 +25,5 @@ include ':grpc-inventory'
 project(':grpc-inventory').projectDir = file('./infrastructure/driven-adapters/grpc-inventory')
 include ':grpc-catalog'
 project(':grpc-catalog').projectDir = file('./infrastructure/driven-adapters/grpc-catalog')
+include ':reactive-web'
+project(':reactive-web').projectDir = file('./infrastructure/entry-points/reactive-web')

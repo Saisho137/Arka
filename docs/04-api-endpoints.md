@@ -57,6 +57,28 @@ Base path: `/inventory`
 
 ---
 
+---
+
+## ms-order — Puerto 8081
+
+Base path: `/api/v1`
+
+### Órdenes
+
+| Método | Endpoint                                        | Descripción                                                                       |
+| ------ | ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| `POST` | `/api/v1/orders`                                | Crear orden de compra. Header: `X-User-Email`                                     |
+| `GET`  | `/api/v1/orders/{id}`                           | Consultar detalle de orden. Headers: `X-User-Email`, `X-User-Role`                |
+| `GET`  | `/api/v1/orders?status=&page=0&size=20`         | Listar órdenes paginadas (max 100). Filtro `status`: PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO. CUSTOMER ve solo sus órdenes. Headers: `X-User-Email`, `X-User-Role` |
+| `PUT`  | `/api/v1/orders/{id}/status`                    | Cambiar estado (CONFIRMADO→EN_DESPACHO, EN_DESPACHO→ENTREGADO). Solo ADMIN. Header: `X-User-Email` |
+| `PUT`  | `/api/v1/orders/{id}/cancel`                    | Cancelar orden. Headers: `X-User-Email`, `X-User-Role`                            |
+
+> Los headers `X-User-Email` y `X-User-Role` son inyectados por el API Gateway tras validar el JWT.
+
+**Swagger UI:** `http://localhost:8081/swagger-ui.html`
+
+---
+
 ### ms-catalog — gRPC (puerto 9091 local / 9090 docker)
 
 | Servicio         | Método           | Descripción                                              |
@@ -69,27 +91,12 @@ Base path: `/inventory`
 
 Los siguientes microservicios existen en el repositorio pero aún no tienen endpoints REST:
 
-- **ms-order** (8081) — Saga orchestrator, en desarrollo
 - **ms-notifications** (8085) — Consumer pasivo de Kafka
 - **ms-cart** (8086) — Fase 2
 - **ms-payment** (8083) — Fase 2
 - **ms-reporter** (8087) — Fase 3
 - **ms-shipping** (8088) — Fase 3
 - **ms-provider** (8089) — Fase 4
-
----
-
-## Endpoints Planificados (aún no implementados)
-
-### ms-order
-
-| Método | Endpoint              | Descripción                                  |
-| ------ | --------------------- | -------------------------------------------- |
-| `POST` | `/orders`             | Crear orden de compra                        |
-| `GET`  | `/orders/{id}`        | Consultar detalle de orden                   |
-| `GET`  | `/orders`             | Listar órdenes (filtros: status, customerId) |
-| `PUT`  | `/orders/{id}/status` | Cambiar estado (admin: dispatch, deliver)    |
-| `PUT`  | `/orders/{id}/cancel` | Cancelar orden                               |
 
 ---
 

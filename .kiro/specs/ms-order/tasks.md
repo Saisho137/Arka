@@ -207,19 +207,19 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [x] 7. Checkpoint — Verificar compilación y tests de adaptadores
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-- [ ] 8. Implementar entry-points (`infrastructure/entry-points`)
-  - [ ] 8.1 Crear los DTOs de request: `CreateOrderRequest`, `OrderItemRequest`, `ChangeStatusRequest`, `CancelOrderRequest` con Bean Validation (`@NotNull`, `@NotBlank`, `@NotEmpty`, `@Positive`, `@Valid`)
+- [-] 8. Implementar entry-points (`infrastructure/entry-points`)
+  - [x] 8.1 Crear los DTOs de request: `CreateOrderRequest`, `OrderItemRequest`, `ChangeStatusRequest`, `CancelOrderRequest` con Bean Validation (`@NotNull`, `@NotBlank`, `@NotEmpty`, `@Positive`, `@Valid`)
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-order && ./gradlew generateEntryPoint --type=webflux --router=false`
     - **Agregar dependencias en `reactive-web/build.gradle`:** `spring-boot-starter-webflux`, `spring-boot-starter-validation` (versiones del Spring BOM)
     - Records con `@Builder(toBuilder=true)`
     - _Requisitos: 1.1, 1.8_
-  - [ ] 8.2 Crear los DTOs de response: `OrderResponse`, `OrderItemResponse`, `OrderSummaryResponse`, `ErrorResponse`
+  - [x] 8.2 Crear los DTOs de response: `OrderResponse`, `OrderItemResponse`, `OrderSummaryResponse`, `ErrorResponse`
     - Records con `@Builder(toBuilder=true)`
     - _Requisitos: 1.6, 2.1, 10.6_
-  - [ ] 8.3 Crear los mappers manuales: `OrderMapper` (métodos estáticos para convertir entre DTOs y comandos/entidades de dominio)
+  - [x] 8.3 Crear los mappers manuales: `OrderMapper` (métodos estáticos para convertir entre DTOs y comandos/entidades de dominio)
     - Sin MapStruct, usar `@Builder` para construir objetos destino
     - _Requisitos: transversal_
-  - [ ] 8.4 Implementar `OrderHandler` (`@Component`) y `OrderController` (`@RestController`)
+  - [x] 8.4 Implementar `OrderHandler` (`@Component`) y `OrderController` (`@RestController`)
     - **OBLIGATORIO (reusability.md #7):** Seguir patrón Controller → Handler → UseCase de `ms-inventory`: `StockController` → `StockHandler` → `StockUseCase` (§4.2)
     - `OrderHandler`: orquesta llamada a UseCase + mapeo vía `OrderMapper` + wrapping en `ResponseEntity`/`Flux`
     - `OrderController`: thin — solo anotaciones HTTP (`@Valid`, `@PathVariable`), extraer `X-User-Email`/`X-User-Role` de headers, delegar a `OrderHandler`
@@ -235,7 +235,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Propiedad 5: Respuestas contienen todos los campos requeridos**
     - Generar órdenes aleatorias, consultar y verificar que la respuesta contiene todos los campos requeridos: orderId, customerId, status, totalAmount, shippingAddress, items (no vacía), createdAt.
     - **Valida: Requisitos 1.6, 2.1**
-  - [ ] 8.7 Implementar `GlobalExceptionHandler` (`@ControllerAdvice`): traducir excepciones de dominio a `ErrorResponse` con códigos HTTP correctos (400, 403, 404, 409, 503, 500). No exponer detalles internos en 500.
+  - [x] 8.7 Implementar `GlobalExceptionHandler` (`@ControllerAdvice`): traducir excepciones de dominio a `ErrorResponse` con códigos HTTP correctos (400, 403, 404, 409, 503, 500). No exponer detalles internos en 500.
     - **OBLIGATORIO (reusability.md #8):** Copiar `ms-inventory/.../api/handler/GlobalExceptionHandler.java` como base — manejar `WebExchangeBindException`, `ServerWebInputException`, `DomainException`, `IllegalArgumentException`, `Exception` genérica
     - Agregar handlers específicos para las excepciones de ms-order
     - Manejar `WebExchangeBindException`, todas las `DomainException` y `Exception` genérica
@@ -245,7 +245,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Generar excepciones de distintos tipos (validación, dominio, inesperada), verificar que la respuesta contiene `code` (no vacío) y `message` (no vacío) con el código HTTP correcto. Las 500 no exponen stack trace.
     - **Valida: Requisitos 10.5, 10.6**
 
-- [ ] 9. Checkpoint — Verificar compilación y tests de entry-points
+- [x] 9. Checkpoint — Verificar compilación y tests de entry-points
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 - [ ] 10. Implementar Outbox Relay y consumidor Kafka
