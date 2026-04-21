@@ -20,4 +20,5 @@ message GetProductInfoResponse {
   string unit_price = 3;
   string currency = 4;
   bool active = 5;
+  string product_id = 6;
 }

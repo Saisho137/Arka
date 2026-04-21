@@ -63,8 +63,8 @@ public class StockController {
     })
     public Flux<StockMovementResponse> getHistory(
             @PathVariable("sku") String sku,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         return stockHandler.getHistory(sku, page, Math.min(size, MAX_PAGE_SIZE));
     }
 }

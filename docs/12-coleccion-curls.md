@@ -468,12 +468,10 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
     "notes": "Entregar en recepción del edificio",
     "items": [
       {
-        "productId": "f47ac10b-58cc-4372-a567-0e02b2c3d001",
         "sku": "KB-MECH-001",
         "quantity": 2
       },
       {
-        "productId": "f47ac10b-58cc-4372-a567-0e02b2c3d003",
         "sku": "MN-UW-003",
         "quantity": 1
       }
@@ -494,12 +492,10 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
     "notes": "Empresa: TechSolutions SAS — NIT 900.123.456-7",
     "items": [
       {
-        "productId": "f47ac10b-58cc-4372-a567-0e02b2c3d005",
         "sku": "RAM-DDR5-005",
         "quantity": 5
       },
       {
-        "productId": "f47ac10b-58cc-4372-a567-0e02b2c3d002",
         "sku": "MS-WIRE-002",
         "quantity": 3
       }
@@ -520,7 +516,6 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
     "notes": "Pedido mayorista GPUs",
     "items": [
       {
-        "productId": "f47ac10b-58cc-4372-a567-0e02b2c3d004",
         "sku": "GPU-RTX-004",
         "quantity": 50
       }

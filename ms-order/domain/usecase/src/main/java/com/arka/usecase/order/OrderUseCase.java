@@ -97,7 +97,7 @@ public class OrderUseCase {
                                               List<ItemContext> contexts) {
         List<OrderItem> orderItems = contexts.stream()
                 .map(ctx -> OrderItem.builder()
-                        .productId(ctx.request().productId())
+                        .productId(ctx.info().productId())
                         .sku(ctx.request().sku())
                         .productName(ctx.info().productName())
                         .quantity(ctx.request().quantity())
@@ -341,7 +341,7 @@ public class OrderUseCase {
     // Inner records
     // ──────────────────────────────────────────────────────────────────
 
-    public record OrderItemCommand(UUID productId, String sku, int quantity) {
+    public record OrderItemCommand(String sku, int quantity) {
     }
 
     public record OrderWithItems(Order order, List<OrderItem> items) {

@@ -89,17 +89,17 @@ public class OrderController {
             @Parameter(description = "Filter by order status. Allowed values: PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO")
             @Pattern(regexp = "^(PENDIENTE_RESERVA|CONFIRMADO|EN_DESPACHO|ENTREGADO|CANCELADO)$",
                     message = "must be one of: PENDIENTE_RESERVA, CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO")
-            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(value = "status", required = false) String status,
             @Parameter(description = "Authenticated user email (injected by API Gateway)", required = true)
             @RequestHeader("X-User-Email") String userEmail,
             @Parameter(description = "User role: ADMIN or CUSTOMER (injected by API Gateway)", required = true)
             @RequestHeader("X-User-Role") String userRole,
             @Parameter(description = "Zero-based page number", example = "0")
             @Min(value = 0, message = "must be >= 0")
-            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(value = "page", defaultValue = "0") int page,
             @Parameter(description = "Page size (max 100)", example = "20")
             @Positive(message = "must be > 0")
-            @RequestParam(name = "size", defaultValue = "20") int size) {
+            @RequestParam(value = "size", defaultValue = "20") int size) {
         UUID requesterId = extractUserIdFromEmail(userEmail);
         boolean isAdmin = ROLE_ADMIN.equals(userRole);
         return orderHandler.listOrders(status, requesterId, isAdmin, page, Math.min(size, MAX_PAGE_SIZE));

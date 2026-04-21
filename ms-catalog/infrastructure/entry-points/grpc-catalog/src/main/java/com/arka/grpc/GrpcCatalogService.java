@@ -47,7 +47,8 @@ public class GrpcCatalogService extends CatalogServiceGrpc.CatalogServiceImplBas
                 .setProductName(product.name())
                 .setUnitPrice(product.price().amount().toPlainString())
                 .setCurrency(product.price().currency())
-                .setActive(product.active());
+                .setActive(product.active())
+                .setProductId(product.id().toString());
 
         return builder.build();
     }

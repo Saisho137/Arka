@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -38,7 +39,9 @@ public class GrpcCatalogClient implements CatalogClient {
                 public void onNext(GetProductInfoResponse response) {
                     try {
                         BigDecimal unitPrice = new BigDecimal(response.getUnitPrice());
+                        UUID productId = UUID.fromString(response.getProductId());
                         sink.success(ProductInfo.builder()
+                                .productId(productId)
                                 .sku(response.getSku())
                                 .productName(response.getProductName())
                                 .unitPrice(unitPrice)

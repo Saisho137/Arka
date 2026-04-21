@@ -24,7 +24,6 @@ public final class OrderMapper {
             List<OrderItemRequest> requests) {
         return requests.stream()
                 .map(req -> new OrderUseCase.OrderItemCommand(
-                        req.productId(),
                         req.sku(),
                         req.quantity()))
                 .toList();

@@ -5,13 +5,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Builder;
 
-import java.util.UUID;
-
 @Builder(toBuilder = true)
 public record OrderItemRequest(
-    @NotNull(message = "productId is required")
-    UUID productId,
-
     @NotBlank(message = "sku is required")
     String sku,
 
