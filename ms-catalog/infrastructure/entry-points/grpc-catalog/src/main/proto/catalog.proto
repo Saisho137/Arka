@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package com.arka.catalog;
+
+option java_package = "com.arka.grpc";
+option java_outer_classname = "CatalogProto";
+option java_multiple_files = true;
+
+service CatalogService {
+  rpc GetProductInfo (GetProductInfoRequest) returns (GetProductInfoResponse);
+}
+
+message GetProductInfoRequest {
+  string sku = 1;
+}
+
+message GetProductInfoResponse {
+  string sku = 1;
+  string product_name = 2;
+  string unit_price = 3;
+  string currency = 4;
+  bool active = 5;
+}

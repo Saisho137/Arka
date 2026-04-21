@@ -332,8 +332,8 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 - [x] 14. Checkpoint final — Verificar integración completa
   - Asegurar que todos los tests pasan (unitarios), preguntar al usuario si surgen dudas.
 
-- [ ] 15. Implementar entry-point gRPC — `CatalogService` para consulta de precio y nombre por SKU
-  - [ ] 15.1 Crear módulo `grpc-catalog` en `infrastructure/entry-points/`
+- [x] 15. Implementar entry-point gRPC — `CatalogService` para consulta de precio y nombre por SKU
+  - [x] 15.1 Crear módulo `grpc-catalog` en `infrastructure/entry-points/`
     - Crear directorio manual: `infrastructure/entry-points/grpc-catalog/` (el Scaffold no tiene `--type=grpc` para entry-points; módulos gRPC son manuales según §14 de `06-patrones-y-estandares.md`)
     - Registrar en `settings.gradle`:
       ```
@@ -343,7 +343,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Agregar en `app-service/build.gradle`: `implementation project(':grpc-catalog')`
     - **Referencia:** Copiar estructura de `ms-inventory/infrastructure/entry-points/grpc-inventory/`
 
-  - [ ] 15.2 Configurar `grpc-catalog/build.gradle` con plugin Protobuf y dependencias gRPC
+  - [x] 15.2 Configurar `grpc-catalog/build.gradle` con plugin Protobuf y dependencias gRPC
     - **OBLIGATORIO:** Copiar `ms-inventory/infrastructure/entry-points/grpc-inventory/build.gradle` como base
     - Plugins: `com.google.protobuf` version `0.9.4`
     - Dependencias: `net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE`, `io.grpc:grpc-stub`, `io.grpc:grpc-protobuf`, `javax.annotation:javax.annotation-api:1.3.2`
@@ -351,7 +351,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - Configurar `protoc` (artifact `com.google.protobuf:protoc:3.25.3`) y plugin `grpc` (artifact `io.grpc:protoc-gen-grpc-java:1.63.0`)
     - Configurar `sourceSets` para incluir directorios generados
 
-  - [ ] 15.3 Definir el contrato Protobuf `catalog.proto`
+  - [x] 15.3 Definir el contrato Protobuf `catalog.proto`
     - Crear en `grpc-catalog/src/main/proto/catalog.proto`
     - Definición:
 
@@ -382,7 +382,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
     - **Nota:** `unit_price` como `string` para preservar precisión de `BigDecimal` (estándar Protobuf para valores monetarios)
     - _Consumidores: ms-order (creación de orden), ms-cart (precio actual antes del checkout)_
 
-  - [ ] 15.4 Implementar `GrpcCatalogService` (gRPC server)
+  - [x] 15.4 Implementar `GrpcCatalogService` (gRPC server)
     - **Referencia:** Copiar patrón de `ms-inventory/infrastructure/entry-points/grpc-inventory/.../GrpcStockService.java`
     - Clase `@GrpcService` que extiende `CatalogServiceGrpc.CatalogServiceImplBase`
     - Inyectar `ProductUseCase`
@@ -393,18 +393,18 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
       - Manejar errores: `ProductNotFoundException` → `Status.NOT_FOUND`, producto inactivo → `Status.FAILED_PRECONDITION`, genérico → `Status.INTERNAL`
     - Suscribirse al `Mono` con `.subscribe(onNext, onError)` igual que `GrpcStockService`
 
-  - [ ] 15.5 Agregar método `getBySku(String sku)` en `ProductUseCase` (si no existe)
+  - [x] 15.5 Agregar método `getBySku(String sku)` en `ProductUseCase` (si no existe)
     - Buscar producto por SKU vía `productRepository.findBySku(sku)`
     - Lanzar `ProductNotFoundException` si no existe
     - Aplicar Cache-Aside si es necesario (opcional: lecturas por SKU pueden compartir caché)
     - _Requisito derivado: ms-order y ms-cart necesitan consultar por SKU, no por ID_
 
-  - [ ] 15.6 Configurar puerto gRPC en `application.yaml`
+  - [x] 15.6 Configurar puerto gRPC en `application.yaml`
     - Agregar `grpc.server.port: 9090` (mismo estándar que ms-inventory)
     - En `application-local.yaml`: `grpc.server.port: 9091` (evitar colisión con ms-inventory en local)
     - En `application-docker.yaml`: `grpc.server.port: 9090` (cada contenedor tiene su propio namespace)
 
-- [ ] 16. Checkpoint — Verificar compilación del módulo gRPC
+- [x] 16. Checkpoint — Verificar compilación del módulo gRPC
   - Ejecutar `./gradlew build` desde ms-catalog para verificar que el proto compila correctamente
   - Verificar que `GrpcCatalogService` se registra como bean Spring
   - Asegurar que todos los tests existentes siguen pasando

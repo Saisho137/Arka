@@ -367,6 +367,7 @@ services:
     container_name: arka-ms-catalog
     ports:
       - "${MS_CATALOG_PORT}:${MS_CATALOG_PORT}"
+      - "${MS_CATALOG_GRPC_PORT}:9090"
     env_file:
       - .env
     depends_on:

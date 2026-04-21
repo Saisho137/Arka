@@ -27,3 +27,5 @@ include ':redis'
 project(':redis').projectDir = file('./infrastructure/driven-adapters/redis')
 include ':kafka-producer'
 project(':kafka-producer').projectDir = file('./infrastructure/driven-adapters/kafka-producer')
+include ':grpc-catalog'
+project(':grpc-catalog').projectDir = file('./infrastructure/entry-points/grpc-catalog')

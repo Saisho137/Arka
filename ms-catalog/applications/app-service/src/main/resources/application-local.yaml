@@ -1,0 +1,24 @@
+# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+# Solo sobreescribe los campos que difieren del application.yaml base.
+# MongoDB y Redis instalados localmente o accesibles en localhost.
+# Usar 127.0.0.1 en lugar de localhost para forzar IPv4 y evitar
+# problemas de resolución con IPv6 en la JVM (localhost → ::1).
+
+grpc:
+  server:
+    port: 9091  # Puerto diferente para evitar colisión con ms-inventory (9090) en local
+
+spring:
+  mongodb:
+    uri: "mongodb://arka:arkaSecret2025@127.0.0.1:27017/db_catalog?authSource=admin&uuidRepresentation=standard"
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+
+logging:
+  level:
+    com.arka: DEBUG
+    org.springframework.data.mongodb.core: DEBUG

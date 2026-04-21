@@ -71,6 +71,18 @@ public class ProductUseCase {
                 ));
     }
 
+    public Mono<Product> getBySku(String sku) {
+        String cacheKey = "product:sku:" + sku;
+
+        return productCachePort.get(cacheKey)
+                .switchIfEmpty(Mono.defer(() ->
+                        productRepository.findBySku(sku)
+                                .switchIfEmpty(Mono.error(new ProductNotFoundException("Product not found for SKU: " + sku)))
+                                .flatMap(product -> productCachePort.put(cacheKey, product)
+                                        .thenReturn(product))
+                ));
+    }
+
     public Flux<Product> listActive(int page, int size) {
         return productRepository.findAllActive(page, size);
     }
