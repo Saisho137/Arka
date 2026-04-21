@@ -32,8 +32,6 @@ subprojects {
         implementation 'io.projectreactor.addons:reactor-extra'
 
         testImplementation 'io.projectreactor.tools:blockhound-junit-platform:1.0.16.RELEASE'
-        testImplementation 'net.jqwik:jqwik:1.9.2'
-        testImplementation 'com.tngtech.archunit:archunit:1.4.1'
 
         testImplementation 'io.projectreactor:reactor-test'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

@@ -163,7 +163,7 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
   - [x] 4.12 Implementar `ProcessExternalEventUseCase`: verificar idempotencia (processed_events), procesar eventos de payment-events y shipping-events (infraestructura base para Fase 2+). Ignorar eventTypes desconocidos con log WARN.
     - **Implementado (Fase 1):** `processExternalEvent(UUID eventId)` con patrón de idempotencia completo. Routing real (PaymentProcessed, PaymentFailed, ShippingDispatched) en tarea F2.3–F2.7.
 
-- [ ] 5. Checkpoint — Verificar compilación y tests de casos de uso
+- [x] 5. Checkpoint — Verificar compilación y tests de casos de uso
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
 - [ ] 6. Implementar adaptadores de infraestructura (`infrastructure/driven-adapters`)

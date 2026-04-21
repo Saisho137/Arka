@@ -26,6 +26,7 @@ dependencies {
     
     // Testing
     testImplementation 'com.tngtech.archunit:archunit:1.4.1'
+    testImplementation 'net.jqwik:jqwik:1.9.2'
     testImplementation 'tools.jackson.core:jackson-databind'
 }
 

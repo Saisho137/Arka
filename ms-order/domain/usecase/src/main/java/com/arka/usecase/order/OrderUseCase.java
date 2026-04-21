@@ -57,7 +57,7 @@ public class OrderUseCase {
 
     public Mono<Order> createOrder(UUID customerId, String customerEmail,
                                    String shippingAddress, String notes,
-                                   List<OrderItemRequest> requestedItems) {
+                                   List<OrderItemCommand> requestedItems) {
 
         UUID orderId = UUID.randomUUID();
 
@@ -340,14 +340,14 @@ public class OrderUseCase {
     // Inner records
     // ──────────────────────────────────────────────────────────────────
 
-    public record OrderItemRequest(UUID productId, String sku, int quantity) {
+    public record OrderItemCommand(UUID productId, String sku, int quantity) {
     }
 
     public record OrderWithItems(Order order, List<OrderItem> items) {
     }
 
     private record ItemContext(
-            OrderItemRequest request,
+            OrderItemCommand request,
             ProductInfo info,
             ReserveStockResult reserveResult
     ) {
