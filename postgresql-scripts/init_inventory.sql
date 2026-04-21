@@ -103,41 +103,22 @@ CREATE INDEX IF NOT EXISTS idx_movements_sku_created ON stock_movements (sku, cr
 
 CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox_events (status, created_at);
 
--- Seed data
-INSERT INTO
-    stock (id, sku, product_id, quantity, depletion_threshold)
-VALUES (
-        gen_random_uuid (),
-        'KB-MECH-001',
-        gen_random_uuid (),
-        50,
-        10
-    ),
-    (
-        gen_random_uuid (),
-        'MS-WIRE-002',
-        gen_random_uuid (),
-        120,
-        20
-    ),
-    (
-        gen_random_uuid (),
-        'MN-UW-003',
-        gen_random_uuid (),
-        15,
-        3
-    ),
-    (
-        gen_random_uuid (),
-        'GPU-RTX-004',
-        gen_random_uuid (),
-        8,
-        2
-    ),
-    (
-        gen_random_uuid (),
-        'RAM-DDR5-005',
-        gen_random_uuid (),
-        60,
-        10
-    ) ON CONFLICT (sku) DO NOTHING;
+-- ─── Seed Data ───────────────────────────────────────────────
+-- CRITICAL: product_id values MUST match:
+--   - _id in mongo-seed-catalog.js  (db_catalog.products)
+--   - product_id in init_orders.sql (db_orders.order_items)
+-- SKUs synchronized with init_orders.sql order_items table.
+INSERT INTO stock (id, sku, product_id, quantity, reserved_quantity, depletion_threshold)
+VALUES
+    -- Periféricos
+    (gen_random_uuid(), 'KB-MECH-001', 'f47ac10b-58cc-4372-a567-0e02b2c3d001'::uuid, 50,  0, 10),
+    (gen_random_uuid(), 'MS-OPT-002',  'f47ac10b-58cc-4372-a567-0e02b2c3d002'::uuid, 120, 0, 20),
+    (gen_random_uuid(), 'HDS-BT-003',  'f47ac10b-58cc-4372-a567-0e02b2c3d004'::uuid, 30,  0, 5),
+    -- Monitores
+    (gen_random_uuid(), 'MNT-27-001',  'f47ac10b-58cc-4372-a567-0e02b2c3d003'::uuid, 15,  0, 3),
+    -- Componentes
+    (gen_random_uuid(), 'GPU-RTX-004', 'f47ac10b-58cc-4372-a567-0e02b2c3d006'::uuid, 8,   0, 2),
+    (gen_random_uuid(), 'RAM-DDR5-005','f47ac10b-58cc-4372-a567-0e02b2c3d007'::uuid, 60,  0, 10),
+    -- Accesorios
+    (gen_random_uuid(), 'USB-HB-004',  'f47ac10b-58cc-4372-a567-0e02b2c3d005'::uuid, 80,  0, 15)
+ON CONFLICT (sku) DO NOTHING;

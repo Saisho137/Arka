@@ -4,7 +4,7 @@
 
 grpc:
   server:
-    port: 9090  # Cada contenedor tiene su propio namespace, no hay colisión
+    port: 9091  # ms-order cliente apunta a ms-catalog:9091 dentro de la red Docker
 
 spring:
   mongodb:

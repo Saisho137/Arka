@@ -87,12 +87,12 @@ public class OrderUseCase {
                         return Mono.error(new InsufficientStockException(failedSkus));
                     }
 
-                    return persistConfirmedOrder(customerId, customerEmail,
+                    return persistConfirmedOrder(orderId, customerId, customerEmail,
                             shippingAddress, notes, contexts);
                 });
     }
 
-    private Mono<Order> persistConfirmedOrder(UUID customerId, String customerEmail,
+    private Mono<Order> persistConfirmedOrder(UUID orderId, UUID customerId, String customerEmail,
                                               String shippingAddress, String notes,
                                               List<ItemContext> contexts) {
         List<OrderItem> orderItems = contexts.stream()
@@ -110,6 +110,7 @@ public class OrderUseCase {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Order order = Order.builder()
+                .id(orderId)
                 .customerId(customerId)
                 .customerEmail(customerEmail)
                 .shippingAddress(shippingAddress)

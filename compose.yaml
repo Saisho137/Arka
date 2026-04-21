@@ -209,6 +209,26 @@ services:
     networks:
       - arka-network
 
+  # One-shot: inserta seed data en db_catalog una vez que el replica set está listo.
+  # Idempotente: usa updateOne + upsert:true + $setOnInsert → seguro de re-ejecutar.
+  # Sincronizado con init_inventory.sql e init_orders.sql (mismos productId UUID).
+  mongo-seed-catalog:
+    image: mongo:7-jammy
+    container_name: arka-mongo-seed-catalog
+    restart: on-failure
+    depends_on:
+      mongo-init-replica:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    volumes:
+      - ./scripts/mongo-seed-catalog.js:/scripts/mongo-seed-catalog.js:ro
+    command: >
+      mongosh "mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongodb:27017/db_catalog?authSource=admin&replicaSet=rs0"
+      --file /scripts/mongo-seed-catalog.js
+    networks:
+      - arka-network
+
   # ═══════════════════════════════════════════════════
   # Redis — Cache-Aside para ms-catalog
   # ═══════════════════════════════════════════════════
@@ -367,12 +387,15 @@ services:
     container_name: arka-ms-catalog
     ports:
       - "${MS_CATALOG_PORT}:${MS_CATALOG_PORT}"
-      - "${MS_CATALOG_GRPC_PORT}:9090"
+      - "${MS_CATALOG_GRPC_PORT}:${MS_CATALOG_GRPC_PORT}"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - GRPC_SERVER_PORT=${MS_CATALOG_GRPC_PORT}
     env_file:
       - .env
     depends_on:
-      # Espera a que el replica set esté iniciado (requerido para TransactionalGateway)
-      mongo-init-replica:
+      # Espera a que el replica set esté iniciado Y el seed data insertado
+      mongo-seed-catalog:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
