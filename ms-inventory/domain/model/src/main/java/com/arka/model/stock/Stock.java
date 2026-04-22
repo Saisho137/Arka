@@ -94,4 +94,17 @@ public record Stock(
                 .updatedAt(Instant.now())
                 .build();
     }
+
+    public Stock commitReservation(int amount) {
+        if (amount <= 0) throw new InvalidStockQuantityException(sku, amount, "must be > 0");
+        if (amount > reservedQuantity)
+            throw new ExcessiveReleaseException(sku, amount, reservedQuantity);
+        if (amount > quantity)
+            throw new InsufficientStockException(sku, amount, quantity);
+        return this.toBuilder()
+                .quantity(this.quantity - amount)
+                .reservedQuantity(this.reservedQuantity - amount)
+                .updatedAt(Instant.now())
+                .build();
+    }
 }

@@ -19,7 +19,6 @@ import com.arka.model.order.gateways.InventoryClient;
 import com.arka.model.order.gateways.OrderItemRepository;
 import com.arka.model.order.gateways.OrderRepository;
 import com.arka.model.order.gateways.OrderStateHistoryRepository;
-import com.arka.model.outboxevent.DomainEventEnvelope;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OrderCancelledPayload;
 import com.arka.model.outboxevent.OrderConfirmedPayload;
@@ -406,16 +405,9 @@ public class OrderUseCase {
     // ──────────────────────────────────────────────────────────────────
 
     private OutboxEvent buildOutboxEvent(EventType eventType, String partitionKey, Object payload) {
-        DomainEventEnvelope envelope = DomainEventEnvelope.builder()
-                .eventId(UUID.randomUUID().toString())
-                .eventType(eventType.value())
-                .correlationId(partitionKey)
-                .payload(payload)
-                .build();
-
         return OutboxEvent.builder()
                 .eventType(eventType)
-                .payload(jsonSerializer.serialize(envelope))
+                .payload(jsonSerializer.serialize(payload))
                 .partitionKey(partitionKey)
                 .build();
     }

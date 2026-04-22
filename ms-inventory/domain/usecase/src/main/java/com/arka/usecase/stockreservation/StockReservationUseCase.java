@@ -84,6 +84,12 @@ public class StockReservationUseCase {
                             .switchIfEmpty(Flux.empty())
                             .flatMap(reservation ->
                                     stockReservationRepository.updateStatus(reservation.id(), ReservationStatus.CONFIRMED)
+                                            .then(stockRepository.findBySkuForUpdate(reservation.sku()))
+                                            .flatMap(stock -> {
+                                                var deducted = stock.commitReservation(reservation.quantity());
+                                                return stockRepository.updateQuantity(reservation.sku(), deducted.quantity(), stock.version())
+                                                        .then(stockRepository.updateReservedQuantity(reservation.sku(), deducted.reservedQuantity()));
+                                            })
                                             .then(stockMovementRepository.save(
                                                     StockMovement.orderConfirm(reservation.sku(), reservation.quantity(), orderId)))
                             )
