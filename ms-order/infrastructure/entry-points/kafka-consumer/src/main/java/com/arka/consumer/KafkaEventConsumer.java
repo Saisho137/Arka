@@ -124,22 +124,31 @@ public class KafkaEventConsumer {
 
     private Mono<Void> processPaymentProcessed(UUID eventId, JsonNode envelope) {
         log.debug("Processing PaymentProcessed eventId={}", eventId);
-        // Phase 2+: Extract orderId from payload and delegate to OrderUseCase
-        // For Phase 1, infrastructure base is ready but no actual processing
-        return orderUseCase.processExternalEvent(eventId);
+        String orderIdStr = envelope.path("payload").path("orderId").asText("");
+        if (orderIdStr.isBlank()) {
+            log.error("PaymentProcessed eventId={} missing orderId in payload — skipping", eventId);
+            return Mono.empty();
+        }
+        UUID orderId = UUID.fromString(orderIdStr);
+        return orderUseCase.processPaymentProcessed(eventId, orderId);
     }
 
     private Mono<Void> processPaymentFailed(UUID eventId, JsonNode envelope) {
         log.debug("Processing PaymentFailed eventId={}", eventId);
-        // Phase 2+: Extract orderId and reason from payload and delegate to OrderUseCase
-        // For Phase 1, infrastructure base is ready but no actual processing
-        return orderUseCase.processExternalEvent(eventId);
+        JsonNode payload = envelope.path("payload");
+        String orderIdStr = payload.path("orderId").asText("");
+        if (orderIdStr.isBlank()) {
+            log.error("PaymentFailed eventId={} missing orderId in payload — skipping", eventId);
+            return Mono.empty();
+        }
+        UUID orderId = UUID.fromString(orderIdStr);
+        String reason = payload.path("reason").asText(null);
+        return orderUseCase.processPaymentFailed(eventId, orderId, reason);
     }
 
     private Mono<Void> processShippingDispatched(UUID eventId, JsonNode envelope) {
-        log.debug("Processing ShippingDispatched eventId={}", eventId);
-        // Phase 2+: Extract orderId from payload and delegate to OrderUseCase
-        // For Phase 1, infrastructure base is ready but no actual processing
+        log.debug("Processing ShippingDispatched eventId={} — Phase 2+ (Task 14)", eventId);
+        // Task 14: extract orderId and delegate to orderUseCase.processShippingDispatched()
         return orderUseCase.processExternalEvent(eventId);
     }
 

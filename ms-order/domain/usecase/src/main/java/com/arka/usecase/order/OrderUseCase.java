@@ -23,6 +23,7 @@ import com.arka.model.outboxevent.DomainEventEnvelope;
 import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OrderCancelledPayload;
 import com.arka.model.outboxevent.OrderConfirmedPayload;
+import com.arka.model.outboxevent.OrderCreatedPayload;
 import com.arka.model.outboxevent.OrderItemPayload;
 import com.arka.model.outboxevent.OrderStatusChangedPayload;
 import com.arka.model.outboxevent.OutboxEvent;
@@ -87,12 +88,12 @@ public class OrderUseCase {
                         return Mono.error(new InsufficientStockException(failedSkus));
                     }
 
-                    return persistConfirmedOrder(orderId, customerId, customerEmail,
+                    return persistPendingPaymentOrder(orderId, customerId, customerEmail,
                             shippingAddress, notes, contexts);
                 });
     }
 
-    private Mono<Order> persistConfirmedOrder(UUID orderId, UUID customerId, String customerEmail,
+    private Mono<Order> persistPendingPaymentOrder(UUID orderId, UUID customerId, String customerEmail,
                                               String shippingAddress, String notes,
                                               List<ItemContext> contexts) {
         List<OrderItem> orderItems = contexts.stream()
@@ -115,7 +116,7 @@ public class OrderUseCase {
                 .customerEmail(customerEmail)
                 .shippingAddress(shippingAddress)
                 .notes(notes)
-                .status(new OrderStatus.Confirmed())
+                .status(new OrderStatus.PendingPayment())
                 .totalAmount(totalAmount)
                 .build();
 
@@ -128,15 +129,15 @@ public class OrderUseCase {
                     OrderStateHistory history = OrderStateHistory.builder()
                             .orderId(savedOrder.id())
                             .previousStatus(new OrderStatus.PendingReserve().value())
-                            .newStatus(new OrderStatus.Confirmed().value())
+                            .newStatus(new OrderStatus.PendingPayment().value())
                             .changedBy(customerId)
-                            .reason("Order created and stock reserved successfully")
+                            .reason("Order created — awaiting payment confirmation")
                             .build();
 
                     OutboxEvent outboxEvent = buildOutboxEvent(
-                            EventType.ORDER_CONFIRMED,
+                            EventType.ORDER_CREATED,
                             savedOrder.id().toString(),
-                            OrderConfirmedPayload.builder()
+                            OrderCreatedPayload.builder()
                                     .orderId(savedOrder.id())
                                     .customerId(customerId)
                                     .customerEmail(customerEmail)
@@ -260,7 +261,7 @@ public class OrderUseCase {
                     if (!OrderStateTransition.isValidTransition(order.status(), cancelled)) {
                         return Mono.error(new InvalidStateTransitionException(
                                 "Cannot cancel order in status " + order.status().value()
-                                        + ". Only CONFIRMADO orders can be cancelled."));
+                                        + ". Cancellable states: PENDIENTE_PAGO, CONFIRMADO."));
                     }
 
                     OrderStateHistory history = OrderStateHistory.builder()
@@ -291,11 +292,103 @@ public class OrderUseCase {
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // 6. PROCESS EXTERNAL EVENT — Idempotent consumer (Phase 2+)
-    //    Handles: PaymentProcessed, PaymentFailed, ShippingDispatched
-    //    Phase 1: deduplication only — routing logic added in Phase 2
+    // 6. PROCESS EXTERNAL EVENT — Idempotent consumers (Phase 2)
+    //    PaymentProcessed → PENDIENTE_PAGO → CONFIRMADO + OrderConfirmed
+    //    PaymentFailed    → PENDIENTE_PAGO → CANCELADO  + OrderCancelled
+    //    ShippingDispatched → Phase 2+ (Task 14)
     // ──────────────────────────────────────────────────────────────────
 
+    public Mono<Void> processPaymentProcessed(UUID eventId, UUID orderId) {
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return Mono.<Void>empty();
+                    }
+                    OrderStatus confirmed = new OrderStatus.Confirmed();
+                    return orderRepository.findById(orderId)
+                            .switchIfEmpty(Mono.error(new OrderNotFoundException(
+                                    ORDER_NOT_FOUND + orderId)))
+                            .flatMap(order -> {
+                                if (!OrderStateTransition.isValidTransition(order.status(), confirmed)) {
+                                    return Mono.error(new InvalidStateTransitionException(
+                                            "Cannot confirm order in status " + order.status().value()));
+                                }
+                                return orderItemRepository.findByOrderId(orderId)
+                                        .collectList()
+                                        .flatMap(items -> {
+                                            OrderStateHistory history = OrderStateHistory.builder()
+                                                    .orderId(orderId)
+                                                    .previousStatus(order.status().value())
+                                                    .newStatus(confirmed.value())
+                                                    .reason("Payment processed successfully")
+                                                    .build();
+
+                                            OutboxEvent outboxEvent = buildOutboxEvent(
+                                                    EventType.ORDER_CONFIRMED,
+                                                    orderId.toString(),
+                                                    OrderConfirmedPayload.builder()
+                                                            .orderId(orderId)
+                                                            .customerId(order.customerId())
+                                                            .customerEmail(order.customerEmail())
+                                                            .items(toItemPayloads(items))
+                                                            .totalAmount(order.totalAmount())
+                                                            .build());
+
+                                            return orderRepository.updateStatus(orderId, confirmed)
+                                                    .then(orderStateHistoryRepository.save(history))
+                                                    .then(outboxEventRepository.save(outboxEvent))
+                                                    .then(processedEventRepository.save(eventId));
+                                        });
+                            });
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
+    public Mono<Void> processPaymentFailed(UUID eventId, UUID orderId, String reason) {
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return Mono.<Void>empty();
+                    }
+                    OrderStatus cancelled = new OrderStatus.Cancelled();
+                    return orderRepository.findById(orderId)
+                            .switchIfEmpty(Mono.error(new OrderNotFoundException(
+                                    ORDER_NOT_FOUND + orderId)))
+                            .flatMap(order -> {
+                                if (!OrderStateTransition.isValidTransition(order.status(), cancelled)) {
+                                    return Mono.error(new InvalidStateTransitionException(
+                                            "Cannot cancel order in status " + order.status().value()));
+                                }
+
+                                OrderStateHistory history = OrderStateHistory.builder()
+                                        .orderId(orderId)
+                                        .previousStatus(order.status().value())
+                                        .newStatus(cancelled.value())
+                                        .reason(reason != null ? reason : "Payment failed")
+                                        .build();
+
+                                OutboxEvent outboxEvent = buildOutboxEvent(
+                                        EventType.ORDER_CANCELLED,
+                                        orderId.toString(),
+                                        OrderCancelledPayload.builder()
+                                                .orderId(orderId)
+                                                .customerId(order.customerId())
+                                                .customerEmail(order.customerEmail())
+                                                .reason(reason != null ? reason : "Payment failed")
+                                                .build());
+
+                                return orderRepository.updateStatus(orderId, cancelled)
+                                        .then(orderStateHistoryRepository.save(history))
+                                        .then(outboxEventRepository.save(outboxEvent))
+                                        .then(processedEventRepository.save(eventId));
+                            });
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
+    // Fallback for unknown event types (deduplication only)
     public Mono<Void> processExternalEvent(UUID eventId) {
         Mono<Void> pipeline = processedEventRepository.exists(eventId)
                 .flatMap(alreadyProcessed -> {

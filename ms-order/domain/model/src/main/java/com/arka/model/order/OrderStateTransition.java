@@ -7,12 +7,14 @@ public final class OrderStateTransition {
 
     private OrderStateTransition() {}
 
-    // PENDIENTE_RESERVA → CONFIRMADO | CANCELADO
+    // PENDIENTE_RESERVA → PENDIENTE_PAGO
+    // PENDIENTE_PAGO    → CONFIRMADO | CANCELADO
     // CONFIRMADO        → EN_DESPACHO | CANCELADO
     // EN_DESPACHO       → ENTREGADO
     // ENTREGADO, CANCELADO: terminal (no outgoing)
     private static final Map<String, Set<String>> VALID_TRANSITIONS = Map.of(
-        "PENDIENTE_RESERVA", Set.of("CONFIRMADO", "CANCELADO"),
+        "PENDIENTE_RESERVA", Set.of("PENDIENTE_PAGO"),
+        "PENDIENTE_PAGO",    Set.of("CONFIRMADO", "CANCELADO"),
         "CONFIRMADO",        Set.of("EN_DESPACHO", "CANCELADO"),
         "EN_DESPACHO",       Set.of("ENTREGADO")
     );

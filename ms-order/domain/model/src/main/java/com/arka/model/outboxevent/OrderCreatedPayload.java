@@ -10,6 +10,7 @@ import java.util.UUID;
 public record OrderCreatedPayload(
     UUID orderId,
     UUID customerId,
+    String customerEmail,
     List<OrderItemPayload> items,
     BigDecimal totalAmount
 ) {

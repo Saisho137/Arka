@@ -299,29 +299,28 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 Estas tareas representan lo que falta para un `ms-order` completo más allá del MVP Fase 1.
 
-- [ ] 13. Fase 2 — Integración ms-payment (Saga de 4 pasos)
-  - [ ] 13.1 Agregar estado `PENDIENTE_PAGO` a `OrderStatus` y actualizar `OrderStateTransition`
+- [x] 13. Fase 2 — Integración ms-payment (Saga de 4 pasos)
+  - [x] 13.1 Agregar estado `PENDIENTE_PAGO` a `OrderStatus` y actualizar `OrderStateTransition`
     - Nueva sealed permit `PendingPayment` con `value()` = `"PENDIENTE_PAGO"`
     - Nuevas transiciones: PENDIENTE_RESERVA → PENDIENTE_PAGO (reemplaza el salto directo a CONFIRMADO); PENDIENTE_PAGO → CONFIRMADO | CANCELADO
     - Actualizar tests de máquina de estados (tarea 2.3)
     - _Impacto: `OrderStatus`, `OrderStateTransition`, `createOrder()`, tests de propiedades_
-  - [ ] 13.2 Adaptar `createOrder()` para Fase 2: persistir en `PENDIENTE_PAGO` y emitir `OrderCreated`
-    - `OrderCreatedPayload` ya definido en `domain/model/outboxevent/`
+  - [x] 13.2 Adaptar `createOrder()` para Fase 2: persistir en `PENDIENTE_PAGO` y emitir `OrderCreated`
+    - `OrderCreatedPayload` ya definido en `domain/model/outboxevent/` — añadido `customerEmail`
     - ms-payment consume `order-events` (OrderCreated) → procesa cobro → emite `PaymentProcessed` o `PaymentFailed` a `payment-events`
-    - Eliminar emisión de `OrderConfirmed` de `createOrder()` (pasa a ser responsabilidad de `processPaymentProcessed`)
-  - [ ] 13.3 Implementar `processPaymentProcessed()` en `OrderUseCase`
+    - Eliminada emisión de `OrderConfirmed` de `createOrder()` (pasa a ser responsabilidad de `processPaymentProcessed`)
+  - [x] 13.3 Implementar `processPaymentProcessed()` en `OrderUseCase`
     - Firma: `Mono<Void> processPaymentProcessed(UUID eventId, UUID orderId)`
     - Idempotente con `processedEventRepository`
     - Transición: PENDIENTE_PAGO → CONFIRMADO; persistir historial; emitir `OrderConfirmed` en outbox
-    - Actualizar `processExternalEvent(UUID eventId, String eventType, String payload)` para routing real
-  - [ ] 13.4 Implementar `processPaymentFailed()` en `OrderUseCase`
+  - [x] 13.4 Implementar `processPaymentFailed()` en `OrderUseCase`
     - Firma: `Mono<Void> processPaymentFailed(UUID eventId, UUID orderId, String reason)`
     - Idempotente con `processedEventRepository`
     - Transición: PENDIENTE_PAGO → CANCELADO; persistir historial con reason; emitir `OrderCancelled` en outbox
     - ms-inventory consume `OrderCancelled` (tópico `order-events`) → libera la reserva de stock (StockReleased)
-  - [ ] 13.5 Actualizar `KafkaEventConsumer` para routear eventos de pago (tarea 10.3 — routing real)
-    - `PaymentProcessed` → `orderUseCase.processPaymentProcessed(eventId, orderId)`
-    - `PaymentFailed` → `orderUseCase.processPaymentFailed(eventId, orderId, reason)`
+  - [x] 13.5 Actualizar `KafkaEventConsumer` para routear eventos de pago (tarea 10.3 — routing real)
+    - `PaymentProcessed` → extrae `orderId` del payload → `orderUseCase.processPaymentProcessed(eventId, orderId)`
+    - `PaymentFailed` → extrae `orderId` y `reason` del payload → `orderUseCase.processPaymentFailed(eventId, orderId, reason)`
     - Consumir tópico `payment-events` (consumer group `order-service-group`, ya configurado en `application.yaml`)
 
 - [ ] 14. Fase 2 — Integración ms-shipping

@@ -13,6 +13,7 @@
 DO $$ BEGIN
     CREATE TYPE order_status AS ENUM (
         'PENDIENTE_RESERVA',
+        'PENDIENTE_PAGO',
         'CONFIRMADO',
         'EN_DESPACHO',
         'ENTREGADO',
