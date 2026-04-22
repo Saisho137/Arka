@@ -842,7 +842,7 @@ grpcurl -plaintext localhost:9090 list
 #### Describir servicio InventoryService
 
 ```bash
-grpcurl -plaintext localhost:9090 describe inventory.InventoryService
+grpcurl -plaintext localhost:9090 describe com.arka.inventory.InventoryService
 ```
 
 #### Reservar stock — teclado (exitoso)
@@ -850,9 +850,9 @@ grpcurl -plaintext localhost:9090 describe inventory.InventoryService
 ```bash
 grpcurl -plaintext -d '{
   "sku": "KB-MECH-001",
-  "order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0001",
+  "orderId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0001",
   "quantity": 2
-}' localhost:9090 inventory.InventoryService/ReserveStock
+}' localhost:9090 com.arka.inventory.InventoryService/ReserveStock
 ```
 
 #### Reservar stock — mouse óptico (exitoso)
@@ -860,9 +860,9 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "MS-OPT-002",
-  "order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0002",
+  "orderId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0002",
   "quantity": 5
-}' localhost:9090 inventory.InventoryService/ReserveStock
+}' localhost:9090 com.arka.inventory.InventoryService/ReserveStock
 ```
 
 #### Reservar stock (fallido — SKU no existe)
@@ -870,9 +870,9 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "NOEXISTE-999",
-  "order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0099",
+  "orderId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0099",
   "quantity": 1
-}' localhost:9090 inventory.InventoryService/ReserveStock
+}' localhost:9090 com.arka.inventory.InventoryService/ReserveStock
 ```
 
 #### Reservar stock (fallido — cantidad insuficiente)
@@ -880,9 +880,9 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "GPU-RTX-004",
-  "order_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0003",
+  "orderId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeee0003",
   "quantity": 999
-}' localhost:9090 inventory.InventoryService/ReserveStock
+}' localhost:9090 com.arka.inventory.InventoryService/ReserveStock
 ```
 
 ### 5.2 ms-catalog — GetProductInfo (puerto 9091)
@@ -898,7 +898,7 @@ grpcurl -plaintext localhost:9091 list
 #### Describir servicio CatalogService
 
 ```bash
-grpcurl -plaintext localhost:9091 describe catalog.CatalogService
+grpcurl -plaintext localhost:9091 describe com.arka.catalog.CatalogService
 ```
 
 #### Obtener info del teclado
@@ -906,7 +906,7 @@ grpcurl -plaintext localhost:9091 describe catalog.CatalogService
 ```bash
 grpcurl -plaintext -d '{
   "sku": "KB-MECH-001"
-}' localhost:9091 catalog.CatalogService/GetProductInfo
+}' localhost:9091 com.arka.catalog.CatalogService/GetProductInfo
 ```
 
 #### Obtener info del mouse óptico
@@ -914,7 +914,7 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "MS-OPT-002"
-}' localhost:9091 catalog.CatalogService/GetProductInfo
+}' localhost:9091 com.arka.catalog.CatalogService/GetProductInfo
 ```
 
 #### Obtener info del monitor
@@ -922,7 +922,7 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "MNT-27-001"
-}' localhost:9091 catalog.CatalogService/GetProductInfo
+}' localhost:9091 com.arka.catalog.CatalogService/GetProductInfo
 ```
 
 #### Obtener info de la GPU
@@ -930,7 +930,7 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "GPU-RTX-004"
-}' localhost:9091 catalog.CatalogService/GetProductInfo
+}' localhost:9091 com.arka.catalog.CatalogService/GetProductInfo
 ```
 
 #### Obtener info de SKU inexistente (debe retornar NOT_FOUND)
@@ -938,7 +938,7 @@ grpcurl -plaintext -d '{
 ```bash
 grpcurl -plaintext -d '{
   "sku": "NOEXISTE-999"
-}' localhost:9091 catalog.CatalogService/GetProductInfo
+}' localhost:9091 com.arka.catalog.CatalogService/GetProductInfo
 ```
 
 ---
