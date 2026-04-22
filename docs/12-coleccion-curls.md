@@ -22,10 +22,11 @@
   - [3.4 Swagger / OpenAPI](#34-swagger--openapi)
 - [4. ms-order — Puerto 8081](#4-ms-order--puerto-8081)
   - [4.1 Crear Orden](#41-crear-orden)
-  - [4.2 Consultar Orden por ID](#42-consultar-orden-por-id)
-  - [4.3 Listar Órdenes (paginado + filtro)](#43-listar-órdenes-paginado--filtro)
-  - [4.4 Cambiar Estado de Orden](#44-cambiar-estado-de-orden)
-  - [4.5 Cancelar Orden](#45-cancelar-orden)
+  - [4.2 Simular Pago via Kafka UI (ms-payment ausente)](#42-simular-pago-via-kafka-ui-ms-payment-ausente)
+  - [4.3 Consultar Orden por ID](#43-consultar-orden-por-id)
+  - [4.4 Listar Órdenes (paginado + filtro)](#44-listar-órdenes-paginado--filtro)
+  - [4.5 Cambiar Estado de Orden (Admin)](#45-cambiar-estado-de-orden-admin)
+  - [4.6 Cancelar Orden](#46-cancelar-orden)
 - [5. gRPC Endpoints](#5-grpc-endpoints)
   - [5.1 ms-inventory — ReserveStock (puerto 9090)](#51-ms-inventory--reservestock-puerto-9090)
   - [5.2 ms-catalog — GetProductInfo (puerto 9091)](#52-ms-catalog--getproductinfo-puerto-9091)
@@ -454,6 +455,10 @@ curl -s http://localhost:8082/api-docs | jq
 
 > **Requisito:** ms-catalog y ms-inventory deben estar corriendo.
 > ms-order consulta precio vía gRPC a ms-catalog y reserva stock vía gRPC a ms-inventory.
+>
+> ⚠️ **Fase 2 activa:** La orden se guarda en estado **`PENDIENTE_PAGO`** (no `CONFIRMADO`).
+> Para avanzar a `CONFIRMADO` es necesario que ms-payment emita `PaymentProcessed`.
+> **Mientras ms-payment no esté implementado, simular el pago manualmente** — ver sección [4.2](#42-simular-pago-via-kafka-ui-ms-payment-ausente).
 
 #### Crear orden como customer1 — 2 Teclados + 1 Monitor
 
@@ -523,7 +528,89 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
   }' | jq
 ```
 
-### 4.2 Consultar Orden por ID
+### 4.2 Simular Pago via Kafka UI (ms-payment ausente)
+
+> **Contexto:** ms-order espera un evento `PaymentProcessed` o `PaymentFailed` en el tópico
+> `payment-events` para avanzar la orden de `PENDIENTE_PAGO` → `CONFIRMADO` o `CANCELADO`.
+> Hasta que ms-payment esté implementado, publicar este evento manualmente en Kafka UI.
+
+**Pasos:**
+
+1. Copiar el `orderId` de la respuesta de `POST /orders` (paso 4.1)
+2. Ir a **http://localhost:8080** → `Topics` → `payment-events` → **Produce Message**
+3. Definir `Partition key` = `<ORDER_ID>` (el mismo UUID)
+4. Pegar el JSON en el campo `Value`
+
+#### JSON para `PaymentProcessed` (pago exitoso)
+
+```json
+{
+  "eventId": "11111111-2222-3333-4444-555555555555",
+  "eventType": "PaymentProcessed",
+  "source": "ms-payment",
+  "correlationId": "<ORDER_ID>",
+  "timestamp": "2026-04-21T10:00:00.000Z",
+  "payload": {
+    "orderId": "<ORDER_ID>",
+    "customerId": "482eae01-3840-3d80-9a3b-17333e6b32d5",
+    "amount": 690000.0,
+    "currency": "COP",
+    "transactionId": "TXN-MOCK-001"
+  }
+}
+```
+
+> Reemplazar `<ORDER_ID>` con el UUID real. Tras publicar, esperar ~1s y consultar la orden:
+
+```bash
+curl -s http://localhost:8081/api/v1/orders/<ORDER_ID> \
+  -H "X-User-Email: customer1@arka.com" \
+  -H "X-User-Role: CUSTOMER" | jq '{orderId: .orderId, status: .status}'
+# Esperado: status: "CONFIRMADO"
+```
+
+#### JSON para `PaymentFailed` (pago rechazado)
+
+```json
+{
+  "eventId": "22222222-3333-4444-5555-666666666666",
+  "eventType": "PaymentFailed",
+  "source": "ms-payment",
+  "correlationId": "<ORDER_ID>",
+  "timestamp": "2026-04-21T10:00:00.000Z",
+  "payload": {
+    "orderId": "<ORDER_ID>",
+    "customerId": "482eae01-3840-3d80-9a3b-17333e6b32d5",
+    "reason": "Fondos insuficientes en la cuenta del cliente"
+  }
+}
+```
+
+> Tras publicar `PaymentFailed`, la orden transiciona `PENDIENTE_PAGO` → `CANCELADO`
+> y ms-order emite `OrderCancelled` a `order-events` para que ms-inventory libere el stock.
+
+```bash
+curl -s http://localhost:8081/api/v1/orders/<ORDER_ID> \
+  -H "X-User-Email: customer1@arka.com" \
+  -H "X-User-Role: CUSTOMER" | jq '{orderId: .orderId, status: .status}'
+# Esperado: status: "CANCELADO"
+```
+
+#### Verificar idempotencia (publicar el mismo eventId dos veces)
+
+> Publicar el mismo JSON (con el mismo `eventId`) una segunda vez en Kafka UI.
+> El segundo procesamiento debe ignorarse — la orden no cambia de estado.
+
+```bash
+# El status no cambia si ya era CONFIRMADO
+curl -s http://localhost:8081/api/v1/orders/<ORDER_ID> \
+  -H "X-User-Email: admin@arka.com" \
+  -H "X-User-Role: ADMIN" | jq '{status: .status}'
+```
+
+---
+
+### 4.3 Consultar Orden por ID
 
 #### Consultar orden seed — CONFIRMADO (como ADMIN)
 
@@ -566,12 +653,20 @@ curl -s http://localhost:8081/api/v1/orders/<NEW_ORDER_ID> \
   -H "X-User-Role: CUSTOMER" | jq
 ```
 
-### 4.3 Listar Órdenes (paginado + filtro)
+### 4.4 Listar Órdenes (paginado + filtro)
 
 #### Como ADMIN — ver todas las órdenes
 
 ```bash
 curl -s "http://localhost:8081/api/v1/orders?page=0&size=20" \
+  -H "X-User-Email: admin@arka.com" \
+  -H "X-User-Role: ADMIN" | jq
+```
+
+#### Como ADMIN — filtrar solo PENDIENTE_PAGO (nuevas órdenes esperando pago)
+
+```bash
+curl -s "http://localhost:8081/api/v1/orders?status=PENDIENTE_PAGO&page=0&size=20" \
   -H "X-User-Email: admin@arka.com" \
   -H "X-User-Role: ADMIN" | jq
 ```
@@ -624,9 +719,15 @@ curl -s "http://localhost:8081/api/v1/orders?status=CONFIRMADO&page=0&size=20" \
   -H "X-User-Role: CUSTOMER" | jq
 ```
 
-### 4.4 Cambiar Estado de Orden
+### 4.5 Cambiar Estado de Orden (Admin)
 
-> Solo ADMIN. Transiciones válidas: `CONFIRMADO → EN_DESPACHO` y `EN_DESPACHO → ENTREGADO`.
+> Solo ADMIN. Transiciones manuales válidas:
+>
+> - `CONFIRMADO → EN_DESPACHO`
+> - `EN_DESPACHO → ENTREGADO`
+>
+> ⚠️ **`PENDIENTE_PAGO → CONFIRMADO`** NO es manual — lo hace ms-payment vía Kafka.
+> Para simularlo durante demo: usar la sección [4.2](#42-simular-pago-via-kafka-ui-ms-payment-ausente).
 
 #### CONFIRMADO → EN_DESPACHO (orden seed 550e...0000)
 
@@ -661,10 +762,13 @@ curl -s -X PUT http://localhost:8081/api/v1/orders/550e8400-e29b-41d4-a716-44665
   }' | jq
 ```
 
-### 4.5 Cancelar Orden
+### 4.6 Cancelar Orden
 
 > ADMIN puede cancelar cualquier orden. CUSTOMER solo las suyas.
-> Solo se pueden cancelar órdenes que NO estén en estado terminal (ENTREGADO, CANCELADO).
+> **Estados cancelables:** `PENDIENTE_PAGO` y `CONFIRMADO`.
+> Los estados terminales (`ENTREGADO`, `CANCELADO`) no pueden cancelarse.
+> Al cancelar una orden `PENDIENTE_PAGO` o `CONFIRMADO`, ms-order emite `OrderCancelled`
+> a `order-events` para que ms-inventory libere el stock reservado.
 
 #### Cancelar como ADMIN la orden seed CONFIRMADO (550e...0004)
 
@@ -842,6 +946,16 @@ open http://localhost:8080
 - **Mensajes:** Ver payload JSON de eventos publicados (ej. `ProductCreated`, `StockReserved`, `OrderCreated`)
 - **Consumer Groups:** `ms-inventory`, `order-service-group`, etc.
 - **Partition Keys:** Verificar que los mensajes están particionados por aggregate ID
+
+### Simular pago manualmente (ms-payment no implementado)
+
+> Flujo: `Produce Message` → Tópico `payment-events` → Key = `<orderId>` → pegar JSON.
+> Ver ejemplos completos con los JSON exactos en **[sección 4.2](#42-simular-pago-via-kafka-ui-ms-payment-ausente)**.
+
+| Escenario    | eventType          | Resultado en ms-order                                     |
+| ------------ | ------------------ | --------------------------------------------------------- |
+| Pago exitoso | `PaymentProcessed` | `PENDIENTE_PAGO` → `CONFIRMADO` + evento `OrderConfirmed` |
+| Pago fallido | `PaymentFailed`    | `PENDIENTE_PAGO` → `CANCELADO` + evento `OrderCancelled`  |
 
 ---
 
@@ -1086,8 +1200,9 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
   }' | jq
 ```
 
-> **Mostrar:** Respuesta 202 con `orderId`, `status: PENDIENTE_RESERVA`, `totalAmount` calculado, `items` con precios.
-> Copiar el `orderId` de la respuesta.
+> **Mostrar:** Respuesta 202 con `orderId`, `status: "PENDIENTE_PAGO"`, `totalAmount` calculado con precios de ms-catalog, `items` con nombres de producto.
+> La orden queda **esperando confirmación de pago** por ms-payment.
+> ⚠️ Copiar el `orderId` de la respuesta — lo necesitas en el siguiente paso.
 
 #### Paso 3 — Verificar que el stock se reservó
 
@@ -1096,15 +1211,48 @@ curl -s http://localhost:8082/inventory/KB-MECH-001 | jq '{sku, quantity, reserv
 curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
 ```
 
-#### Paso 4 — Consultar detalle de la orden creada
+#### Paso 4 — Simular pago exitoso en Kafka UI
+
+> Abrir **http://localhost:8080** → Tópico `payment-events` → **Produce Message**
+> Partition key = `<ORDER_ID>`. JSON a publicar (reemplazar `<ORDER_ID>` y `<CUSTOMER_ID>`):
+
+```json
+{
+  "eventId": "11111111-2222-3333-4444-555555555555",
+  "eventType": "PaymentProcessed",
+  "source": "ms-payment",
+  "correlationId": "<ORDER_ID>",
+  "timestamp": "2026-04-21T10:00:00.000Z",
+  "payload": {
+    "orderId": "<ORDER_ID>",
+    "customerId": "482eae01-3840-3d80-9a3b-17333e6b32d5",
+    "amount": 2115000.0,
+    "currency": "COP",
+    "transactionId": "TXN-MOCK-001"
+  }
+}
+```
+
+> Esperar ~1s para que el consumer procese el evento.
+
+#### Paso 5 — Verificar que la orden pasó a CONFIRMADO
 
 ```bash
 curl -s http://localhost:8081/api/v1/orders/<NEW_ORDER_ID> \
   -H "X-User-Email: customer1@arka.com" \
-  -H "X-User-Role: CUSTOMER" | jq
+  -H "X-User-Role: CUSTOMER" | jq '{orderId: .orderId, status: .status, totalAmount: .totalAmount}'
+# Esperado: status: "CONFIRMADO"
 ```
 
-#### Paso 5 — Demostrar validación de stock insuficiente
+#### Paso 6 — Verificar eventos en Kafka UI
+
+```text
+→ http://localhost:8080 → Tópicos: order-events, inventory-events, payment-events
+→ order-events:     OrderCreated (al crear la orden) + OrderConfirmed (tras pago exitoso)
+→ inventory-events: StockReserved (al reservar stock)
+```
+
+#### Paso 7 — Demostrar stock insuficiente (fallo rápido)
 
 ```bash
 # Intentar ordenar 500 GPUs (solo hay ~8)
@@ -1125,14 +1273,20 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
   }' | jq
 ```
 
-> **Mostrar:** La orden se crea en estado PENDIENTE_RESERVA pero la saga detectará
-> el fallo de stock y la cancelará automáticamente vía evento `StockReserveFailed`.
+> **Mostrar:** La orden falla inmediatamente con **409 Conflict** — stock insuficiente.
+> El fail-fast ocurre en el gRPC a ms-inventory: **no se crea orden, no se reserva nada**.
+> El stock de la GPU no cambia.
 
-#### Paso 6 — Verificar eventos en Kafka UI
+#### Paso 8 — Demostrar fallo de pago (PaymentFailed)
 
-```
-→ http://localhost:8080 → Tópicos: order-events, inventory-events
-→ Ver OrderCreated, StockReserved / StockReserveFailed
+> Crear una segunda orden y simular pago fallido en Kafka UI (sección [4.2](#42-simular-pago-via-kafka-ui-ms-payment-ausente)):
+
+```bash
+# Verificar que la orden pasó a CANCELADO tras publicar PaymentFailed
+curl -s http://localhost:8081/api/v1/orders/<NEW_ORDER_ID_2> \
+  -H "X-User-Email: customer2@arka.com" \
+  -H "X-User-Role: CUSTOMER" | jq '{orderId: .orderId, status: .status}'
+# Esperado: status: "CANCELADO"
 ```
 
 ---
@@ -1147,14 +1301,21 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
 - ⚠️ Notificación por correo (ms-notifications consume eventos pero aún no envía email — pendiente Fase 2)
 - ✅ Cambios de estado publicados como eventos Kafka (`OrderStatusChanged`)
 
-#### Paso 1 — Listar órdenes con todos los estados posibles
+#### Paso 1 — Ver ciclo de vida completo con órdenes seed
 
 ```bash
-# Ver las 5 órdenes seed con diferentes estados
+# Listar las 5 órdenes seed con sus estados actuales
 curl -s "http://localhost:8081/api/v1/orders?page=0&size=20" \
   -H "X-User-Email: admin@arka.com" \
-  -H "X-User-Role: ADMIN" | jq '.[].status'
+  -H "X-User-Role: ADMIN" | jq '.[] | {orderId, status}'
+# seed: CONFIRMADO, EN_DESPACHO, ENTREGADO, CANCELADO, CONFIRMADO
 ```
+
+#### Paso 1.5 — Simular orden nueva en PENDIENTE_PAGO (demo completo del ciclo)
+
+> Crear una nueva orden (ver Paso 2 de HU4) y luego simular el pago con Kafka UI
+> antes de continuar con los pasos de despacho.
+> Ver flujo completo en sección [4.2](#42-simular-pago-via-kafka-ui-ms-payment-ausente).
 
 #### Paso 2 — Transición CONFIRMADO → EN_DESPACHO
 
@@ -1213,9 +1374,13 @@ curl -s "http://localhost:8081/api/v1/orders?page=0&size=20" \
 → Cada evento incluye: orderId, previousStatus, newStatus, changedBy, reason
 ```
 
-> **Nota para la presentación:** Aunque ms-notifications aún no envía correos (Fase 2),
-> el evento `OrderStatusChanged` ya se publica a Kafka. Cuando ms-notifications implemente
-> su consumer, recibirá estos eventos automáticamente y enviará el correo vía AWS SES.
+> **Nota para la presentación:**
+>
+> - **`PENDIENTE_PAGO → CONFIRMADO`** ocurre vía Kafka (ms-payment o simulación manual)
+> - **`CONFIRMADO → EN_DESPACHO → ENTREGADO`** son transiciones manuales por Admin
+> - Aunque ms-notifications aún no envía correos (pendiente), los eventos `OrderStatusChanged`
+>   y `OrderConfirmed` ya se publican a Kafka. Cuando ms-notifications implemente su consumer,
+>   recibirá estos eventos automáticamente y enviará el correo vía AWS SES.
 
 ---
 
@@ -1277,13 +1442,13 @@ docker exec arka-kafka kafka-consumer-groups --bootstrap-server localhost:29092 
 
 ## Apéndice B — Resumen de HUs vs Estado de Implementación
 
-| HU  | Descripción                           | MS Principal     | Estado          | Demo posible |
-| --- | ------------------------------------- | ---------------- | --------------- | ------------ |
-| HU1 | Registrar productos                   | ms-catalog       | ✅ Implementado | Sí           |
-| HU2 | Actualizar stock                      | ms-inventory     | ✅ Implementado | Sí           |
-| HU3 | Reportes de bajo stock                | ms-reporter      | ❌ Pendiente    | No           |
-| HU4 | Registrar orden de compra             | ms-order         | ✅ Implementado | Sí           |
-| HU5 | Modificar orden antes de confirmación | ms-order         | ❌ Pendiente    | No           |
-| HU6 | Notificación de cambio de estado      | ms-order + Kafka | ✅ Parcial      | Sí (eventos) |
-| HU7 | Reportes semanales de ventas          | ms-reporter      | ❌ Pendiente    | No           |
-| HU8 | Carritos abandonados                  | ms-cart          | ❌ Pendiente    | No           |
+| HU  | Descripción                           | MS Principal     | Estado                                                              | Demo posible |
+| --- | ------------------------------------- | ---------------- | ------------------------------------------------------------------- | ------------ |
+| HU1 | Registrar productos                   | ms-catalog       | ✅ Implementado                                                     | Sí           |
+| HU2 | Actualizar stock                      | ms-inventory     | ✅ Implementado                                                     | Sí           |
+| HU3 | Reportes de bajo stock                | ms-reporter      | ❌ Pendiente                                                        | No           |
+| HU4 | Registrar orden de compra             | ms-order         | ✅ Implementado (Fase 2: PENDIENTE_PAGO → simular pago en Kafka UI) | Sí           |
+| HU5 | Modificar orden antes de confirmación | ms-order         | ❌ Pendiente                                                        | No           |
+| HU6 | Notificación de cambio de estado      | ms-order + Kafka | ✅ Parcial                                                          | Sí (eventos) |
+| HU7 | Reportes semanales de ventas          | ms-reporter      | ❌ Pendiente                                                        | No           |
+| HU8 | Carritos abandonados                  | ms-cart          | ❌ Pendiente                                                        | No           |

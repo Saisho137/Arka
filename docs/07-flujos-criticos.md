@@ -1,6 +1,10 @@
 # 07 — Flujos Críticos del Sistema
 
-## 1. Creación de Pedido — Happy Path (Fase 1 MVP)
+## 1. Creación de Pedido — Happy Path (Implementación actual — Fase 2)
+
+> **Estado actual:** `createOrder()` persiste en `PENDIENTE_PAGO` y emite `OrderCreated`.
+> ms-payment (pendiente) debe consumir ese evento y emitir `PaymentProcessed`/`PaymentFailed`.
+> **Demo sin ms-payment:** simular manualmente el evento via Kafka UI (ver sección 6).
 
 ```text
 Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
@@ -24,19 +28,24 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                                       │
                                           gRPC Response: success ◄──
                                                       │
-                                          Guarda orden CONFIRMADO
+                                          Guarda orden PENDIENTE_PAGO
                                           (items con precio de catálogo)
-                                          Guarda OrderConfirmed en outbox
+                                          Guarda OrderCreated en outbox
                                           ──▶ 202 Accepted al cliente
                                                       │
-                                          Outbox Relay (5s) ──▶ Kafka: order-events
+                                          Outbox Relay (5s) ──▶ Kafka: order-events (OrderCreated)
                                                                      │
-                                                              ms-notifications
-                                                                     │
-                                                              Email vía AWS SES
+                                                 [ms-payment — pendiente impl.]
+                                                 Simular con Kafka UI → payment-events
+                                                     │
+                                               ms-order consume PaymentProcessed
+                                               PENDIENTE_PAGO → CONFIRMADO
+                                               Publica OrderConfirmed ──▶ order-events
+                                                     │
+                                               ms-notifications → Email vía AWS SES
 ```
 
-## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment)
+## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment — diseño completo)
 
 ```text
 ms-order ──gRPC──▶ ms-catalog (precio y nombre por SKU)
