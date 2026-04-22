@@ -31,16 +31,16 @@ Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa de comando
 
 Antes de comenzar la implementación, verificar que se han consultado estos componentes de `reusability.md`:
 
-- [ ] **#6 Kafka Consumer** — Copiar 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/` (Config + Lifecycle + Consumer)
-- [ ] **#9 Spring Profiles** — Copiar estructura de 3 YAMLs de `ms-inventory/applications/app-service/src/main/resources/`
-- [ ] **#11 Índices MongoDB** — Implementar patrón `@Configuration` + `CommandLineRunner` + `ReactiveMongoTemplate.indexOps()`
-- [ ] **#3 ProcessedEvents (idempotencia)** — Aplicar patrón `exists()` antes de procesar (adaptado a `notification_history.eventId`)
-- [ ] **Versionado Unificado** — Verificar todas las versiones contra tabla en `reusability.md`
+- [x] **#6 Kafka Consumer** — Copiar 3 archivos de `ms-inventory/infrastructure/entry-points/kafka-consumer/` (Config + Lifecycle + Consumer)
+- [x] **#9 Spring Profiles** — Copiar estructura de 3 YAMLs de `ms-inventory/applications/app-service/src/main/resources/`
+- [x] **#11 Índices MongoDB** — Implementar patrón `@Configuration` + `CommandLineRunner` + `ReactiveMongoTemplate.indexOps()`
+- [x] **#3 ProcessedEvents (idempotencia)** — Aplicar patrón `exists()` antes de procesar (adaptado a `notification_history.eventId`)
+- [x] **Versionado Unificado** — Verificar todas las versiones contra tabla en `reusability.md`
 
 ### Implementación
 
-- [ ] 1. Configurar estructura del proyecto y dependencias
-  - [ ] 1.1 Configurar `build.gradle` con dependencias: Spring WebFlux, Reactive MongoDB Driver, Spring Kafka, AWS SES SDK, jqwik, reactor-test, Lombok, BlockHound
+- [x] 1. Configurar estructura del proyecto y dependencias
+  - [x] 1.1 Configurar `build.gradle` con dependencias: Spring WebFlux, Reactive MongoDB Driver, Spring Kafka, AWS SES SDK, jqwik, reactor-test, Lombok, BlockHound
     - **OBLIGATORIO (reusability.md — Versionado Unificado):** Seguir tabla de versiones exactas
       - `io.projectreactor.kafka:reactor-kafka:1.3.25`
       - `net.jqwik:jqwik:1.9.2` (testImplementation)
@@ -51,14 +51,14 @@ Antes de comenzar la implementación, verificar que se han consultado estos comp
     - Verificar compatibilidad con Spring Boot 4.0.3 y Scaffold 4.2.0
     - **REFERENCIA:** `ms-inventory/build.gradle` + `ms-inventory/main.gradle` como fuente canónica
     - _Requisitos: transversal_
-  - [ ] 1.2 Configurar `application.yml` con conexión Reactive MongoDB (`notifications_db`), propiedades de Kafka (bootstrap-servers, consumer group `notification-service-group`, tópicos `order-events`, `inventory-events` y `payment-events`), dirección de remitente SES (`notification.from-address`), email de administrador (`notification.admin-email`) y configuración de reintentos (`notification.retry.*`)
+  - [x] 1.2 Configurar `application.yml` con conexión Reactive MongoDB (`notifications_db`), propiedades de Kafka (bootstrap-servers, consumer group `notification-service-group`, tópicos `order-events`, `inventory-events` y `payment-events`), dirección de remitente SES (`notification.from-address`), email de administrador (`notification.admin-email`) y configuración de reintentos (`notification.retry.*`)
     - Configurar perfiles `default` y `local`
     - _Requisitos: 1.1, 3.6, 3.7, 7.3, 9.2_
-  - [ ] 1.3 Crear script de inicialización de MongoDB con los índices de las colecciones `templates` (índice único sobre `eventType`) y `notification_history` (índice único sobre `eventId`, TTL Index de 90 días sobre `createdAt` con `expireAfterSeconds: 7776000`)
+  - [x] 1.3 Crear script de inicialización de MongoDB con los índices de las colecciones `templates` (índice único sobre `eventType`) y `notification_history` (índice único sobre `eventId`, TTL Index de 90 días sobre `createdAt` con `expireAfterSeconds: 7776000`)
     - **OBLIGATORIO (reusability.md #11):** Implementar como `@Configuration` + `CommandLineRunner` + `ReactiveMongoTemplate.indexOps().ensureIndex().then()`
     - Ubicar en `ms-notifications/applications/app-service/src/main/java/com/arka/config/MongoIndexConfig.java`
     - _Requisitos: 2.1, 8.2, 8.3_
-  - [ ] 1.4 Configurar Spring Profiles (local/docker)
+  - [x] 1.4 Configurar Spring Profiles (local/docker)
     - **OBLIGATORIO (reusability.md #9):** Copiar estructura exacta de `ms-inventory/applications/app-service/src/main/resources/`
     - Crear `application.yaml` base con `spring.profiles.active: ${SPRING_PROFILES_ACTIVE:local}`
     - Crear `application-local.yaml` con hosts `localhost` y puertos mapeados:
@@ -115,7 +115,7 @@ Antes de comenzar la implementación, verificar que se han consultado estos comp
     - _Requisitos: 10.2, 10.3_
 
 - [ ] 4. Implementar caso de uso principal (`domain/usecase`)
-  - [ ] 4.1 Implementar `ProcessNotificationUseCase`: orquestar el flujo completo — (1) verificar idempotencia consultando `notification_history` por eventId, (2) si existe, log DEBUG "Evento duplicado descartado: {eventId}" y retornar vacío, (3) resolver estrategia via `EventStrategyFactory`, (4) extraer `NotificationContext` del payload, (5) buscar plantilla activa por eventType, (6) si no existe plantilla, log ERROR y guardar historial FAILED, (7) resolver variables en subject y bodyTemplate con `TemplateEngine`, (8) enviar email via `EmailSenderPort`, (9) guardar historial SENT. Aplicar retry con backoff exponencial (3 reintentos: 1s, 2s, 4s) solo para errores transitorios. Errores permanentes registran FAILED sin reintentar. Capturar `DuplicateKeyException` de MongoDB al guardar historial como evento duplicado sin propagar error.
+  - [x] 4.1 Implementar `ProcessNotificationUseCase`: orquestar el flujo completo — (1) verificar idempotencia consultando `notification_history` por eventId, (2) si existe, log DEBUG "Evento duplicado descartado: {eventId}" y retornar vacío, (3) resolver estrategia via `EventStrategyFactory`, (4) extraer `NotificationContext` del payload, (5) buscar plantilla activa por eventType, (6) si no existe plantilla, log ERROR y guardar historial FAILED, (7) resolver variables en subject y bodyTemplate con `TemplateEngine`, (8) enviar email via `EmailSenderPort`, (9) guardar historial SENT. Aplicar retry con backoff exponencial (3 reintentos: 1s, 2s, 4s) solo para errores transitorios. Errores permanentes registran FAILED sin reintentar. Capturar `DuplicateKeyException` de MongoDB al guardar historial como evento duplicado sin propagar error.
     - **CRÍTICO**: Generar con Scaffold: `cd ms-notifications && ./gradlew generateUseCase --name=ProcessNotification`
     - Usar operadores reactivos: `flatMap`, `switchIfEmpty`, `retryWhen(Retry.backoff(...))`, `onErrorResume`
     - _Requisitos: 1.3, 1.4, 1.5, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5, 8.1, 8.4, 9.1, 9.2, 9.3, 9.4, 9.5_
@@ -160,7 +160,7 @@ Antes de comenzar la implementación, verificar que se han consultado estos comp
     - Crear mapper estático `NotificationTemplateMapper` con métodos `toEntity()` y `toData()`
     - Usar `ReactiveMongoTemplate` para consultas (NO Spring Data Repository — mayor control sobre queries)
     - _Requisitos: 2.1, 2.2_
-  - [ ] 6.2 Implementar `MongoHistoryAdapter` (implementa `NotificationHistoryRepository`): operaciones `existsByEventId` (consulta por eventId, retorna `Mono<Boolean>`) y `save` (inserta documento en `notification_history`). Capturar `DuplicateKeyException` en `save` y tratarla como evento duplicado sin propagar error.
+  - [x] 6.2 Implementar `MongoHistoryAdapter` (implementa `NotificationHistoryRepository`): operaciones `existsByEventId` (consulta por eventId, retorna `Mono<Boolean>`) y `save` (inserta documento en `notification_history`). Capturar `DuplicateKeyException` en `save` y tratarla como evento duplicado sin propagar error.
     - **PATRÓN DE IDEMPOTENCIA (reusability.md #3):** Aunque ms-notifications usa `notification_history.eventId` en lugar de tabla `processed_events`, el patrón de verificación es el mismo:
       1. `existsByEventId()` antes de procesar
       2. Si existe → descartar (log DEBUG)
@@ -169,15 +169,15 @@ Antes de comenzar la implementación, verificar que se han consultado estos comp
     - Crear DTO `NotificationHistoryData` con campos del documento MongoDB
     - Crear mapper estático `NotificationHistoryMapper`
     - _Requisitos: 1.3, 8.1, 8.2, 8.4_
-  - [ ] 6.3 Implementar `SesEmailAdapter` (implementa `EmailSenderPort`): envolver llamada al SDK bloqueante de AWS SES con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`. Construir `SendEmailRequest` con source (from-address configurable), destination (to), subject y body HTML. Clasificar errores de SES: `SdkClientException` (timeout) → transitorio, `SesException` HTTP 429/5xx → transitorio, `MessageRejectedException` → permanente, `MailFromDomainNotVerifiedException` → permanente. Lanzar `EmailSendException` con flag `transient` según clasificación.
+  - [x] 6.3 Implementar `SesEmailAdapter` (implementa `EmailSenderPort`): envolver llamada al SDK bloqueante de AWS SES con `Mono.fromCallable(...).subscribeOn(Schedulers.boundedElastic())`. Construir `SendEmailRequest` con source (from-address configurable), destination (to), subject y body HTML. Clasificar errores de SES: `SdkClientException` (timeout) → transitorio, `SesException` HTTP 429/5xx → transitorio, `MessageRejectedException` → permanente, `MailFromDomainNotVerifiedException` → permanente. Lanzar `EmailSendException` con flag `transient` según clasificación.
     - **CRÍTICO**: Generar módulo con Scaffold: `cd ms-notifications && ./gradlew generateDrivenAdapter --type=generic --name=ses-adapter`
     - **PATRÓN BLOQUEANTE → REACTIVO:** Envolver SDK bloqueante con `Mono.fromCallable(() -> { /* llamada bloqueante */ }).subscribeOn(Schedulers.boundedElastic()).then()`
     - Obtener credenciales de AWS SES desde AWS Secrets Manager (usar driven-adapter `secrets` si es necesario)
     - Crear excepción `EmailSendException extends DomainException` con campo `boolean transient`
     - _Requisitos: 3.1, 3.2, 3.6, 9.5_
 
-- [ ] 7. Implementar entry-point Kafka (`infrastructure/entry-points`)
-  - [ ] 7.1 Implementar `KafkaNotificationConsumer`, `KafkaConsumerConfig` y `KafkaConsumerLifecycle`
+- [x] 7. Implementar entry-point Kafka (`infrastructure/entry-points`)
+  - [x] 7.1 Implementar `KafkaNotificationConsumer`, `KafkaConsumerConfig` y `KafkaConsumerLifecycle`
     - **CRÍTICO — COPIAR Y ADAPTAR (reusability.md #6):** Este es el componente más importante para reutilizar
     - **PASO 1:** Crear módulo `kafka-consumer` en `infrastructure/entry-points/` con Scaffold:
       ```bash
@@ -217,8 +217,8 @@ Antes de comenzar la implementación, verificar que se han consultado estos comp
     - Generar eventos de cada tipo relevante (6 tipos) con plantilla activa y payload completo. Verificar que el subject y bodyTemplate resueltos contienen los valores de todas las variables especificadas para ese tipo de evento y no queda ningún marcador `{{...}}` sin resolver.
     - **Valida: Requisitos 4.4, 5.4, 6.4, 7.4, 11.4, 12.4**
 
-- [ ] 8. Integración final y configuración de Spring
-  - [ ] 8.1 Configurar beans de Spring en `app-service`: inyección de dependencias para `ProcessNotificationUseCase`, `TemplateEngine`, `EventStrategyFactory` (con las 6 estrategias registradas: 4 de Fase 1 + 2 de Fase 2), adaptadores MongoDB (`MongoTemplateAdapter`, `MongoHistoryAdapter`), `SesEmailAdapter` y `KafkaNotificationConsumer`. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio ("=== ms-notifications iniciado correctamente ===").
+- [x] 8. Integración final y configuración de Spring
+  - [x] 8.1 Configurar beans de Spring en `app-service`: inyección de dependencias para `ProcessNotificationUseCase`, `TemplateEngine`, `EventStrategyFactory` (con las 6 estrategias registradas: 4 de Fase 1 + 2 de Fase 2), adaptadores MongoDB (`MongoTemplateAdapter`, `MongoHistoryAdapter`), `SesEmailAdapter` y `KafkaNotificationConsumer`. Agregar `@ConfigurationPropertiesScan` y `CommandLineRunner` de log de inicio ("=== ms-notifications iniciado correctamente ===").
     - Inyectar `notification.from-address` y `notification.admin-email` desde propiedades
     - _Requisitos: transversal_
 

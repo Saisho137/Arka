@@ -31,7 +31,12 @@
   - [5.1 ms-inventory — ReserveStock (puerto 9090)](#51-ms-inventory--reservestock-puerto-9090)
   - [5.2 ms-catalog — GetProductInfo (puerto 9091)](#52-ms-catalog--getproductinfo-puerto-9091)
 - [6. Kafka UI](#6-kafka-ui)
-- [7. Demostración de Historias de Usuario (HUs)](#7-demostración-de-historias-de-usuario-hus)
+- [7. ms-notifications — Puerto 8085](#7-ms-notifications--puerto-8085)
+- [8. Demostración de Historias de Usuario (HUs)](#8-demostración-de-historias-de-usuario-hus)
+  - [HU1 — Registrar productos en el sistema](#hu1--registrar-productos-en-el-sistema)
+  - [HU2 — Actualizar stock de productos](#hu2--actualizar-stock-de-productos)
+  - [HU4 — Registrar una orden de compra](#hu4--registrar-una-orden-de-compra)
+  - [HU6 — Notificación de cambio de estado del pedido](#hu6--notificación-de-cambio-de-estado-del-pedido)
   - [HU1 — Registrar productos en el sistema](#hu1--registrar-productos-en-el-sistema)
   - [HU2 — Actualizar stock de productos](#hu2--actualizar-stock-de-productos)
   - [HU4 — Registrar una orden de compra](#hu4--registrar-una-orden-de-compra)
@@ -959,7 +964,68 @@ open http://localhost:8080
 
 ---
 
-## 7. Demostración de Historias de Usuario (HUs)
+## 7. ms-notifications — Puerto 8085
+
+> Microservicio event-driven. No expone endpoints REST públicos — su único entry-point es el consumer Kafka.
+> Consume `order-events` e `inventory-events`. Envía correos transaccionales vía AWS SES (LocalStack en local).
+
+### 7.1 Health Check
+
+```bash
+curl -s http://localhost:8085/actuator/health | jq
+```
+
+### 7.2 Enviar correo de prueba (endpoint de debug)
+
+```bash
+# Correo de prueba con parámetros por defecto
+curl -s -X POST "http://localhost:8085/api/test/send-email?to=customer1@arka.com" | jq
+
+# Con asunto y cuerpo personalizados
+curl -s -X POST "http://localhost:8085/api/test/send-email?to=admin@arka.com&subject=Prueba%20Arka&body=Hola%20desde%20ms-notifications" | jq
+```
+
+### 7.3 Ver todos los correos enviados (LocalStack SES)
+
+> **URL:** http://localhost:4566/_aws/ses
+>
+> Muestra **todos los correos enviados** por AWS SES simulado (LocalStack).
+> Cada evento procesado (`OrderConfirmed`, `OrderCancelled`, `OrderStatusChanged`, `StockDepleted`) genera un correo visible aquí.
+
+```bash
+# Listar correos enviados (JSON)
+curl -s http://localhost:4566/_aws/ses | jq
+
+# Abrir en navegador
+open http://localhost:4566/_aws/ses
+```
+
+**Flujo de verificación end-to-end:**
+
+1. Crear una orden (sección 4.1)
+2. Simular pago `PaymentProcessed` en Kafka UI (sección 4.2)
+3. ms-order emite `OrderConfirmed` → ms-notifications lo consume → envía correo
+4. Verificar el correo de confirmación: `curl -s http://localhost:4566/_aws/ses | jq`
+
+```bash
+# Ver el último correo enviado
+curl -s http://localhost:4566/_aws/ses | jq '.[-1]'
+
+# Ver destinatarios de todos los correos
+curl -s http://localhost:4566/_aws/ses | jq '[.[] | {to: .Destination.ToAddresses, subject: .Message.Subject.Data}]'
+```
+
+### 7.4 Swagger / OpenAPI
+
+```bash
+open http://localhost:8085/swagger-ui.html
+
+curl -s http://localhost:8085/api-docs | jq
+```
+
+---
+
+## 8. Demostración de Historias de Usuario (HUs)
 
 > **Flujo de presentación sugerido (40 min):**
 >
@@ -1244,12 +1310,17 @@ curl -s http://localhost:8081/api/v1/orders/<NEW_ORDER_ID> \
 # Esperado: status: "CONFIRMADO"
 ```
 
-#### Paso 6 — Verificar eventos en Kafka UI
+#### Paso 7 — Verificar eventos y correos enviados
 
-```text
+```
 → http://localhost:8080 → Tópicos: order-events, inventory-events, payment-events
 → order-events:     OrderCreated (al crear la orden) + OrderConfirmed (tras pago exitoso)
 → inventory-events: StockReserved (al reservar stock)
+```
+
+```bash
+# Verificar correo de confirmación enviado por ms-notifications
+curl -s http://localhost:4566/_aws/ses | jq '[.[] | {to: .Destination.ToAddresses, subject: .Message.Subject.Data}]'
 ```
 
 #### Paso 7 — Demostrar stock insuficiente (fallo rápido)
@@ -1298,7 +1369,7 @@ curl -s http://localhost:8081/api/v1/orders/<NEW_ORDER_ID_2> \
 **Criterios de aceptación:**
 
 - ✅ Estados: pendiente, confirmado, en despacho, entregado
-- ⚠️ Notificación por correo (ms-notifications consume eventos pero aún no envía email — pendiente Fase 2)
+- ✅ Notificación por correo vía AWS SES (ms-notifications activo — ver correos en http://localhost:4566/_aws/ses)
 - ✅ Cambios de estado publicados como eventos Kafka (`OrderStatusChanged`)
 
 #### Paso 1 — Ver ciclo de vida completo con órdenes seed
@@ -1378,9 +1449,9 @@ curl -s "http://localhost:8081/api/v1/orders?page=0&size=20" \
 >
 > - **`PENDIENTE_PAGO → CONFIRMADO`** ocurre vía Kafka (ms-payment o simulación manual)
 > - **`CONFIRMADO → EN_DESPACHO → ENTREGADO`** son transiciones manuales por Admin
-> - Aunque ms-notifications aún no envía correos (pendiente), los eventos `OrderStatusChanged`
->   y `OrderConfirmed` ya se publican a Kafka. Cuando ms-notifications implemente su consumer,
->   recibirá estos eventos automáticamente y enviará el correo vía AWS SES.
+> - ms-notifications **está activo** y consume `order-events`. Los correos de `OrderConfirmed`,
+>   `OrderStatusChanged` y `OrderCancelled` se envían automáticamente vía AWS SES.
+> - **Ver correos enviados:** http://localhost:4566/_aws/ses
 
 ---
 
@@ -1449,6 +1520,6 @@ docker exec arka-kafka kafka-consumer-groups --bootstrap-server localhost:29092 
 | HU3 | Reportes de bajo stock                | ms-reporter      | ❌ Pendiente                                                        | No           |
 | HU4 | Registrar orden de compra             | ms-order         | ✅ Implementado (Fase 2: PENDIENTE_PAGO → simular pago en Kafka UI) | Sí           |
 | HU5 | Modificar orden antes de confirmación | ms-order         | ❌ Pendiente                                                        | No           |
-| HU6 | Notificación de cambio de estado      | ms-order + Kafka | ✅ Parcial                                                          | Sí (eventos) |
+| HU6 | Notificación de cambio de estado      | ms-order + ms-notifications | ✅ Implementado (correos activos vía SES — ver http://localhost:4566/_aws/ses) | Sí |}
 | HU7 | Reportes semanales de ventas          | ms-reporter      | ❌ Pendiente                                                        | No           |
 | HU8 | Carritos abandonados                  | ms-cart          | ❌ Pendiente                                                        | No           |

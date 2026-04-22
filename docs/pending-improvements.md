@@ -43,4 +43,5 @@
 
 ### General
 
-- [ ] **ms-notifications, ms-cart, ms-payment, ms-shipping, ms-provider:** Sin endpoints REST implementados (diferidos a sus fases respectivas)
+- [ ] **ms-cart, ms-payment, ms-shipping, ms-provider:** Sin endpoints REST implementados (diferidos a sus fases respectivas)
+- [x] **ms-notifications:** Implementado como consumer Kafka puro (event-driven). Envía correos vía AWS SES. Expone `POST /api/test/send-email` solo para debug. Ver correos enviados en http://localhost:4566/_aws/ses
