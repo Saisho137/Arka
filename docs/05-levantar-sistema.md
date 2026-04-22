@@ -37,7 +37,7 @@
 | `ms-order`         | 8081   | postgres-orders, localstack, kafka, ms-inventory      |
 | `ms-notifications` | 8085   | mongo-init-replica, localstack, kafka                 |
 | `ms-cart`          | 8086   | mongo-init-replica, localstack, kafka, ms-catalog     |
-| `ms-payment`       | 8083   | postgres-payment, localstack, kafka                   |
+| `ms-payment`       | 8083   | kafka                                                 |
 | `ms-reporter`      | 8087   | postgres-reporter, localstack, kafka                  |
 | `ms-shipping`      | 8088   | postgres-shipping, localstack, kafka                  |
 | `ms-provider`      | 8089   | postgres-provider, localstack, kafka                  |

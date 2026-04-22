@@ -2,17 +2,17 @@
 
 ## Mapa de Servicios
 
-| Servicio         | Dominio                                  | BD                        | Paradigma  | Puerto | Fase |
-| ---------------- | ---------------------------------------- | ------------------------- | ---------- | ------ | ---- |
-| ms-catalog       | Catálogo de productos + reseñas anidadas | MongoDB + Redis           | Reactivo   | 8084   | 1    |
-| ms-inventory     | Stock, reservas, lock pesimista          | PostgreSQL 17 (R2DBC)     | Reactivo   | 8082   | 1    |
-| ms-order         | Pedidos, Saga orchestrator               | PostgreSQL 17 (R2DBC)     | Reactivo   | 8081   | 1    |
-| ms-notifications | Alertas y correos (AWS SES)              | MongoDB                   | Reactivo   | 8085   | 1    |
-| ms-cart          | Carrito de compras, abandono             | MongoDB                   | Reactivo   | 8086   | 2    |
-| ms-payment       | Pagos ACL (Stripe/Wompi/MercadoPago)     | PostgreSQL 17 (R2DBC)     | Reactivo   | 8083   | 2    |
-| ms-reporter      | Reportes, CQRS, Event Sourcing           | PostgreSQL 17 (JDBC) + S3 | Imperativo | 8087   | 3    |
-| ms-shipping      | Logística ACL (DHL/FedEx/Legacy)         | PostgreSQL 17 (R2DBC)     | Reactivo   | 8088   | 3    |
-| ms-provider      | Proveedores B2B ACL                      | PostgreSQL 17 (R2DBC)     | Reactivo   | 8089   | 4    |
+| Servicio         | Dominio                                  | BD                         | Paradigma  | Puerto | Fase |
+| ---------------- | ---------------------------------------- | -------------------------- | ---------- | ------ | ---- |
+| ms-catalog       | Catálogo de productos + reseñas anidadas | MongoDB + Redis            | Reactivo   | 8084   | 1    |
+| ms-inventory     | Stock, reservas, lock pesimista          | PostgreSQL 17 (R2DBC)      | Reactivo   | 8082   | 1    |
+| ms-order         | Pedidos, Saga orchestrator               | PostgreSQL 17 (R2DBC)      | Reactivo   | 8081   | 1    |
+| ms-notifications | Alertas y correos (AWS SES)              | MongoDB                    | Reactivo   | 8085   | 1    |
+| ms-cart          | Carrito de compras, abandono             | MongoDB                    | Reactivo   | 8086   | 2    |
+| ms-payment       | Pagos mock (80% éxito / 20% fallo)       | Sin BD (event-driven puro) | Reactivo   | 8083   | 2    |
+| ms-reporter      | Reportes, CQRS, Event Sourcing           | PostgreSQL 17 (JDBC) + S3  | Imperativo | 8087   | 3    |
+| ms-shipping      | Logística ACL (DHL/FedEx/Legacy)         | PostgreSQL 17 (R2DBC)      | Reactivo   | 8088   | 3    |
+| ms-provider      | Proveedores B2B ACL                      | PostgreSQL 17 (R2DBC)      | Reactivo   | 8089   | 4    |
 
 ---
 
@@ -84,10 +84,13 @@
 
 ### ms-payment (HU5 — Pagos)
 
-- ACL para pasarelas: Stripe, Wompi, Mercado Pago
-- SDKs bloqueantes aislados con `Schedulers.boundedElastic()`
-- Idempotencia rigurosa (Unique Constraints anti-cobros dobles)
-- Circuit Breaker + Bulkhead (Resilience4j)
+> **Implementación mock.** No integra pasarelas reales. Simula el procesamiento de pago con `Random` (80 % éxito, 20 % fallo) sin base de datos ni persistencia.
+
+- Consume `OrderCreated` del tópico `order-events`
+- Genera `PaymentProcessed` (80 %) o `PaymentFailed` (20 %) con `Random.nextDouble()`
+- Publica el resultado a `payment-events` con `orderId` como partition key
+- **Sin:** R2DBC, Outbox, idempotencia, Circuit Breaker, Secrets Manager, REST endpoints, SDKs de pasarelas
+- Patron Kafka Consumer: `KafkaReceiver` (reactor-kafka directo — `ReactiveKafkaConsumerTemplate` eliminado en spring-kafka 4.0)
 - Eventos Kafka: `PaymentProcessed`, `PaymentFailed`
 
 ---

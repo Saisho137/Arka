@@ -114,7 +114,7 @@ ms-payment/
 
 ### Tarea 1 — Configurar dependencias y application.yaml
 
-- [ ] 1.1 Agregar dependencias en `build.gradle` (app-service) y `main.gradle`:
+- [x] 1.1 Agregar dependencias en `build.gradle` (app-service) y `main.gradle`:
   - `io.projectreactor.kafka:reactor-kafka:1.3.25` (en módulo kafka-producer y kafka-consumer cuando se creen)
   - `spring-kafka` (del BOM de Spring Boot — sin versión)
   - `jackson-databind` (del BOM)
@@ -122,7 +122,7 @@ ms-payment/
   - **NO** agregar: R2DBC, MongoDB, Redis, Resilience4j, AWS SDK, gRPC
   - _Versiones de la tabla "Versionado Unificado" de `reusability.md`. Referencia: `ms-inventory/build.gradle` + `ms-inventory/main.gradle`._
 
-- [ ] 1.2 Crear `application.yaml` (base), `application-local.yaml` y `application-docker.yaml`:
+- [x] 1.2 Crear `application.yaml` (base), `application-local.yaml` y `application-docker.yaml`:
   - **Base (`application.yaml`):**
     ```yaml
     spring:
@@ -158,7 +158,7 @@ ms-payment/
 
 ### Tarea 2 — Implementar modelo de dominio (`domain/model`)
 
-- [ ] 2.1 Generar módulo con Scaffold y crear los records de dominio mínimos:
+- [x] 2.1 Generar módulo con Scaffold y crear los records de dominio mínimos:
 
   ```bash
   cd ms-payment && ./gradlew generateModel --name=Payment
@@ -171,13 +171,13 @@ ms-payment/
   - **`PaymentFailedPayload`** — record con `UUID orderId`, `String reason`
     - `@Builder(toBuilder = true)`, Lombok
 
-- [ ] 2.2 Crear `DomainEventEnvelope` en `com.arka.model.payment.event`:
+- [x] 2.2 Crear `DomainEventEnvelope` en `com.arka.model.payment.event`:
   - **Copiar** de `ms-order/domain/model/src/main/java/com/arka/model/outboxevent/DomainEventEnvelope.java`
   - Cambiar la constante `MS_SOURCE = "ms-payment"` (único cambio)
   - Campos: `eventId`, `eventType`, `timestamp`, `source`, `correlationId`, `payload` (Object)
   - Compact constructor con `Objects.requireNonNull` y defaults para `timestamp` y `source`
 
-- [ ] 2.3 Crear el port (interfaz Gateway) `PaymentEventPublisher` en `com.arka.model.payment.gateways`:
+- [x] 2.3 Crear el port (interfaz Gateway) `PaymentEventPublisher` en `com.arka.model.payment.gateways`:
   - Un único método:
     ```java
     Mono<Void> publishPaymentEvent(String orderId, DomainEventEnvelope envelope);
@@ -188,13 +188,13 @@ ms-payment/
 
 ### Tarea 3 — Implementar caso de uso (`domain/usecase`)
 
-- [ ] 3.1 Generar UseCase con Scaffold:
+- [x] 3.1 Generar UseCase con Scaffold:
 
   ```bash
   cd ms-payment && ./gradlew generateUseCase --name=ProcessPayment
   ```
 
-- [ ] 3.2 Implementar `ProcessPaymentUseCase` en `com.arka.usecase.processPayment`:
+- [x] 3.2 Implementar `ProcessPaymentUseCase` en `com.arka.usecase.processPayment`:
   - Dependencia inyectada: `PaymentEventPublisher` (port del modelo)
   - Método público principal:
     ```java
@@ -216,7 +216,7 @@ ms-payment/
 
 ### Tarea 4 — Implementar Kafka Producer (driven adapter)
 
-- [ ] 4.1 Generar módulo con Scaffold:
+- [x] 4.1 Generar módulo con Scaffold:
 
   ```bash
   cd ms-payment && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer
@@ -224,7 +224,7 @@ ms-payment/
 
   > El tipo `generic` crea un módulo vacío. El tipo `kafka` genera un producer de bajo nivel; para este mock usamos `generic` para tener control total con `KafkaSender` de reactor-kafka.
 
-- [ ] 4.2 Implementar `KafkaPaymentProducer` en `com.arka.producer` (implementa `PaymentEventPublisher`):
+- [x] 4.2 Implementar `KafkaPaymentProducer` en `com.arka.producer` (implementa `PaymentEventPublisher`):
   - **Copiar y adaptar** de `ms-inventory/infrastructure/driven-adapters/kafka-producer/` (reusability.md #2)
   - Dependencias del módulo: `io.projectreactor.kafka:reactor-kafka:1.3.25`, `com.fasterxml.jackson.core:jackson-databind`
   - Bean `KafkaSender<String, String>` configurado con `SenderOptions.create(producerProperties)`
@@ -235,20 +235,20 @@ ms-payment/
     - Retornar `Mono<Void>`
   - Log INFO: `"Published {} event for orderId={}"` con eventType y orderId
 
-- [ ] 4.3 Agregar al `settings.gradle` el nuevo módulo generado por Scaffold:
+- [x] 4.3 Agregar al `settings.gradle` el nuevo módulo generado por Scaffold:
   - Verificar que `kafka-producer` quedó incluido (Scaffold lo hace automáticamente, pero confirmar).
 
 ---
 
 ### Tarea 5 — Implementar Kafka Consumer (entry point)
 
-- [ ] 5.1 Generar módulo con Scaffold:
+- [x] 5.1 Generar módulo con Scaffold:
 
   ```bash
   cd ms-payment && ./gradlew generateEntryPoint --type=kafka
   ```
 
-- [ ] 5.2 Implementar `KafkaConsumerConfig` en `com.arka.consumer`:
+- [x] 5.2 Implementar `KafkaConsumerConfig` en `com.arka.consumer`:
   - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaConsumerConfig.java`
   - Crear un único bean `@Bean @Qualifier("orderEventsReceiver") KafkaReceiver<String, String>`:
     - Consumer group: `payment-service-group`
@@ -256,7 +256,7 @@ ms-payment/
     - Propiedades tomadas del `application.yaml`
   - Dependencia del módulo: `io.projectreactor.kafka:reactor-kafka:1.3.25`
 
-- [ ] 5.3 Implementar `KafkaEventConsumer` en `com.arka.consumer`:
+- [x] 5.3 Implementar `KafkaEventConsumer` en `com.arka.consumer`:
   - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaEventConsumer.java`
   - Dependencias: `ProcessPaymentUseCase`, `KafkaReceiver<String, String>` (qualifier `orderEventsReceiver`), `ObjectMapper`
   - Método `startConsuming()`: suscribe al receiver con `receive().flatMap(...)`
@@ -270,7 +270,7 @@ ms-payment/
   - Acknowledge de offset siempre (even on error), para no frenar el consumer group
   - Log DEBUG al inicio de cada `OrderCreated` recibido
 
-- [ ] 5.4 Implementar `KafkaConsumerLifecycle` en `com.arka.consumer`:
+- [x] 5.4 Implementar `KafkaConsumerLifecycle` en `com.arka.consumer`:
   - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaConsumerLifecycle.java`
   - Escuchar `ApplicationReadyEvent` con `@EventListener`
   - Llamar a `kafkaEventConsumer.startConsuming()`
@@ -280,14 +280,14 @@ ms-payment/
 
 ### Tarea 6 — Configurar app-service y wiring
 
-- [ ] 6.1 Verificar que `MainApplication.java` existe y está correctamente anotado con `@SpringBootApplication`.
+- [x] 6.1 Verificar que `MainApplication.java` existe y está correctamente anotado con `@SpringBootApplication`.
   - Si no existe, crearlo en `com.arka` bajo `applications/app-service/src/main/java/com/arka/`.
 
-- [ ] 6.2 Crear bean de configuración `AppConfig` (o en `MainApplication`) que registre el `KafkaPaymentProducer` como implementación del port `PaymentEventPublisher`:
+- [x] 6.2 Crear bean de configuración `AppConfig` (o en `MainApplication`) que registre el `KafkaPaymentProducer` como implementación del port `PaymentEventPublisher`:
   - Esto se resuelve automáticamente si `KafkaPaymentProducer` está anotado con `@Component` e implementa `PaymentEventPublisher`. Confirmar que Spring DI conecta el port correctamente.
   - Si app-service no tiene dependencia directa del módulo `kafka-producer`, agregar `implementation project(':kafka-producer')` en `applications/app-service/build.gradle`.
 
-- [ ] 6.3 Verificar `settings.gradle` incluye todos los módulos generados:
+- [x] 6.3 Verificar `settings.gradle` incluye todos los módulos generados:
   ```groovy
   include ':app-service'
   include ':model'
@@ -301,7 +301,7 @@ ms-payment/
 
 ### Tarea 7 — Validación y compilación
 
-- [ ] 7.1 Ejecutar validación de estructura:
+- [x] 7.1 Ejecutar validación de estructura:
 
   ```bash
   cd ms-payment && ./gradlew validateStructure
@@ -309,7 +309,7 @@ ms-payment/
 
   Corregir cualquier violación de Clean Architecture reportada.
 
-- [ ] 7.2 Compilar el proyecto completo:
+- [x] 7.2 Compilar el proyecto completo:
 
   ```bash
   cd ms-payment && ./gradlew build -x test
@@ -317,14 +317,14 @@ ms-payment/
 
   Resolver errores de compilación. No avanzar si hay errores.
 
-- [ ] 7.3 Agregar ms-payment al `compose.yaml` raíz:
+- [x] 7.3 Agregar ms-payment al `compose.yaml` raíz:
   - Usar el mismo patrón que `ms-catalog`, `ms-inventory` u `ms-order`
   - Puerto sugerido: `8084` (verificar `docs/10-urls-puertos-globales.md` para no colisionar)
   - Variables de entorno: `SPRING_PROFILES_ACTIVE=docker`
   - Dependencias Docker: `arka-kafka`
   - **NO** agregar dependencia de `arka-postgres` (sin BD)
 
-- [ ] 7.4 Construir imagen Docker:
+- [x] 7.4 Construir imagen Docker:
 
   ```bash
   cd ms-payment && ./gradlew :app-service:bootBuildImage
@@ -332,7 +332,7 @@ ms-payment/
 
   Verificar que la imagen construye sin errores.
 
-- [ ] 7.5 Smoke test end-to-end:
+- [x] 7.5 Smoke test end-to-end:
 
   ```bash
   # Levantar el ecosistema mínimo
