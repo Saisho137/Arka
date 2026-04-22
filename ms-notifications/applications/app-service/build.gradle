@@ -1,12 +1,20 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+    implementation project(':mongo-repository')
+    implementation project(':ses-email')
+    implementation project(':kafka-consumer')
     implementation project(':model')
     implementation project(':usecase')
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'tools.jackson.core:jackson-databind'
+    implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2'
     runtimeOnly('org.springframework.boot:spring-boot-devtools')
     testImplementation 'com.tngtech.archunit:archunit:1.4.1'
     testImplementation 'tools.jackson.core:jackson-databind'
+    testImplementation 'org.mockito:mockito-core'
 }
 
 tasks.register('explodedJar', Copy) {
@@ -23,4 +31,3 @@ bootJar {
     // Sets output jar name
     archiveFileName = "${project.getParent().getName()}.${archiveExtension.get()}"
 }
-

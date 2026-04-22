@@ -1,5 +1,10 @@
 # Perfil LOCAL — desarrollo desde IntelliJ sin Docker
 spring:
-  data:
-    mongodb:
-      uri: mongodb://arka:arkaSecret2025@localhost:27017/db_notifications?authSource=admin
+  mongodb:
+    uri: "mongodb://arka:arkaSecret2025@127.0.0.1:27017/db_notifications?authSource=admin&uuidRepresentation=standard"
+  kafka:
+    bootstrap-servers: localhost:9092
+
+aws:
+  ses:
+    endpoint: "http://localhost:4566"

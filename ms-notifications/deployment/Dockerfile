@@ -2,15 +2,22 @@
 FROM gradle:9.4-jdk21 AS builder
 WORKDIR /myapp
 
+# Copiar wrapper y configuración primero (mejor cache de capas)
+COPY gradle/ gradle/
+COPY gradlew gradlew
+COPY *.gradle ./
+COPY gradle.properties gradle.properties
+COPY lombok.config lombok.config
+
+# Copiar código fuente
 COPY applications applications
 COPY domain domain
 COPY infrastructure infrastructure
-COPY *.gradle .
-COPY lombok.* .
-COPY gradlew.* .
-COPY gradle.* .
 
-RUN gradle build -x test --no-daemon
+RUN gradle build -x test --no-daemon \
+    --no-configuration-cache \
+    --max-workers=2 \
+    -Dorg.gradle.jvmargs="-Xmx768m -XX:MaxMetaspaceSize=384m -XX:+UseSerialGC"
 
 # ── Stage 2: Run ──
 FROM amazoncorretto:21-alpine

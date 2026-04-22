@@ -1,11 +1,51 @@
 server:
-  port: ${MS_NOTIFICATIONS_PORT:8085}
+  port: "${MS_NOTIFICATIONS_PORT:8085}"
 
 spring:
   application:
-    name: ms-notifications
+    name: "ms-notifications"
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
-  data:
-    mongodb:
-      uri: mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_notifications?authSource=admin
+    active: "${SPRING_PROFILES_ACTIVE:local}"
+  mongodb:
+    uri: "mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@arka-mongodb:27017/db_notifications?authSource=admin&replicaSet=rs0&uuidRepresentation=standard"
+  kafka:
+    bootstrap-servers: kafka:29092
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+notification:
+  from-address: noreply@arka.com
+  admin-email: admin@arka.com
+
+aws:
+  ses:
+    endpoint: "http://${LOCALSTACK_HOST:arka-localstack}:${LOCALSTACK_PORT:4566}"
+    region: ${AWS_REGION:us-east-1}
+    access-key: ${AWS_ACCESS_KEY_ID:test}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus"
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+  show-actuator: false
+
+logging:
+  level:
+    com.arka: DEBUG
+    org.mongodb.driver: WARN
+

@@ -1,5 +1,10 @@
 # Perfil DOCKER — cuando corre dentro de Docker Compose
 spring:
-  data:
-    mongodb:
-      uri: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@arka-mongodb:27017/db_notifications?authSource=admin
+  mongodb:
+    uri: "mongodb://${MONGO_USER}:${MONGO_PASSWORD}@arka-mongodb:27017/db_notifications?authSource=admin&replicaSet=rs0&uuidRepresentation=standard"
+  kafka:
+    bootstrap-servers: kafka:29092
+
+aws:
+  ses:
+    endpoint: "http://${LOCALSTACK_HOST:arka-localstack}:${LOCALSTACK_PORT:4566}"
