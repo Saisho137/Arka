@@ -1,4 +1,9 @@
-# 12 — Colección de cURLs — Arka E-Commerce B2B
+---
+sidebar_position: 12
+title: Colección de cURLs
+---
+
+# Colección de cURLs — Arka E-Commerce B2B
 
 > **Objetivo:** Tener TODOS los cURLs listos para lanzar durante la presentación de 40 min.
 > Cada comando usa data real del sistema (PostgreSQL seed + datos creados en MongoDB).

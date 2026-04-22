@@ -1,4 +1,9 @@
-# Pending Improvements — Arka
+---
+sidebar_position: 14
+title: Mejoras Pendientes
+---
+
+# Mejoras Pendientes — Arka
 
 > Registro de mejoras pendientes y deuda técnica identificada.
 

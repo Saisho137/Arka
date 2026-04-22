@@ -1,4 +1,9 @@
-# Documentación: Estado de Kafka Reactivo en Spring Boot 4.x
+---
+sidebar_position: 13
+title: "Referencia: Kafka Reactivo en Spring Boot 4.x"
+---
+
+# Estado de Kafka Reactivo en Spring Boot 4.x
 
 ## 1. El Problema Central: Fin de Vida de `reactor-kafka`
 

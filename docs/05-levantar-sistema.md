@@ -1,4 +1,9 @@
-# 05 — Cómo Levantar el Sistema
+---
+sidebar_position: 9
+title: Cómo Levantar el Sistema
+---
+
+# Cómo Levantar el Sistema
 
 ## Prerequisitos
 

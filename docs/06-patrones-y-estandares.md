@@ -1,4 +1,9 @@
-# 06 — Patrones y Estándares de Código (Referencia Rápida)
+---
+sidebar_position: 8
+title: Estándares de Código
+---
+
+# Patrones y Estándares de Código
 
 > Resumen ejecutivo del documento normativo. Define QUÉ se usa y POR QUÉ, sin ejemplos de implementación.
 

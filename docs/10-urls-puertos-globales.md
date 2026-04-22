@@ -1,4 +1,9 @@
-# 10 — Puertos e Interfaces del Sistema
+---
+sidebar_position: 10
+title: Puertos e Interfaces
+---
+
+# Puertos e Interfaces del Sistema
 
 > Mapa completo de todos los puertos, UIs, herramientas de observabilidad y conexiones a bases de datos expuestos por el ecosistema. **No incluye endpoints REST de controllers** (ver [04-api-endpoints.md](04-api-endpoints.md)).
 

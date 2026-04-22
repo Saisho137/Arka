@@ -1,4 +1,9 @@
-# 04 — API Endpoints (Implementados)
+---
+sidebar_position: 7
+title: API Endpoints
+---
+
+# API Endpoints (Implementados)
 
 > Solo los endpoints que **existen actualmente** en el código.
 

@@ -1,4 +1,9 @@
-# 01 — Arquitectura del Sistema
+---
+sidebar_position: 2
+title: Arquitectura del Sistema
+---
+
+# Arquitectura del Sistema
 
 ## Visión General
 
@@ -43,14 +48,21 @@ Paquete base: `com.arka`
 
 ## Seguridad — Zero Trust
 
-- **API Gateway** es el único punto expuesto a internet
-- JWT validado contra Microsoft Entra ID / AWS Cognito
-- Tenant Restrictions bloquea dominios públicos (`@gmail.com`) para mantener enfoque B2B
-- Header `X-User-Email` inyectado hacia la VPC privada
-- RBAC: 2 roles — `CUSTOMER` (cliente B2B), `ADMIN` (personal interno)
-- Rate Limiting: 100 req/s por IP
-- Microservicios 100% stateless
-- BFF descartado permanentemente
+| Aspecto               | Implementación                                                              |
+| --------------------- | --------------------------------------------------------------------------- |
+| Modelo                | Zero Trust — API Gateway como único punto expuesto a internet               |
+| Autenticación         | JWT validado contra Microsoft Entra ID / AWS Cognito (Federated Identities) |
+| Tenant Restrictions   | Bloqueo de dominios públicos (`@gmail.com`) para garantizar enfoque B2B     |
+| Autorización          | RBAC con 2 roles: `CUSTOMER` (cliente B2B), `ADMIN` (personal interno)      |
+| HTTPS                 | Obligatorio vía API Gateway (SSL Termination)                               |
+| Propagación Identidad | Header `X-User-Email` inyectado por API Gateway hacia la VPC privada        |
+| BD protegida          | PostgreSQL 17 y MongoDB en subnet privada                                   |
+| Kafka protegido       | MSK en subnet privada con SASL authentication                               |
+| Secrets               | AWS Secrets Manager para credenciales y configuración sensible              |
+| Rate Limiting         | 100 req/s por IP en API Gateway                                             |
+| Validación de input   | Bean Validation (`@NotNull`, `@Size`, `@Positive`) en cada servicio         |
+| Microservicios        | 100% stateless — no almacenan sesión ni tokens localmente                   |
+| BFF                   | Descartado permanentemente                                                  |
 
 ## Comunicación Interna
 
@@ -87,25 +99,6 @@ Paquete base: `com.arka`
 ## Diagramas
 
 Ver [docs/diagramas/README.md](diagramas/README.md) para los diagramas C1 y C2 completos en Mermaid y sus imágenes renderizadas.
-
----
-
-## Seguridad (Detalle)
-
-| Aspecto               | Implementación                                                              |
-| --------------------- | --------------------------------------------------------------------------- |
-| Modelo de Seguridad   | Zero Trust — API Gateway como único punto expuesto a internet               |
-| Autenticación         | JWT validado contra Microsoft Entra ID / AWS Cognito (Federated Identities) |
-| Tenant Restrictions   | Bloqueo de dominios públicos (`@gmail.com`) para garantizar enfoque B2B     |
-| Autorización          | RBAC con 2 roles: `CUSTOMER` (cliente B2B), `ADMIN` (personal interno)      |
-| HTTPS                 | Obligatorio vía API Gateway (SSL Termination)                               |
-| Propagación Identidad | Header `X-User-Email` inyectado por API Gateway hacia la VPC privada        |
-| BD protegida          | PostgreSQL 17 y MongoDB en subnet privada                                   |
-| Kafka protegido       | MSK en subnet privada con SASL authentication                               |
-| Secrets               | AWS Secrets Manager para credenciales y configuración sensible              |
-| Rate Limiting         | 100 req/s por IP en API Gateway                                             |
-| Validación de input   | Bean Validation (`@NotNull`, `@Size`, `@Positive`) en cada servicio         |
-| Microservicios        | 100% stateless — no almacenan sesión ni tokens localmente                   |
 
 ---
 

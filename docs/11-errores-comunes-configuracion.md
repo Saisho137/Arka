@@ -1,4 +1,9 @@
-# Errores Comunes y Configuración al Levantar un Microservicio
+---
+sidebar_position: 11
+title: Errores Comunes
+---
+
+# Errores Comunes y Configuración
 
 Guía de referencia para configurar correctamente cada microservicio nuevo del monorepo Arka y evitar errores recurrentes.
 

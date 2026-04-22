@@ -1,4 +1,9 @@
-# 08 — Patrones Arquitectónicos
+---
+sidebar_position: 4
+title: Patrones Arquitectónicos
+---
+
+# Patrones Arquitectónicos
 
 ## Resumen de Patrones Implementados
 

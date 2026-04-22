@@ -1,4 +1,9 @@
-# 03 — Kafka: Tópicos, Eventos y Consumers
+---
+sidebar_position: 5
+title: "Kafka: Eventos y Tópicos"
+---
+
+# Kafka: Tópicos, Eventos y Consumers
 
 ## Estrategia
 

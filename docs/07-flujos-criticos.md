@@ -1,4 +1,9 @@
-# 07 — Flujos Críticos del Sistema
+---
+sidebar_position: 6
+title: Flujos Críticos
+---
+
+# Flujos Críticos del Sistema
 
 ## 1. Creación de Pedido — Happy Path (Implementación actual — Fase 2)
 
