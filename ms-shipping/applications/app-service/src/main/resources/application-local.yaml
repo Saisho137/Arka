@@ -1,6 +1,17 @@
 # Perfil LOCAL — desarrollo desde IntelliJ sin Docker
+# Solo sobreescribe los campos que difieren del application.yaml base.
 spring:
   r2dbc:
-    url: r2dbc:postgresql://localhost:5436/db_shipping
+    url: r2dbc:postgresql://127.0.0.1:5436/db_shipping
     username: arka
     password: arkaSecret2025
+  kafka:
+    bootstrap-servers: localhost:9092
+
+aws:
+  endpoint: http://localhost:4566
+  region: us-east-1
+
+logging:
+  level:
+    com.arka: DEBUG

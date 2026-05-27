@@ -1,12 +1,27 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+	implementation project(':kafka-consumer')
+	implementation project(':kafka-producer')
+	implementation project(':reactive-web')
+	implementation project(':carrier-factory')
+	implementation project(':s3-repository')
+	implementation project(':metrics')
+	implementation project(':async-event-bus')
+	implementation project(':r2dbc-postgresql')
     implementation project(':model')
     implementation project(':usecase')
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+    implementation 'tools.jackson.core:jackson-databind'
+    implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2'
+    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
+    implementation 'org.springframework:spring-aop'
     runtimeOnly('org.springframework.boot:spring-boot-devtools')
     testImplementation 'com.tngtech.archunit:archunit:1.4.1'
     testImplementation 'tools.jackson.core:jackson-databind'
+    testImplementation 'net.jqwik:jqwik:1.9.2'
 }
 
 tasks.register('explodedJar', Copy) {
@@ -23,4 +38,3 @@ bootJar {
     // Sets output jar name
     archiveFileName = "${project.getParent().getName()}.${archiveExtension.get()}"
 }
-
