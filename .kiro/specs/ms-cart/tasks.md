@@ -1,10 +1,10 @@
-# Plan de Implementación: ms-cart
+# Implementation Plan: ms-cart
 
-## Visión General
+## Overview
 
 Implementación incremental del microservicio de Gestión de Carritos de Compra para la plataforma B2B Arka. Se sigue la Clean Architecture del Scaffold Bancolombia 4.2.0 con Java 21, Spring WebFlux reactivo, MongoDB (Reactive Mongo Drivers), Apache Kafka (sin Outbox Pattern) y gRPC client para consultar precios a ms-catalog. El objetivo principal es gestionar carritos temporales de clientes B2B, detectar abandono automáticamente mediante un scheduler periódico, y validar precios en tiempo real durante el checkout. Cada tarea construye sobre las anteriores, integrando tests unitarios (JUnit 5 + StepVerifier) como subtareas cercanas a la implementación. Los UseCases se organizan por entidad de dominio (1 UseCase por entidad con múltiples métodos), no por operación individual.
 
-## Tareas
+## Tasks
 
 - [ ] 1. Configurar proyecto base con Scaffold Plugin
   - [ ] 1.1 Generar estructura base del proyecto ms-cart
@@ -35,11 +35,10 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Agregar `org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2` en `main.gradle`
     - _Requisitos: Documentación de API_
 
-
 - [ ] 2. Definir entidades de dominio, Value Objects, enums y excepciones
   - [ ] 2.1 Crear el record `Cart` en `domain/model`
     - Crear `Cart` record con compact constructor: validación de `customerId` no nulo, `status` no nulo, `createdAt` y `lastModifiedAt` no nulos, `items` inicializado como lista inmutable (List.copyOf o List.of si null)
-    - Métodos de consulta: `isEmpty()`, `isCheckedOut()`, `isAbandoned()`, `calculateTotal()` (suma de unitPrice * quantity de todos los items)
+    - Métodos de consulta: `isEmpty()`, `isCheckedOut()`, `isAbandoned()`, `calculateTotal()` (suma de unitPrice \* quantity de todos los items)
     - Usar `@Builder(toBuilder = true)`
     - Paquete: `com.arka.model.cart`
     - _Requisitos: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 14.1_
@@ -76,12 +75,11 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.model.commons.exception`
     - _Requisitos: 2.2, 3.3, 4.2, 4.3, 5.3, 6.2, 7.2, 8.5, 8.6, 8.7, 12.3, 12.4_
 
-  - [ ]* 2.7 Escribir tests unitarios para entidades de dominio
+  - [ ]\* 2.7 Escribir tests unitarios para entidades de dominio
     - Test para `Cart`: validación de campos no nulos, `isEmpty()`, `isCheckedOut()`, `isAbandoned()`, `calculateTotal()`
     - Test para `CartItem`: validación de campos no nulos, `quantity > 0`, `unitPrice >= 0`
     - Test para transiciones de estado de `CartStatus`
     - _Requisitos: 1.1, 3.1_
-
 
 - [ ] 3. Definir ports (gateway interfaces)
   - [ ] 3.1 Crear interfaz `CartRepository` en `domain/model/cart/gateways`
@@ -128,7 +126,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Implementar `deleteCart(UUID cartId, String customerId, boolean isAdmin)`: buscar carrito (por ID si admin, por ID y customerId si no), eliminar con `CartRepository.deleteById()`
     - _Requisitos: 4.1, 4.2, 4.3, 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 7.1, 7.2, 7.3, 7.4, 7.5_
 
-
   - [ ] 4.4 Implementar método `checkout(UUID cartId, String customerId)` en `CartUseCase`
     - Buscar carrito por ID y customerId, lanzar `CartNotFoundException` si no existe
     - Si carrito está vacío, lanzar `EmptyCartException`
@@ -149,7 +146,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Retornar `Mono<Integer>` con cantidad de carritos procesados
     - _Requisitos: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8_
 
-  - [ ]* 4.6 Escribir tests unitarios para `CartUseCase`
+  - [ ]\* 4.6 Escribir tests unitarios para `CartUseCase`
     - Test para `createCart`: verificar que se crea con status ACTIVE, items vacío, timestamps correctos
     - Test para `getCart`: verificar que retorna carrito correcto, lanza excepción si no existe o no pertenece al usuario
     - Test para `addItem`: verificar que consulta precio a gRPC, agrega item, actualiza lastModifiedAt, maneja duplicados con incremento de quantity
@@ -161,7 +158,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
 
 - [ ] 5. Checkpoint — Verificar dominio y casos de uso core
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
-
 
 - [ ] 6. Implementar driven adapter — MongoDB Repository
   - [ ] 6.1 Generar módulo MongoDB con Scaffold
@@ -204,7 +200,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Implementar `markAsAbandoned()`: crear Query, usar operador `$set` para cambiar status a ABANDONED, usar `findAndModify` con `returnNew(true)`
     - _Requisitos: 3.8, 3.9, 4.1, 5.1, 6.1, 8.9, 9.2, 9.3_
 
-  - [ ]* 6.6 Escribir tests de integración para `MongoCartAdapter`
+  - [ ]\* 6.6 Escribir tests de integración para `MongoCartAdapter`
     - Usar `@DataMongoTest` con MongoDB embebido (Flapdoodle)
     - Test para `save()` y `findById()`: verificar round trip
     - Test para `addItem()`: verificar que agrega item nuevo y que incrementa quantity si SKU ya existe
@@ -212,7 +208,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Test para `findAbandonedCarts()`: verificar que retorna solo carritos ACTIVE con lastModifiedAt anterior al threshold
     - Usar StepVerifier para verificación de publishers
     - _Requisitos: 1.1, 3.1, 4.1, 5.1, 6.1, 9.2_
-
 
 - [ ] 7. Implementar driven adapter — gRPC Client para ms-catalog
   - [ ] 7.1 Crear archivo `.proto` para el servicio de catálogo
@@ -244,14 +239,13 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.grpc.config`
     - _Requisitos: 3.1, 8.1_
 
-  - [ ]* 7.5 Escribir tests unitarios para `GrpcProductPriceAdapter`
+  - [ ]\* 7.5 Escribir tests unitarios para `GrpcProductPriceAdapter`
     - Usar Mockito para mock del stub gRPC
     - Test para respuesta exitosa: verificar que mapea correctamente a `ProductInfo`
     - Test para NOT_FOUND: verificar que retorna `Mono.empty()`
     - Test para error de conexión: verificar que lanza `CatalogServiceUnavailableException`
     - Usar StepVerifier para verificación de publishers
     - _Requisitos: 3.1, 3.2, 3.3, 12.4_
-
 
 - [ ] 8. Implementar driven adapter — Kafka Producer para eventos de abandono
   - [ ] 8.1 Generar módulo Kafka producer con Scaffold
@@ -272,7 +266,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.kafka.publisher`
     - _Requisitos: 9.4, 9.5, 10.1, 10.2, 10.3, 10.5_
 
-  - [ ]* 8.4 Escribir tests unitarios para `KafkaCartEventPublisher`
+  - [ ]\* 8.4 Escribir tests unitarios para `KafkaCartEventPublisher`
     - Usar Mockito para mock de `KafkaSender`
     - Test para publicación exitosa: verificar que crea envelope correcto, serializa a JSON, envía con key=cartId
     - Test para error de publicación: verificar que propaga excepción
@@ -297,7 +291,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Todos con `@Builder(toBuilder = true)`
     - Paquete: `com.arka.api.dto`
     - _Requisitos: 1.2, 3.6, 3.7, 5.4, 8.8, 12.2_
-
 
   - [ ] 9.3 Crear `CartDtoMapper` para conversión entre dominio y DTOs
     - Crear clase `CartDtoMapper` con métodos estáticos: `toResponse(Cart)`, `toCartItemResponse(CartItem)`, `toCheckoutResponse(CheckoutResponse)`, `toPriceChangeDto(PriceChange)`
@@ -330,13 +323,12 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.api`
     - _Requisitos: 1.1, 2.1, 2.3, 3.1, 3.10, 4.1, 4.2, 5.1, 5.5, 6.1, 6.3, 7.1, 7.5, 8.1, 14.1, 14.5_
 
-  - [ ]* 9.6 Escribir tests unitarios para `CartController`
+  - [ ]\* 9.6 Escribir tests unitarios para `CartController`
     - Usar `@WebFluxTest(CartController.class)` con mock de `CartHandler`
     - Test para cada endpoint: verificar que delega correctamente al handler, retorna código HTTP correcto, mapea DTOs correctamente
     - Test para validación de Bean Validation: verificar que retorna 400 para requests inválidos
     - Usar WebTestClient para invocar endpoints
     - _Requisitos: 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 14.1_
-
 
 - [ ] 10. Implementar entry point — Scheduler de detección de abandono
   - [ ] 10.1 Generar módulo scheduler con Scaffold
@@ -361,7 +353,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.scheduler`
     - _Requisitos: 9.1, 9.2, 9.6, 9.7, 9.8, 13.1, 13.2_
 
-  - [ ]* 10.4 Escribir tests unitarios para `AbandonmentScheduler`
+  - [ ]\* 10.4 Escribir tests unitarios para `AbandonmentScheduler`
     - Usar Mockito para mock de `CartUseCase`
     - Test para ejecución exitosa: verificar que invoca `detectAbandonedCarts()` con threshold correcto, log INFO
     - Test para error: verificar que log ERROR si falla
@@ -378,11 +370,10 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Paquete: `com.arka.api.handler`
     - _Requisitos: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
 
-  - [ ]* 11.2 Escribir tests unitarios para `GlobalExceptionHandler`
+  - [ ]\* 11.2 Escribir tests unitarios para `GlobalExceptionHandler`
     - Test para cada tipo de excepción: verificar que retorna código HTTP correcto, `ErrorResponse` con code y message correctos
     - Test para excepción genérica: verificar que retorna 500 y no expone detalles internos
     - _Requisitos: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
-
 
 - [ ] 12. Configurar índices MongoDB y aplicación Spring Boot
   - [ ] 12.1 Implementar `MongoIndexConfig` para creación de índices
@@ -416,7 +407,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
 - [ ] 13. Checkpoint — Verificar integración completa
   - Asegurar que todos los tests pasan, preguntar al usuario si surgen dudas.
 
-
 - [ ] 14. Crear Dockerfile y configuración de despliegue
   - [ ] 14.1 Crear Dockerfile para ms-cart
     - Usar imagen base `amazoncorretto:21-alpine`
@@ -435,7 +425,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - _Requisitos: Despliegue local con Docker Compose_
 
 - [ ] 15. Escribir tests de integración E2E
-  - [ ]* 15.1 Escribir tests E2E para flujo completo de carrito
+  - [ ]\* 15.1 Escribir tests E2E para flujo completo de carrito
     - Test para crear carrito, agregar items, modificar quantities, checkout exitoso
     - Test para checkout con cambio de precios
     - Test para detección de abandono
@@ -461,8 +451,7 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
     - Verificar que no hay warnings de compilación
     - _Requisitos: Calidad de código_
 
-
-## Notas
+## Notes
 
 - **Tareas marcadas con `*` son opcionales** y pueden omitirse para un MVP más rápido. Incluyen tests unitarios, tests de integración y tests E2E.
 - **Cada tarea referencia requisitos específicos** para trazabilidad completa entre implementación y especificación.
@@ -475,7 +464,6 @@ Implementación incremental del microservicio de Gestión de Carritos de Compra 
 - **Scaffold Plugin es OBLIGATORIO** para generar módulos (Model, UseCase, Driven Adapter, Entry Point, Helper) — nunca crear estructura manualmente.
 - **Versiones unificadas** según `reusability.md` — mismas versiones en todo el monorepo.
 - **Spring Profiles**: `local` (default para desarrollo) y `docker` (inyectado por Compose).
-
 
 ## Task Dependency Graph
 
