@@ -1,0 +1,7 @@
+dependencies {
+    implementation project(':model')
+    implementation 'org.springframework:spring-webflux'
+    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+    implementation 'io.projectreactor.netty:reactor-netty-http'
+    compileOnly 'org.slf4j:slf4j-api'
+}
