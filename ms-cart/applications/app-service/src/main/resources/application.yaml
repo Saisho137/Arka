@@ -1,5 +1,5 @@
 server:
-  port: "${MS_CART_PORT:8084}"
+  port: "${MS_CART_PORT:8086}"
 
 spring:
   application:
@@ -37,6 +37,8 @@ springdoc:
 cors:
   allowed-origins: "http://localhost:4200,http://localhost:8080"
 
-catalog:
-  service:
-    base-url: "${CATALOG_SERVICE_URL:http://localhost:8081}"
+grpc:
+  client:
+    ms-catalog:
+      address: "static://${MS_CATALOG_GRPC_HOST:localhost}:${MS_CATALOG_GRPC_PORT:9091}"
+      negotiation-type: plaintext

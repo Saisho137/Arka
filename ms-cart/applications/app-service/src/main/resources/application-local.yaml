@@ -2,4 +2,4 @@
 spring:
   data:
     mongodb:
-      uri: mongodb://arka:arkaSecret2025@localhost:27017/db_cart?authSource=admin
+      uri: mongodb://arka:arkaSecret2025@localhost:27017/db_cart?authSource=admin&replicaSet=rs0
