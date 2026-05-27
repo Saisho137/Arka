@@ -447,7 +447,218 @@ ms-shipping/
     { "id": 3, "tasks": ["3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8"] },
     { "id": 4, "tasks": ["4.1"] },
     { "id": 5, "tasks": ["4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8"] },
-    { "id": 6, "tasks": ["4.9"] }
+    { "id": 6, "tasks": ["4.9"] },
+    { "id": 7, "tasks": ["6.1", "6.2", "6.3", "6.4", "6.5"] },
+    { "id": 8, "tasks": ["7.1", "7.2"] },
+    { "id": 9, "tasks": ["8.1", "8.2", "8.3"] },
+    { "id": 10, "tasks": ["9.1", "9.2", "9.3"] },
+    { "id": 11, "tasks": ["10.1", "10.2", "10.3", "10.4"] },
+    { "id": 12, "tasks": ["11.1", "11.2", "11.3"] }
   ]
 }
 ```
+
+---
+
+## Wave 6 — REST API Production-Ready (DTOs, Validation, Authorization, OpenAPI)
+
+- [x] 6. Refine REST API layer for production readiness
+  - [x] 6.1 Create request/response DTOs in `com.arka.api.dto`:
+    - **`ShipmentResponse`** — record with `@Builder`: `id`, `orderId`, `trackingNumber`, `carrier`, `shippingLabelUrl`, `status`, `deliveryAddress` (nested), `estimatedDeliveryDate`, `actualDeliveryDate`, `failureReason`, `createdAt`, `updatedAt`
+    - **`DeliveryAddressDto`** — record: `street`, `city`, `state`, `postalCode`, `country`
+    - **`UpdateStatusRequest`** — record with `@NotBlank String status`, `@Nullable String failureReason`, `@Nullable Instant actualDeliveryDate`
+    - **`WebhookPayload`** — record with `@NotBlank String trackingNumber`, `@NotBlank String status`, `@Nullable Instant deliveryDate`
+    - **`PageResponse<T>`** — generic record with `List<T> content`, `int page`, `int size`, `long totalElements`
+    - Replace raw `Map<String, String>` in controller with strongly-typed DTOs
+    - _Requisitos: Clean Architecture (domain no se expone directamente), Bean Validation_
+
+  - [x] 6.2 Create `ShipmentDtoMapper` in `com.arka.api.mapper`:
+    - Static methods: `toResponse(Shipment)`, `toDeliveryAddressDto(DeliveryAddress)`
+    - Use `@NoArgsConstructor(access = AccessLevel.PRIVATE)` + `final` class
+    - _Requisitos: Separation of concerns_
+
+  - [x] 6.3 Add role-based authorization via request headers:
+    - Extract `X-User-Email` and `X-User-Role` headers in controller
+    - `GET /shipments/{orderId}`: if not ADMIN, pass customerId to use case (restrict to own shipments)
+    - `GET /shipments`: ADMIN only — return 403 if not ADMIN
+    - `PUT /shipments/{orderId}/status`: ADMIN only — return 403 if not ADMIN
+    - `POST /shipments/retry/{orderId}`: ADMIN only — return 403 if not ADMIN
+    - Webhook endpoints: no auth header required (validated by HMAC signature)
+    - _Requisitos: req 3 (GET), req 5 (PUT), req 6 (POST retry)_
+
+  - [x] 6.4 Refactor controller to `ShipmentController` + `WebhookController`:
+    - **`ShipmentController`** (`/api/v1/shipments`):
+      - `GET /{orderId}` → 200 `ShipmentResponse` or 404
+      - `GET /` → 200 `PageResponse<ShipmentResponse>` (query params: status, carrier, page, size)
+      - `PUT /{orderId}/status` → 200 `ShipmentResponse` or 404/409
+      - `POST /retry/{orderId}` → 200 `ShipmentResponse` or 404/409
+    - **`WebhookController`** (`/api/v1/webhooks`):
+      - `POST /{carrier}/tracking` → 200 (accepts tracking updates per carrier)
+      - Validate `X-Webhook-Signature` header using HMAC-SHA256 with carrier-specific secret
+      - Return 401 if signature invalid
+    - Add `@Tag(name = "Shipments")`, `@Operation(summary = ...)`, `@ApiResponse` for Springdoc
+    - _Requisitos: req 1-6 (REST endpoints), req 8 (webhook per carrier), req 16 (HMAC)_
+
+  - [x] 6.5 Add Bean Validation on requests:
+    - `@Valid` on all `@RequestBody` parameters
+    - `UpdateStatusRequest`: `@NotBlank status`, validate status is a valid `ShippingStatus` value
+    - `WebhookPayload`: `@NotBlank trackingNumber`, `@NotBlank status`
+    - Return 400 with `ErrorResponse` listing validation failures (already handled by `GlobalExceptionHandler`)
+    - _Requisitos: req 12 (input validation)_
+
+---
+
+## Wave 7 — Secrets Manager Adapter + Webhook HMAC Validation
+
+- [x] 7. Implement AWS Secrets Manager adapter and webhook signature validation
+  - [ ] 7.1 Create `AwsSecretsManagerAdapter` in driven adapter module:
+    - Implement `SecretsManager` port from domain model
+    - Use `software.amazon.awssdk:secretsmanager` (already in dependencies)
+    - Create `SecretsManagerConfig` class with `@Bean SecretsManagerAsyncClient` (endpoint from `aws.endpoint` property for LocalStack)
+    - Implementation: `getSecret(String secretName)` → wraps `client.getSecretValue(req).thenApply(...)` in `Mono.fromFuture()`
+    - Cache secrets in-memory with a TTL of 5 minutes to reduce calls
+    - _Requisitos: req 15 (credentials via Secrets Manager)_
+
+  - [x] 7.2 Implement webhook HMAC-SHA256 signature validation:
+    - Create `WebhookSignatureValidator` component in reactive-web module
+    - Method: `boolean isValid(String carrier, String payload, String signatureHeader)`
+    - Use `SecretsManager` to retrieve `shipping/{carrier}/webhook-secret`
+    - Compute `HMAC-SHA256(secret, rawBody)` and compare with `X-Webhook-Signature` header
+    - Called from `WebhookController` before processing webhook payload
+    - Return 401 `InvalidWebhookSignatureException` if mismatch
+    - _Requisitos: req 16 (webhook HMAC validation)_
+
+---
+
+## Wave 8 — Resilience4j Annotations on Carrier Adapters
+
+- [x] 8. Add Resilience4j patterns to carrier adapter calls
+  - [x] 8.1 Annotate carrier adapters with Resilience4j:
+    - Add `@CircuitBreaker(name = "dhl-carrier", fallbackMethod = "carrierFallback")` on `DHLShippingCarrier.generateLabel()`
+    - Add `@Retry(name = "dhl-carrier")` on `DHLShippingCarrier.generateLabel()`
+    - Add `@Bulkhead(name = "dhl-carrier", type = Bulkhead.Type.SEMAPHORE)` on `DHLShippingCarrier.generateLabel()`
+    - Repeat for `FedExShippingCarrier` and `LegacyShippingCarrier` with their respective instance names
+    - **Fallback method**: return `Mono<ShippingResult>` with `success=false`, `reason="Circuit breaker open for {carrier}"`
+    - _Requisitos: req 13 (Circuit Breaker 50%/30s), req 14 (Retry 3x exponential), req 14 (Bulkhead 10 concurrent)_
+
+  - [x] 8.2 Add resilience4j-reactor dependency in carrier-factory module:
+    - `implementation 'io.github.resilience4j:resilience4j-reactor'`
+    - `implementation 'io.github.resilience4j:resilience4j-spring-boot3'`
+    - Verify that `resilience4j.circuitbreaker.instances.*` in application.yaml is picked up
+    - Write test verifying Circuit Breaker opens after configured failures
+    - _Requisitos: req 13, req 14_
+
+  - [x] 8.3 Add `@EnableScheduling` to MainApplication (if missing):
+    - Required for `@Scheduled` on `KafkaOutboxRelay.relay()`
+    - Verify outbox relay runs every 5s in local profile
+    - _Requisitos: Outbox Pattern relay scheduling_
+
+---
+
+## Wave 9 — Actuator, Health, and Observability
+
+- [x] 9. Configure Spring Actuator and observability
+  - [x] 9.1 Configure Actuator endpoints in `application.yaml`:
+    ```yaml
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,info,prometheus,metrics
+      endpoint:
+        health:
+          show-details: when-authorized
+          probes:
+            enabled: true
+      health:
+        r2dbc:
+          enabled: true
+    ```
+    - Expose `/actuator/health/liveness` and `/actuator/health/readiness` for Kubernetes probes
+    - _Requisitos: Production readiness, compose.yaml healthcheck already uses `/actuator/health`_
+
+  - [x] 9.2 Add custom health indicators:
+    - **`KafkaHealthIndicator`** — checks Kafka broker connectivity
+    - **`S3HealthIndicator`** — checks S3 bucket exists (head-bucket call)
+    - Both return `Health.up()` or `Health.down()` with details
+    - _Requisitos: Observability for dependent services_
+
+  - [ ] 9.3 Add Micrometer metrics for business operations:
+    - Counter: `shipping.labels.generated` (tag: carrier)
+    - Counter: `shipping.labels.failed` (tag: carrier, reason)
+    - Timer: `shipping.carrier.duration` (tag: carrier)
+    - Counter: `shipping.webhooks.received` (tag: carrier)
+    - Counter: `shipping.webhooks.invalid_signature` (tag: carrier)
+    - Gauge: `shipping.outbox.pending_events`
+    - Instrument in `ProcessShipmentUseCase`, carrier adapters, and webhook controller
+    - _Requisitos: Observability, Prometheus scraping_
+
+---
+
+## Wave 10 — Complete Test Coverage
+
+- [x] 10. Write comprehensive tests
+  - [x] 10.1 Complete unit tests for all use cases:
+    - `ListShipmentsUseCaseTest` — verify filtering, pagination, ADMIN-only
+    - `UpdateShipmentStatusUseCaseTest` — verify state transitions, invalid transitions throw 409
+    - `ProcessWebhookUseCaseTest` — verify tracking number lookup, status update
+    - `OutboxRelayUseCaseTest` — verify batch fetch + mark as published
+    - Use Mockito + StepVerifier
+    - _Requisitos: All use case logic_
+
+  - [x] 10.2 Write REST controller integration tests:
+    - `ShipmentControllerTest` with `@WebFluxTest`:
+      - Test GET /{orderId} — 200, 404, 403 (non-admin)
+      - Test GET / — 200 with pagination, 403 (non-admin)
+      - Test PUT /{orderId}/status — 200, 400 (invalid status), 403
+      - Test POST /retry/{orderId} — 200, 404, 409, 403
+    - `WebhookControllerTest`:
+      - Test POST /{carrier}/tracking — 200, 401 (invalid sig)
+    - Mock use cases with `@MockBean`
+    - Use `WebTestClient`
+    - _Requisitos: REST layer validation_
+
+  - [ ] 10.3 Write Kafka consumer integration test:
+    - `KafkaEventConsumerTest`:
+      - Verify `OrderConfirmed` event is consumed and forwarded to `ProcessShipmentUseCase`
+      - Verify unknown `eventType` is ignored (offset committed without processing)
+      - Verify error handling: malformed JSON doesn't block consumer
+      - Mock `ProcessShipmentUseCase`, verify invocations
+    - _Requisitos: Kafka consumer resilience_
+
+  - [ ] 10.4 Write carrier adapter test with Resilience4j:
+    - `DHLShippingCarrierTest`:
+      - Verify label generation returns ShippingResult on success
+      - Verify timeout after 30s triggers failure result
+      - Verify Circuit Breaker opens after 50% failure rate
+    - Use `@SpringBootTest` with real Resilience4j config
+    - _Requisitos: req 13, req 14_
+
+---
+
+## Wave 11 — Documentation, README, and Final Validation
+
+- [x] 11. Documentation and final refinements
+  - [x] 11.1 Create proper `README.md` for ms-shipping:
+    - Service description and responsibilities
+    - Stack and architecture overview
+    - How to run locally: `./gradlew bootRun` (requires PostgreSQL + Kafka + LocalStack)
+    - How to run tests: `./gradlew test`
+    - How to build Docker image: `docker build -t ms-shipping:latest -f deployment/Dockerfile .`
+    - API endpoints table with methods, paths, descriptions, auth requirements
+    - Kafka topics consumed/produced
+    - Configuration variables table
+    - _Requisitos: Developer onboarding_
+
+  - [x] 11.2 Verify `@EnableScheduling` + outbox relay scheduling:
+    - Ensure `MainApplication` has `@EnableScheduling`
+    - Verify `KafkaOutboxRelay.relay()` fires every 5s
+    - Verify `KafkaConsumerLifecycle` starts consuming on app startup
+    - _Requisitos: Background processing_
+
+  - [x] 11.3 Final build + architecture validation:
+    - Run `./gradlew clean build` — must pass with no errors
+    - Run `./gradlew validateStructure` — must pass Clean Architecture validation
+    - Verify no domain layer imports from infrastructure
+    - All tests green
+    - _Requisitos: Final checkpoint_

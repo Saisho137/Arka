@@ -1,12 +1,100 @@
-# Proyecto Base Implementando Clean Architecture
+# ms-shipping
 
-## Antes de Iniciar
+Microservicio de logística y envíos para la plataforma Arka e-commerce B2B. Gestiona la generación de guías de envío con múltiples carriers (DHL, FedEx, Legacy), tracking de paquetes y webhooks de actualización de estado.
 
-Empezaremos por explicar los diferentes componentes del proyectos y partiremos de los componentes externos, continuando con los componentes core de negocio (dominio) y por último el inicio y configuración de la aplicación.
+## Stack
 
-Lee el artículo [Clean Architecture — Aislando los detalles](https://medium.com/bancolombia-tech/clean-architecture-aislando-los-detalles-4f9530f35d7a)
+- Java 21 + Spring Boot 4.0.3 (WebFlux — Reactivo)
+- PostgreSQL 17 (R2DBC)
+- Kafka (Reactor Kafka — producer/consumer)
+- AWS S3 (LocalStack — almacenamiento de labels PDF)
+- Resilience4j (Circuit Breaker, Retry, Bulkhead por carrier)
 
-# Arquitectura
+## Arquitectura
+
+Clean Architecture con Bancolombia Scaffold Plugin 4.2.0:
+
+```
+applications/app-service/    → Spring Boot main, DI, health indicators
+domain/model/                → Entities, Value Objects, Gateway ports
+domain/usecase/              → Business logic (7 use cases)
+infrastructure/
+  driven-adapters/
+    r2dbc-postgresql/        → Shipment, Outbox, ProcessedEvent repos
+    carrier-factory/         → DHL, FedEx, Legacy adapters + Resilience4j
+    s3-repository/           → Label PDF storage
+    kafka-producer/          → Outbox relay → Kafka
+    async-event-bus/         → Domain events
+  entry-points/
+    reactive-web/            → REST controllers (Shipment + Webhook)
+    kafka-consumer/          → Order events consumer
+  helpers/
+    metrics/                 → Micrometer metrics
+```
+
+## Ejecutar localmente
+
+```bash
+# Requiere: PostgreSQL + Kafka + LocalStack (docker compose up desde raíz del monorepo)
+./gradlew bootRun
+```
+
+Puerto: `8088` (configurable via `MS_SHIPPING_PORT`)
+
+## Tests
+
+```bash
+./gradlew test                  # Unit + integration tests
+./gradlew validateStructure     # Clean Architecture validation
+```
+
+## Build Docker
+
+```bash
+docker build -t ms-shipping:latest -f deployment/Dockerfile .
+```
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/shipments/{orderId}` | Any | Get shipment by order ID |
+| GET | `/api/v1/shipments` | ADMIN | List shipments (paginated, filterable) |
+| PUT | `/api/v1/shipments/{orderId}/status` | ADMIN | Update shipment status |
+| POST | `/api/v1/shipments/retry/{orderId}` | ADMIN | Retry failed shipment |
+| POST | `/api/v1/webhooks/{carrier}/tracking` | HMAC | Carrier tracking webhook |
+
+Headers: `X-User-Role`, `X-User-Email`, `X-Webhook-Signature`
+
+## Kafka
+
+| Topic | Role | Events |
+|-------|------|--------|
+| `order-events` | Consumer | OrderConfirmed → triggers label generation |
+| `shipping-events` | Producer | ShippingDispatched (via Outbox Pattern) |
+
+## Patrones
+
+- **ACL (Anti-Corruption Layer)**: Strategy + Factory para 3 carriers
+- **Outbox Pattern**: Transaccional BD + evento atómico, relay cada 5s
+- **Circuit Breaker**: 50% failure threshold, 30s open state
+- **Retry**: 3 intentos con exponential backoff (2s base, x2 multiplier)
+- **Bulkhead**: 10 concurrent calls por carrier
+- **Idempotency**: ProcessedEvents table para evitar duplicados Kafka
+
+## Configuración
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MS_SHIPPING_PORT` | 8088 | Server port |
+| `R2DBC_HOST` | localhost | PostgreSQL host |
+| `R2DBC_PORT` | 5436 | PostgreSQL port |
+| `R2DBC_DB` | db_shipping | Database name |
+| `KAFKA_BOOTSTRAP_SERVERS` | localhost:9092 | Kafka brokers |
+| `AWS_ENDPOINT` | http://localhost:4566 | LocalStack endpoint |
+| `DHL_WEBHOOK_SECRET` | test-dhl-webhook-secret | DHL HMAC secret |
+| `FEDEX_WEBHOOK_SECRET` | test-fedex-webhook-secret | FedEx HMAC secret |
+| `LEGACY_WEBHOOK_SECRET` | test-legacy-webhook-secret | Legacy HMAC secret |
 
 ![Clean Architecture](https://miro.medium.com/max/1400/1*ZdlHz8B0-qu9Y-QO3AXR_w.png)
 
