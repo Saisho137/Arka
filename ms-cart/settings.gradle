@@ -19,3 +19,13 @@ include ':usecase'
 project(':app-service').projectDir = file('./applications/app-service')
 project(':model').projectDir = file('./domain/model')
 project(':usecase').projectDir = file('./domain/usecase')
+include ':mongo-repository'
+project(':mongo-repository').projectDir = file('./infrastructure/driven-adapters/mongo-repository')
+include ':kafka-producer'
+project(':kafka-producer').projectDir = file('./infrastructure/driven-adapters/kafka-producer')
+include ':reactive-web'
+project(':reactive-web').projectDir = file('./infrastructure/entry-points/reactive-web')
+include ':scheduler'
+project(':scheduler').projectDir = file('./infrastructure/helpers/scheduler')
+include ':catalog-client'
+project(':catalog-client').projectDir = file('./infrastructure/driven-adapters/catalog-client')

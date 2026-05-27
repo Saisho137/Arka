@@ -1,47 +1,75 @@
-# Proyecto Base Implementando Clean Architecture
+# ms-cart — Carrito de Compras
 
-## Antes de Iniciar
+Microservicio reactivo de gestión de carritos de compra para la plataforma B2B Arka. Gestiona carritos temporales de clientes, detecta abandono automáticamente y valida precios en tiempo real durante el checkout contra ms-catalog.
 
-Empezaremos por explicar los diferentes componentes del proyectos y partiremos de los componentes externos, continuando con los componentes core de negocio (dominio) y por último el inicio y configuración de la aplicación.
+## Stack
 
-Lee el artículo [Clean Architecture — Aislando los detalles](https://medium.com/bancolombia-tech/clean-architecture-aislando-los-detalles-4f9530f35d7a)
+- Java 21, Spring Boot 4.0.3 (WebFlux)
+- MongoDB (Reactive Drivers)
+- Apache Kafka (reactor-kafka) — evento `CartAbandoned`
+- WebClient → ms-catalog (precio actual)
+- Puerto: **8084**
 
-# Arquitectura
+## Ejecutar localmente
 
-![Clean Architecture](https://miro.medium.com/max/1400/1*ZdlHz8B0-qu9Y-QO3AXR_w.png)
+```bash
+./gradlew bootRun
+```
 
-## Domain
+Requiere MongoDB en `localhost:27017` y ms-catalog en `localhost:8081`.
 
-Es el módulo más interno de la arquitectura, pertenece a la capa del dominio y encapsula la lógica y reglas del negocio mediante modelos y entidades del dominio.
+## Tests
 
-## Usecases
+```bash
+./gradlew test
+```
 
-Este módulo gradle perteneciente a la capa del dominio, implementa los casos de uso del sistema, define lógica de aplicación y reacciona a las invocaciones desde el módulo de entry points, orquestando los flujos hacia el módulo de entities.
+## Docker
 
-## Infrastructure
+```bash
+./gradlew build -x test
+docker build -t ms-cart:latest -f deployment/Dockerfile .
+```
 
-### Helpers
+## Endpoints principales
 
-En el apartado de helpers tendremos utilidades generales para los Driven Adapters y Entry Points.
+| Método | Ruta                             | Descripción                |
+|--------|----------------------------------|----------------------------|
+| POST   | `/api/v1/carts`                  | Crear carrito              |
+| GET    | `/api/v1/carts/{cartId}`         | Obtener carrito            |
+| GET    | `/api/v1/carts`                  | Listar carritos de cliente |
+| POST   | `/api/v1/carts/{cartId}/items`   | Agregar item               |
+| PUT    | `/api/v1/carts/{cartId}/items/{sku}` | Actualizar cantidad    |
+| DELETE | `/api/v1/carts/{cartId}/items/{sku}` | Eliminar item          |
+| DELETE | `/api/v1/carts/{cartId}/items`   | Vaciar carrito             |
+| DELETE | `/api/v1/carts/{cartId}`         | Eliminar carrito           |
+| POST   | `/api/v1/carts/{cartId}/checkout`| Checkout con validación    |
 
-Estas utilidades no están arraigadas a objetos concretos, se realiza el uso de generics para modelar comportamientos
-genéricos de los diferentes objetos de persistencia que puedan existir, este tipo de implementaciones se realizan
-basadas en el patrón de diseño [Unit of Work y Repository](https://medium.com/@krzychukosobudzki/repository-design-pattern-bc490b256006)
+## Variables de entorno
 
-Estas clases no puede existir solas y debe heredarse su compartimiento en los **Driven Adapters**
+| Variable                         | Default                           |
+|----------------------------------|-----------------------------------|
+| `MS_CART_PORT`                   | 8084                              |
+| `MONGODB_URI`                    | mongodb://localhost:27017/cart_db  |
+| `KAFKA_BOOTSTRAP_SERVERS`        | localhost:9092                     |
+| `CATALOG_SERVICE_URL`            | http://localhost:8081              |
+| `CART_ABANDONMENT_CHECK_INTERVAL`| 300000 (5 min)                    |
 
-### Driven Adapters
+## Arquitectura
 
-Los driven adapter representan implementaciones externas a nuestro sistema, como lo son conexiones a servicios rest,
-soap, bases de datos, lectura de archivos planos, y en concreto cualquier origen y fuente de datos con la que debamos
-interactuar.
+Clean Architecture (Bancolombia Scaffold 4.2.0):
 
-### Entry Points
-
-Los entry points representan los puntos de entrada de la aplicación o el inicio de los flujos de negocio.
-
-## Application
-
-Este módulo es el más externo de la arquitectura, es el encargado de ensamblar los distintos módulos, resolver las dependencias y crear los beans de los casos de use (UseCases) de forma automática, inyectando en éstos instancias concretas de las dependencias declaradas. Además inicia la aplicación (es el único módulo del proyecto donde encontraremos la función “public static void main(String[] args)”.
-
-**Los beans de los casos de uso se disponibilizan automaticamente gracias a un '@ComponentScan' ubicado en esta capa.**
+```
+domain/model/     → Entidades, Value Objects, Gateways
+domain/usecase/   → CartUseCase (CRUD, checkout, detección abandono)
+infrastructure/
+  driven-adapters/
+    mongo-repository/  → MongoCartAdapter (ReactiveMongoTemplate)
+    kafka-producer/    → KafkaCartEventPublisher (reactor-kafka)
+    catalog-client/    → WebClientProductPriceAdapter
+  entry-points/
+    reactive-web/      → CartController, DTOs, GlobalExceptionHandler
+  helpers/
+    scheduler/         → AbandonmentScheduler
+applications/app-service/ → Spring Boot main, DI
+```

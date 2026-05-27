@@ -3,3 +3,7 @@ spring:
   data:
     mongodb:
       uri: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@arka-mongodb:27017/db_cart?authSource=admin
+
+catalog:
+  service:
+    base-url: http://ms-catalog:8081
