@@ -4,3 +4,9 @@ spring:
     url: jdbc:postgresql://localhost:5435/db_reporter
     username: arka
     password: arkaSecret2025
+  kafka:
+    bootstrap-servers: localhost:9092
+
+aws:
+  s3:
+    endpoint: http://localhost:4566

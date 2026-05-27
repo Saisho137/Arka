@@ -19,3 +19,19 @@ include ':usecase'
 project(':app-service').projectDir = file('./applications/app-service')
 project(':model').projectDir = file('./domain/model')
 project(':usecase').projectDir = file('./domain/usecase')
+include ':jdbc-postgresql'
+project(':jdbc-postgresql').projectDir = file('./infrastructure/driven-adapters/jdbc-postgresql')
+include ':metrics'
+project(':metrics').projectDir = file('./infrastructure/helpers/metrics')
+include ':s3-repository'
+project(':s3-repository').projectDir = file('./infrastructure/driven-adapters/s3-repository')
+include ':csv-generator'
+project(':csv-generator').projectDir = file('./infrastructure/helpers/csv-generator')
+include ':pdf-generator'
+project(':pdf-generator').projectDir = file('./infrastructure/helpers/pdf-generator')
+include ':api-rest'
+project(':api-rest').projectDir = file('./infrastructure/entry-points/api-rest')
+include ':kafka-consumer'
+project(':kafka-consumer').projectDir = file('./infrastructure/entry-points/kafka-consumer')
+include ':kafka-producer'
+project(':kafka-producer').projectDir = file('./infrastructure/driven-adapters/kafka-producer')
