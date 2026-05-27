@@ -4,7 +4,7 @@ dependencies {
 	implementation project(':scheduler')
 	implementation project(':reactive-web')
 	implementation project(':kafka-producer')
-	implementation project(':catalog-client')
+	implementation project(':grpc-catalog')
 	implementation project(':mongo-repository')
     implementation project(':model')
     implementation project(':usecase')
