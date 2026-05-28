@@ -12,6 +12,13 @@ aws:
   endpoint: http://localstack:4566
   region: us-east-1
 
+adapters:
+  aws:
+    s3:
+      endpoint: http://localstack:4566
+      region: us-east-1
+      bucket-name: arka-shipping-labels
+
 logging:
   level:
     com.arka: DEBUG

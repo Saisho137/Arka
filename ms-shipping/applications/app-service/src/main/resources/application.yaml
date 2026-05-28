@@ -13,10 +13,24 @@ spring:
     pool:
       enabled: true
       initial-size: 5
-      max-size: 20  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      max-size: 20
+  kafka:
+    bootstrap-servers: "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
     consumer:
-      group-id: shipping-service-group
+      group-id: "shipping-service-group"
+      auto-offset-reset: "earliest"
+      enable-auto-commit: false
+      key-deserializer: "org.apache.kafka.common.serialization.StringDeserializer"
+      value-deserializer: "org.apache.kafka.common.serialization.StringDeserializer"
+    producer:
+      key-serializer: "org.apache.kafka.common.serialization.StringSerializer"
+      value-serializer: "org.apache.kafka.common.serialization.StringSerializer"
+      acks: "all"
+      retries: 3
+      properties:
+        enable.idempotence: true
+    listener:
+      ack-mode: "manual_immediate"
 
 scheduler:
   outbox-relay:
@@ -27,6 +41,16 @@ shipping:
     bucket-name: arka-shipping-labels
   timeout:
     carrier-call: 30s
+  carriers:
+    dhl:
+      api-key: "${DHL_API_KEY:test-dhl-key}"
+      webhook-secret: "${DHL_WEBHOOK_SECRET:test-dhl-webhook-secret}"
+    fedex:
+      api-key: "${FEDEX_API_KEY:test-fedex-key}"
+      webhook-secret: "${FEDEX_WEBHOOK_SECRET:test-fedex-webhook-secret}"
+    legacy:
+      api-key: "${LEGACY_API_KEY:test-legacy-key}"
+      webhook-secret: "${LEGACY_WEBHOOK_SECRET:test-legacy-webhook-secret}"
 
 adapters:
   aws:
@@ -81,12 +105,7 @@ springdoc:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
-    enabled: true  kafka:
-    bootstrap-servers: "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
-    consumer:
-      group-id: "shipping-service-group"
-      auto-offset-reset: earliest
-      enable-auto-commit: false
+    enabled: true
 
 adapter:
   aws:
@@ -98,73 +117,6 @@ adapter:
 aws:
   region: "us-east-1"
   endpoint: "${AWS_ENDPOINT:http://localhost:4566}"
-
-shipping:
-  carriers:
-    dhl:
-      api-key: "${DHL_API_KEY:test-dhl-key}"
-      webhook-secret: "${DHL_WEBHOOK_SECRET:test-dhl-webhook-secret}"
-    fedex:
-      api-key: "${FEDEX_API_KEY:test-fedex-key}"
-      webhook-secret: "${FEDEX_WEBHOOK_SECRET:test-fedex-webhook-secret}"
-    legacy:
-      api-key: "${LEGACY_API_KEY:test-legacy-key}"
-      webhook-secret: "${LEGACY_WEBHOOK_SECRET:test-legacy-webhook-secret}"
-  timeout:
-    carrier-call: 30s
-
-scheduler:
-  outbox-relay:
-    interval: 5000
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      dhl-carrier:
-        failure-rate-threshold: 50
-        minimum-number-of-calls: 10
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-      fedex-carrier:
-        failure-rate-threshold: 50
-        minimum-number-of-calls: 10
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-      legacy-carrier:
-        failure-rate-threshold: 50
-        minimum-number-of-calls: 10
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-  retry:
-    instances:
-      dhl-carrier:
-        max-attempts: 3
-        wait-duration: 2s
-        exponential-backoff-multiplier: 2
-      fedex-carrier:
-        max-attempts: 3
-        wait-duration: 2s
-        exponential-backoff-multiplier: 2
-      legacy-carrier:
-        max-attempts: 3
-        wait-duration: 2s
-        exponential-backoff-multiplier: 2
-  bulkhead:
-    instances:
-      dhl-carrier:
-        max-concurrent-calls: 10
-      fedex-carrier:
-        max-concurrent-calls: 10
-      legacy-carrier:
-        max-concurrent-calls: 10
-
-springdoc:
-  api-docs:
-    path: /api-docs
-  swagger-ui:
-    path: /swagger-ui.html
-    enabled: true
-  show-actuator: false
 
 management:
   endpoints:
