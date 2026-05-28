@@ -147,9 +147,15 @@ public class KafkaEventConsumer {
     }
 
     private Mono<Void> processShippingDispatched(UUID eventId, JsonNode envelope) {
-        log.debug("Processing ShippingDispatched eventId={} — Phase 2+ (Task 14)", eventId);
-        // Task 14: extract orderId and delegate to orderUseCase.processShippingDispatched()
-        return orderUseCase.processExternalEvent(eventId);
+        log.debug("Processing ShippingDispatched eventId={}", eventId);
+        JsonNode payload = envelope.path("payload");
+        String orderIdStr = payload.path("orderId").asText("");
+        if (orderIdStr.isBlank()) {
+            log.error("ShippingDispatched eventId={} missing orderId in payload — skipping", eventId);
+            return Mono.empty();
+        }
+        UUID orderId = UUID.fromString(orderIdStr);
+        return orderUseCase.processShippingDispatched(eventId, orderId);
     }
 
     private Retry retrySpec(String eventType) {

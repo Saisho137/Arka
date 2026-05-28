@@ -400,6 +400,50 @@ public class OrderUseCase {
         return transactionalGateway.executeInTransaction(pipeline);
     }
 
+    public Mono<Void> processShippingDispatched(UUID eventId, UUID orderId) {
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return Mono.<Void>empty();
+                    }
+                    OrderStatus inShipment = new OrderStatus.InShipment();
+                    return orderRepository.findById(orderId)
+                            .switchIfEmpty(Mono.error(new OrderNotFoundException(
+                                    ORDER_NOT_FOUND + orderId)))
+                            .flatMap(order -> {
+                                if (!OrderStateTransition.isValidTransition(order.status(), inShipment)) {
+                                    return Mono.error(new InvalidStateTransitionException(
+                                            "Cannot transition order to EN_DESPACHO from status "
+                                                    + order.status().value()));
+                                }
+
+                                OrderStateHistory history = OrderStateHistory.builder()
+                                        .orderId(orderId)
+                                        .previousStatus(order.status().value())
+                                        .newStatus(inShipment.value())
+                                        .reason("Shipping dispatched")
+                                        .build();
+
+                                OutboxEvent outboxEvent = buildOutboxEvent(
+                                        EventType.ORDER_STATUS_CHANGED,
+                                        orderId.toString(),
+                                        OrderStatusChangedPayload.builder()
+                                                .orderId(orderId)
+                                                .previousStatus(order.status().value())
+                                                .newStatus(inShipment.value())
+                                                .customerEmail(order.customerEmail())
+                                                .build());
+
+                                return orderRepository.updateStatus(orderId, inShipment)
+                                        .then(orderStateHistoryRepository.save(history))
+                                        .then(outboxEventRepository.save(outboxEvent))
+                                        .then(processedEventRepository.save(eventId));
+                            });
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
     // ──────────────────────────────────────────────────────────────────
     // Private helpers
     // ──────────────────────────────────────────────────────────────────
