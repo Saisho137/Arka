@@ -569,7 +569,7 @@ services:
     networks:
       - arka-network
 
-  # ── ms-payment (Reactivo) — Mock 80/20 sin BD ──
+  # ── ms-payment (Reactivo) — ACL Pasarelas + PostgreSQL + Outbox ──
   ms-payment:
     build:
       context: ./ms-payment
@@ -582,6 +582,8 @@ services:
     env_file:
       - .env
     depends_on:
+      postgres-payment:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     healthcheck:
