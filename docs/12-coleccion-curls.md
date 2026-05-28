@@ -355,25 +355,25 @@ curl -s http://localhost:8084/api-docs.yaml
 
 ```bash
 # Teclado Mecánico — stock: 50, umbral: 10
-curl -s http://localhost:8082/inventory/KB-MECH-001 | jq
+curl -s http://localhost:8082/api/v1/inventory/KB-MECH-001 | jq
 
 # Mouse Óptico Inalámbrico — stock: 120, umbral: 20
-curl -s http://localhost:8082/inventory/MS-OPT-002 | jq
+curl -s http://localhost:8082/api/v1/inventory/MS-OPT-002 | jq
 
 # Monitor 27 pulgadas 4K — stock: 15, umbral: 3
-curl -s http://localhost:8082/inventory/MNT-27-001 | jq
+curl -s http://localhost:8082/api/v1/inventory/MNT-27-001 | jq
 
 # Audífonos Bluetooth NC — stock: 30, umbral: 5
-curl -s http://localhost:8082/inventory/HDS-BT-003 | jq
+curl -s http://localhost:8082/api/v1/inventory/HDS-BT-003 | jq
 
 # Hub USB-C — stock: 80, umbral: 15
-curl -s http://localhost:8082/inventory/USB-HB-004 | jq
+curl -s http://localhost:8082/api/v1/inventory/USB-HB-004 | jq
 
 # GPU RTX — stock: 8, umbral: 2
-curl -s http://localhost:8082/inventory/GPU-RTX-004 | jq
+curl -s http://localhost:8082/api/v1/inventory/GPU-RTX-004 | jq
 
 # RAM DDR5 — stock: 60, umbral: 10
-curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq
+curl -s http://localhost:8082/api/v1/inventory/RAM-DDR5-005 | jq
 ```
 
 ### 3.2 Actualizar Stock
@@ -381,7 +381,7 @@ curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq
 #### Actualizar stock del teclado a 75 unidades
 
 ```bash
-curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/KB-MECH-001/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 75,
@@ -392,7 +392,7 @@ curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
 #### Actualizar stock del mouse óptico a 150 unidades
 
 ```bash
-curl -s -X PUT http://localhost:8082/inventory/MS-OPT-002/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/MS-OPT-002/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 150,
@@ -403,7 +403,7 @@ curl -s -X PUT http://localhost:8082/inventory/MS-OPT-002/stock \
 #### Actualizar stock del monitor a 25 unidades
 
 ```bash
-curl -s -X PUT http://localhost:8082/inventory/MNT-27-001/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/MNT-27-001/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 25,
@@ -414,7 +414,7 @@ curl -s -X PUT http://localhost:8082/inventory/MNT-27-001/stock \
 #### Ajustar stock de la GPU (bajo stock)
 
 ```bash
-curl -s -X PUT http://localhost:8082/inventory/GPU-RTX-004/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/GPU-RTX-004/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 3,
@@ -426,16 +426,16 @@ curl -s -X PUT http://localhost:8082/inventory/GPU-RTX-004/stock \
 
 ```bash
 # Historial del teclado (verás RESTOCK después del update)
-curl -s "http://localhost:8082/inventory/KB-MECH-001/history?page=0&size=10" | jq
+curl -s "http://localhost:8082/api/v1/inventory/KB-MECH-001/history?page=0&size=10" | jq
 
 # Historial del mouse óptico
-curl -s "http://localhost:8082/inventory/MS-OPT-002/history?page=0&size=10" | jq
+curl -s "http://localhost:8082/api/v1/inventory/MS-OPT-002/history?page=0&size=10" | jq
 
 # Historial del monitor
-curl -s "http://localhost:8082/inventory/MNT-27-001/history?page=0&size=10" | jq
+curl -s "http://localhost:8082/api/v1/inventory/MNT-27-001/history?page=0&size=10" | jq
 
 # Historial de la GPU (verá el ajuste de stock)
-curl -s "http://localhost:8082/inventory/GPU-RTX-004/history?page=0&size=10" | jq
+curl -s "http://localhost:8082/api/v1/inventory/GPU-RTX-004/history?page=0&size=10" | jq
 ```
 
 ### 3.4 Swagger / OpenAPI
@@ -462,9 +462,9 @@ curl -s http://localhost:8082/api-docs | jq
 > **Requisito:** ms-catalog, ms-inventory y **ms-payment** deben estar corriendo.
 > ms-order consulta precio vía gRPC a ms-catalog y reserva stock vía gRPC a ms-inventory.
 >
-> ✅ **ms-payment operativo:** La orden se guarda en estado `PENDIENTE_PAGO` y ms-payment
+> **ms-payment operativo:** La orden se guarda en estado `PENDIENTE_PAGO` y ms-payment
 > consume el evento `OrderCreated` automáticamente. En ~1-2 s la orden transiciona a
-> `CONFIRMADO` (80 %) o `CANCELADO` (20 %) sin intervención manual.
+> `CONFIRMADO` o `CANCELADO` según la respuesta de la pasarela.
 
 #### Crear orden como customer1 — 2 Teclados + 1 Monitor
 
@@ -539,20 +539,20 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
 > **ms-payment está implementado y activo.** Al crear una orden, el flujo completo es:
 >
 > 1. ms-order crea la orden en `PENDIENTE_PAGO` y publica `OrderCreated` a `order-events`
-> 2. ms-payment consume `OrderCreated`, simula el pago con `Random` y publica a `payment-events`
+> 2. ms-payment consume `OrderCreated`, procesa el pago vía pasarela (ACL) y publica a `payment-events`
 > 3. ms-order consume el resultado y transiciona la orden automáticamente
 >
-> | Resultado (probabilidad) | Evento publicado   | Nuevo estado de orden |
-> | ------------------------ | ------------------ | --------------------- |
-> | ✅ 80 % éxito            | `PaymentProcessed` | `CONFIRMADO`          |
-> | ❌ 20 % fallo            | `PaymentFailed`    | `CANCELADO`           |
+> | Resultado              | Evento publicado   | Nuevo estado de orden |
+> | ---------------------- | ------------------ | --------------------- |
+> | Pago exitoso           | `PaymentProcessed` | `CONFIRMADO`          |
+> | Pago rechazado         | `PaymentFailed`    | `CANCELADO`           |
 
 #### Verificar logs de ms-payment
 
 ```bash
 # Ver que ms-payment procesó el pago
-docker compose logs ms-payment | grep "Processing mock payment"
-# Ejemplo: Processing mock payment for orderId=<uuid> → PaymentProcessed
+docker compose logs ms-payment | grep "Processing payment"
+# Ejemplo: Processing payment for orderId=<uuid> → PaymentProcessed
 
 # Ver todos los eventos publicados
 docker compose logs ms-payment | grep "Published"
@@ -599,7 +599,7 @@ open http://localhost:8080
   "timestamp": "2026-04-21T10:00:00.000Z",
   "payload": {
     "orderId": "<ORDER_ID>",
-    "transactionId": "mock-txn-manual-001",
+    "transactionId": "txn-gateway-001",
     "status": "COMPLETED"
   }
 }
@@ -616,7 +616,7 @@ open http://localhost:8080
   "timestamp": "2026-04-21T10:00:00.000Z",
   "payload": {
     "orderId": "<ORDER_ID>",
-    "reason": "Mock payment rejected (simulated 20% failure rate)"
+    "reason": "Payment rejected by gateway"
   }
 }
 ```
@@ -1174,13 +1174,13 @@ curl -s "http://localhost:8084/api/v1/products?page=0&size=20" | jq '.[].sku'
 #### Paso 1 — Consultar stock actual
 
 ```bash
-curl -s http://localhost:8082/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
 ```
 
 #### Paso 2 — Actualizar stock (reabastecimiento)
 
 ```bash
-curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/KB-MECH-001/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 100,
@@ -1191,14 +1191,14 @@ curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
 #### Paso 3 — Verificar nuevo stock
 
 ```bash
-curl -s http://localhost:8082/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
 ```
 
 #### Paso 4 — Demostrar validación (no permite valores negativos)
 
 ```bash
 # Esto debe retornar error de validación
-curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/KB-MECH-001/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": -5,
@@ -1209,7 +1209,7 @@ curl -s -X PUT http://localhost:8082/inventory/KB-MECH-001/stock \
 #### Paso 5 — Consultar historial de cambios
 
 ```bash
-curl -s "http://localhost:8082/inventory/KB-MECH-001/history?page=0&size=20" | jq
+curl -s "http://localhost:8082/api/v1/inventory/KB-MECH-001/history?page=0&size=20" | jq
 ```
 
 > **Mostrar:** Se ven movimientos con tipo `RESTOCK`, con `previousQuantity` y `newQuantity` en cada entrada.
@@ -1218,10 +1218,10 @@ curl -s "http://localhost:8082/inventory/KB-MECH-001/history?page=0&size=20" | j
 
 ```bash
 # Ver stock actual (8 unidades, umbral 2)
-curl -s http://localhost:8082/inventory/GPU-RTX-004 | jq '{sku, quantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/GPU-RTX-004 | jq '{sku, quantity, availableQuantity}'
 
 # Reducir stock — simular pérdida por inventario físico
-curl -s -X PUT http://localhost:8082/inventory/GPU-RTX-004/stock \
+curl -s -X PUT http://localhost:8082/api/v1/inventory/GPU-RTX-004/stock \
   -H "Content-Type: application/json" \
   -d '{
     "quantity": 2,
@@ -1229,7 +1229,7 @@ curl -s -X PUT http://localhost:8082/inventory/GPU-RTX-004/stock \
   }' | jq
 
 # Ver que alcanzó el umbral de agotamiento (quantity == threshold: 2 → StockDepleted)
-curl -s http://localhost:8082/inventory/GPU-RTX-004 | jq '{sku, quantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/GPU-RTX-004 | jq '{sku, quantity, availableQuantity}'
 
 # Ver evento StockDepleted en Kafka UI → http://localhost:8080 → inventory-events
 ```
@@ -1250,8 +1250,8 @@ curl -s http://localhost:8082/inventory/GPU-RTX-004 | jq '{sku, quantity, availa
 
 ```bash
 echo "=== Stock disponible ==="
-curl -s http://localhost:8082/inventory/KB-MECH-001 | jq '{sku, availableQuantity}'
-curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq '{sku, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/KB-MECH-001 | jq '{sku, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/RAM-DDR5-005 | jq '{sku, availableQuantity}'
 ```
 
 #### Paso 2 — Crear orden con múltiples productos (debe tener éxito)
@@ -1287,8 +1287,8 @@ curl -s -X POST http://localhost:8081/api/v1/orders \
 #### Paso 3 — Verificar que el stock se reservó
 
 ```bash
-curl -s http://localhost:8082/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
-curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/KB-MECH-001 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
+curl -s http://localhost:8082/api/v1/inventory/RAM-DDR5-005 | jq '{sku, quantity, reservedQuantity, availableQuantity}'
 ```
 
 #### Paso 4 — Esperar el pago automático de ms-payment (~1-2 s)
@@ -1297,8 +1297,8 @@ curl -s http://localhost:8082/inventory/RAM-DDR5-005 | jq '{sku, quantity, reser
 
 ```bash
 # Ver logs de ms-payment en tiempo real
-docker compose logs -f ms-payment | grep "Processing mock payment\|Published"
-# Ejemplo: Processing mock payment for orderId=<uuid> → PaymentProcessed
+docker compose logs -f ms-payment | grep "Processing payment\|Published"
+# Ejemplo: Processing payment for orderId=<uuid> → PaymentProcessed
 ```
 
 #### Paso 5 — Verificar que la orden cambió de estado
@@ -1389,11 +1389,11 @@ curl -s "http://localhost:8081/api/v1/orders?page=0&size=20" \
 #### Paso 1.5 — Crear orden nueva y esperar el pago automático (demo completo del ciclo)
 
 > Crear una nueva orden (ver Paso 2 de HU4). ms-payment la procesará automáticamente en ~1-2 s.
-> La orden quedará en `CONFIRMADO` (80 %) o `CANCELADO` (20 %) antes de continuar.
+> La orden quedará en `CONFIRMADO` o `CANCELADO` según la respuesta de la pasarela.
 
 ```bash
 # Ver el resultado del pago en logs
-docker compose logs ms-payment | grep "Processing mock payment" | tail -5
+docker compose logs ms-payment | grep "Processing payment" | tail -5
 ```
 
 #### Paso 2 — Transición CONFIRMADO → EN_DESPACHO
