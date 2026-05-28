@@ -72,7 +72,7 @@ ms-inventory/
 
 ## Endpoints REST
 
-Base path: `/inventory` — Puerto HTTP: `8082`
+Base path: `/api/v1/inventory` — Puerto HTTP: `8082`
 
 | Método | Ruta             | Descripción                                | Roles           | Códigos HTTP       |
 | ------ | ---------------- | ------------------------------------------ | --------------- | ------------------ |
@@ -91,15 +91,15 @@ Ver Swagger UI para ejemplos completos. Endpoints principales:
 
 ```bash
 # Consultar stock
-curl http://localhost:8082/inventory/ACC-KB-001
+curl http://localhost:8082/api/v1/inventory/ACC-KB-001
 
 # Actualizar stock (requiere auth ADMIN)
-curl -X PUT http://localhost:8082/inventory/ACC-KB-001/stock \
+curl -X PUT http://localhost:8082/api/v1/inventory/ACC-KB-001/stock \
   -H "Content-Type: application/json" \
   -d '{"quantity": 100, "reason": "Restock from supplier"}'
 
 # Historial de movimientos
-curl "http://localhost:8082/inventory/ACC-KB-001/history?page=0&size=20"
+curl "http://localhost:8082/api/v1/inventory/ACC-KB-001/history?page=0&size=20"
 ```
 
 ---
