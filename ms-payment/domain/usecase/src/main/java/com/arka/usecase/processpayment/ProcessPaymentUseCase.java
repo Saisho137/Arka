@@ -15,12 +15,16 @@ import com.arka.model.payment.gateways.ProcessedEventRepository;
 import com.arka.model.payment.gateways.TransactionalGateway;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
+import reactor.util.Logger;
+import reactor.util.Loggers;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
 @RequiredArgsConstructor
 public class ProcessPaymentUseCase {
+
+    private static final Logger log = Loggers.getLogger(ProcessPaymentUseCase.class);
 
     private final PaymentGateway paymentGateway;
     private final PaymentRepository paymentRepository;
@@ -50,7 +54,10 @@ public class ProcessPaymentUseCase {
                                     .flatMap(result -> handleGatewayResult(saved, result, eventId)));
                 });
 
-        return transactionalGateway.executeInTransaction(pipeline);
+        return transactionalGateway.executeInTransaction(pipeline)
+                .doOnSubscribe(s -> log.info("ProcessPaymentUseCase: starting eventId={}, orderId={}, amount={}", eventId, orderId, amount))
+                .doOnSuccess(v -> log.info("ProcessPaymentUseCase: completed eventId={}, orderId={}", eventId, orderId))
+                .doOnError(ex -> log.error("ProcessPaymentUseCase: failed eventId={}, orderId={}", eventId, orderId, ex));
     }
 
     private Mono<Void> handleGatewayResult(Payment payment, PaymentGatewayResult result, UUID eventId) {
