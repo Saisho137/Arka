@@ -1,7 +1,6 @@
 package com.arka.kafka;
 
 import com.arka.model.outboxevent.DomainEventEnvelope;
-import com.arka.model.outboxevent.EventType;
 import com.arka.model.outboxevent.OutboxEvent;
 import com.arka.usecase.outboxrelay.OutboxRelayUseCase;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +66,7 @@ public class KafkaOutboxRelay {
 
         DomainEventEnvelope envelope = DomainEventEnvelope.builder()
                 .eventId(event.id().toString())
-                .eventType(toCamelCase(event.eventType()))
+                .eventType(event.eventType().value())
                 .timestamp(event.createdAt() != null ? event.createdAt() : Instant.now())
                 .source(DomainEventEnvelope.MS_SOURCE)
                 .correlationId(event.partitionKey())
@@ -79,14 +78,5 @@ public class KafkaOutboxRelay {
         } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize DomainEventEnvelope for event " + event.id(), e);
         }
-    }
-
-    static String toCamelCase(EventType eventType) {
-        String[] parts = eventType.name().split("_");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            sb.append(part.charAt(0)).append(part.substring(1).toLowerCase());
-        }
-        return sb.toString();
     }
 }
