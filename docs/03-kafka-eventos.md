@@ -9,7 +9,7 @@ title: "Kafka: Eventos y Tópicos"
 
 **1 tópico por Bounded Context** (servicio productor). Los eventos se discriminan por `eventType` en el sobre estándar. Partition key = ID del agregado raíz para garantizar orden causal.
 
-- 7 tópicos fijos (crece solo al agregar un microservicio nuevo)
+- 8 tópicos fijos (crece solo al agregar un microservicio nuevo)
 - Nuevo evento = nuevo `eventType`, sin cambio de infraestructura
 - Consumidores filtran por `eventType` e ignoran eventos desconocidos (log warning)
 
@@ -17,7 +17,7 @@ title: "Kafka: Eventos y Tópicos"
 
 | Criterio                | Tópico por Evento (❌ descartado)               | Tópico por Servicio (✅ adoptado)                                         |
 | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
-| Cantidad de tópicos     | 13+ (crece con cada nuevo evento)               | **7 fijos** (crece solo con nuevo microservicio)                          |
+| Cantidad de tópicos     | 13+ (crece con cada nuevo evento)               | **8 fijos** (crece solo con nuevo microservicio)                          |
 | Complejidad operacional | Alta: más ACLs, particiones, monitoreo          | **Baja:** un tópico por equipo/servicio owner                             |
 | Ordenamiento de eventos | Sin garantía entre tópicos del mismo dominio    | **Garantizado por partición** con `aggregateId` como key                  |
 | Evolución del esquema   | Nuevo evento = nuevo tópico + config + permisos | **Nuevo evento = nuevo `eventType`**, sin cambio de infraestructura       |
@@ -113,7 +113,7 @@ title: "Kafka: Eventos y Tópicos"
 | `payment-service-group`      | ms-payment       | `order-events`                                                                          |
 | `shipping-service-group`     | ms-shipping      | `order-events`                                                                          |
 | `provider-service-group`     | ms-provider      | `inventory-events`                                                                      |
-| `reporter-service-group`     | ms-reporter      | **TODOS** (7 tópicos)                                                                   |
+| `reporter-service-group`     | ms-reporter      | **TODOS** (7 tópicos de otros servicios)                                                        |
 
 ---
 
