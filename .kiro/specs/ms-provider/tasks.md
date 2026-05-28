@@ -81,8 +81,8 @@ ms-provider/
 
 ## Tasks
 
-- [ ] 1. Configure dependencies and application.yaml
-  - [ ] 1.1 Add dependencies in `build.gradle` (app-service) and `main.gradle`:
+- [x] 1. Configure dependencies and application.yaml
+  - [x] 1.1 Add dependencies in `build.gradle` (app-service) and `main.gradle`:
     - `io.projectreactor.kafka:reactor-kafka:1.3.25`
     - `org.springframework.boot:spring-boot-starter-data-r2dbc` (from BOM)
     - `org.postgresql:r2dbc-postgresql` (from BOM)
@@ -91,7 +91,7 @@ ms-provider/
     - `io.projectreactor.tools:blockhound-junit-platform:1.0.16.RELEASE` (testImplementation)
     - _Reference: `ms-inventory/build.gradle` + `ms-inventory/main.gradle` for exact patterns._
 
-  - [ ] 1.2 Create `application.yaml` (base), `application-local.yaml` and `application-docker.yaml`:
+  - [x] 1.2 Create `application.yaml` (base), `application-local.yaml` and `application-docker.yaml`:
     - See Design Document § Configuration for full content
     - Port: 8089
     - DB: provider_db on port 5436 (local) / postgres-provider:5432 (docker)
@@ -100,26 +100,26 @@ ms-provider/
     - Topics produced: provider-events
     - Outbox relay interval: 5000ms
 
-  - [ ] 1.3 Create `schema.sql` in `applications/app-service/src/main/resources/`:
+  - [x] 1.3 Create `schema.sql` in `applications/app-service/src/main/resources/`:
     - See Design Document § Database Schema for full DDL
     - Tables: suppliers, supplier_products, purchase_orders, purchase_order_items, outbox_events, processed_events
 
-  - [ ] 1.4 Configure R2DBC schema initialization:
+  - [x] 1.4 Configure R2DBC schema initialization:
     - Add `@Bean ConnectionFactoryInitializer` with `ResourceDatabasePopulator` loading `schema.sql`
 
-  - [ ] 1.5 Add PostgreSQL container to `compose.yaml` (root):
+  - [x] 1.5 Add PostgreSQL container to `compose.yaml` (root):
     - Service: `postgres-provider`, image: `postgres:17`, port: 5436:5432, db: provider_db
     - Add init script in `postgresql-scripts/` for provider_db
 
 ---
 
-- [ ] 2. Implement domain model (`domain/model`)
-  - [ ] 2.1 Generate model module with Scaffold:
+- [x] 2. Implement domain model (`domain/model`)
+  - [x] 2.1 Generate model module with Scaffold:
     ```bash
     cd ms-provider && ./gradlew generateModel --name=Supplier
     ```
 
-  - [ ] 2.2 Create domain records in `domain/model/src/main/java/com/arka/model/`:
+  - [x] 2.2 Create domain records in `domain/model/src/main/java/com/arka/model/`:
     - `supplier/Supplier.java` — record with @Builder: id, name, email, phone, address, country, active, createdAt, updatedAt
     - `supplier/SupplierProduct.java` — record with @Builder: id, supplierId, sku, supplierSku, unitPrice, leadTimeDays, reorderMultiplier, preferred, createdAt
     - `purchaseorder/PurchaseOrder.java` — record with @Builder: id, supplierId, status, totalAmount, notes, createdAt, updatedAt, sentAt, confirmedAt, receivedAt, items (List)
@@ -131,7 +131,7 @@ ms-provider/
     - `processedevent/ProcessedEvent.java` — record: eventId, processedAt
     - `envelope/DomainEventEnvelope.java` — record with @Builder: eventId, eventType, timestamp, source, correlationId, payload
 
-  - [ ] 2.3 Create gateway interfaces (ports) in `domain/model/src/main/java/com/arka/model/gateways/`:
+  - [x] 2.3 Create gateway interfaces (ports) in `domain/model/src/main/java/com/arka/model/gateways/`:
     - `SupplierRepository.java` — save, findById, findAll (paginated), findByEmail, deactivate
     - `SupplierProductRepository.java` — save, findBySupplierIdAndSku, findBySku, findPreferredBySku, deleteBySupplierIdAndSku
     - `PurchaseOrderRepository.java` — save, findById, findAll (filtered + paginated), existsBySkuAndStatusIn
@@ -140,8 +140,8 @@ ms-provider/
 
 ---
 
-- [ ] 3. Implement use cases (`domain/usecase`)
-  - [ ] 3.1 Generate use case modules with Scaffold:
+- [x] 3. Implement use cases (`domain/usecase`)
+  - [x] 3.1 Generate use case modules with Scaffold:
     ```bash
     ./gradlew generateUseCase --name=GeneratePurchaseOrder
     ./gradlew generateUseCase --name=CreateSupplier
@@ -157,7 +157,7 @@ ms-provider/
     ./gradlew generateUseCase --name=OutboxRelay
     ```
 
-  - [ ] 3.2 Implement `GeneratePurchaseOrderUseCase`:
+  - [x] 3.2 Implement `GeneratePurchaseOrderUseCase`:
     - Input: DomainEventEnvelope (from Kafka)
     - Steps:
       1. Check idempotency (ProcessedEventRepository.existsByEventId)
@@ -168,70 +168,70 @@ ms-provider/
       6. Save PurchaseOrder, OutboxEvent(PurchaseOrderCreated), ProcessedEvent — same transaction
     - Returns: Mono<Void>
 
-  - [ ] 3.3 Implement `CreateSupplierUseCase`:
+  - [x] 3.3 Implement `CreateSupplierUseCase`:
     - Check email uniqueness → 409 if exists
     - Save Supplier with active=true
     - Returns: Mono<Supplier>
 
-  - [ ] 3.4 Implement `GetSupplierUseCase`:
+  - [x] 3.4 Implement `GetSupplierUseCase`:
     - Find by ID, include supplier_products
     - Returns: Mono<Supplier> (with products populated)
 
-  - [ ] 3.5 Implement `ListSuppliersUseCase`:
+  - [x] 3.5 Implement `ListSuppliersUseCase`:
     - Paginated list of active suppliers
     - Returns: Mono<PageResponse<Supplier>>
 
-  - [ ] 3.6 Implement `UpdateSupplierUseCase`:
+  - [x] 3.6 Implement `UpdateSupplierUseCase`:
     - Find by ID → 404 if not found
     - Update fields, set updatedAt
     - Returns: Mono<Supplier>
 
-  - [ ] 3.7 Implement `DeactivateSupplierUseCase`:
+  - [x] 3.7 Implement `DeactivateSupplierUseCase`:
     - Set active=false, updatedAt=now
     - Returns: Mono<Void>
 
-  - [ ] 3.8 Implement `AssignSupplierProductUseCase`:
+  - [x] 3.8 Implement `AssignSupplierProductUseCase`:
     - If assigning as preferred → remove preferred from other suppliers for same SKU
     - Save SupplierProduct
     - Returns: Mono<SupplierProduct>
 
-  - [ ] 3.9 Implement `ListPurchaseOrdersUseCase`:
+  - [x] 3.9 Implement `ListPurchaseOrdersUseCase`:
     - Filters: status, supplierId, sku, dateFrom, dateTo
     - Paginated
     - Returns: Mono<PageResponse<PurchaseOrder>>
 
-  - [ ] 3.10 Implement `GetPurchaseOrderUseCase`:
+  - [x] 3.10 Implement `GetPurchaseOrderUseCase`:
     - Find by ID with items
     - Returns: Mono<PurchaseOrder>
 
-  - [ ] 3.11 Implement `TransitionPurchaseOrderUseCase`:
+  - [x] 3.11 Implement `TransitionPurchaseOrderUseCase`:
     - Validate transition via PurchaseOrderStatus.canTransitionTo()
     - If invalid → throw InvalidStateTransitionException (422)
     - If transition to SENT → also insert OutboxEvent(PurchaseOrderSent)
     - Update status, set timestamp field (sentAt, confirmedAt, receivedAt)
     - Returns: Mono<PurchaseOrder>
 
-  - [ ] 3.12 Implement `CreateManualPurchaseOrderUseCase`:
+  - [x] 3.12 Implement `CreateManualPurchaseOrderUseCase`:
     - Admin creates PO without StockDepleted event
     - Input: supplierId, items: [{sku, quantity}]
     - Lookup unit prices from supplier_products
     - Create PO + items + OutboxEvent(PurchaseOrderCreated)
     - Returns: Mono<PurchaseOrder>
 
-  - [ ] 3.13 Implement `OutboxRelayUseCase`:
+  - [x] 3.13 Implement `OutboxRelayUseCase`:
     - Query outbox_events WHERE status = PENDING ORDER BY created_at
     - For each: build DomainEventEnvelope, delegate to KafkaProducer, mark PUBLISHED
     - Returns: Flux<Void> (scheduled)
 
 ---
 
-- [ ] 4. Implement driven adapters (`infrastructure/driven-adapters`)
-  - [ ] 4.1 Generate R2DBC adapter with Scaffold:
+- [x] 4. Implement driven adapters (`infrastructure/driven-adapters`)
+  - [x] 4.1 Generate R2DBC adapter with Scaffold:
     ```bash
     ./gradlew generateDrivenAdapter --type=r2dbc
     ```
 
-  - [ ] 4.2 Implement R2DBC entities (Spring Data mapping):
+  - [x] 4.2 Implement R2DBC entities (Spring Data mapping):
     - `SupplierEntity.java` — @Table("suppliers"), maps to Supplier domain record
     - `SupplierProductEntity.java` — @Table("supplier_products"), maps to SupplierProduct
     - `PurchaseOrderEntity.java` — @Table("purchase_orders"), maps to PurchaseOrder
@@ -239,7 +239,7 @@ ms-provider/
     - `OutboxEventEntity.java` — @Table("outbox_events"), maps to OutboxEvent
     - `ProcessedEventEntity.java` — @Table("processed_events"), maps to ProcessedEvent
 
-  - [ ] 4.3 Implement Spring Data R2DBC repositories (interfaces):
+  - [x] 4.3 Implement Spring Data R2DBC repositories (interfaces):
     - `SupplierR2dbcRepository extends ReactiveCrudRepository<SupplierEntity, UUID>`
     - `SupplierProductR2dbcRepository extends ReactiveCrudRepository<SupplierProductEntity, UUID>` — custom queries: findBySku, findBySkuAndPreferredTrue
     - `PurchaseOrderR2dbcRepository extends ReactiveCrudRepository<PurchaseOrderEntity, UUID>` — custom queries with @Query for filtering
@@ -247,19 +247,19 @@ ms-provider/
     - `OutboxEventR2dbcRepository extends ReactiveCrudRepository<OutboxEventEntity, UUID>` — findByStatusOrderByCreatedAt
     - `ProcessedEventR2dbcRepository extends ReactiveCrudRepository<ProcessedEventEntity, UUID>`
 
-  - [ ] 4.4 Implement adapter classes that implement domain ports:
+  - [x] 4.4 Implement adapter classes that implement domain ports:
     - `R2dbcSupplierAdapter implements SupplierRepository` — delegates to SupplierR2dbcRepository with entity↔domain mapping
     - `R2dbcSupplierProductAdapter implements SupplierProductRepository`
     - `R2dbcPurchaseOrderAdapter implements PurchaseOrderRepository`
     - `R2dbcOutboxAdapter implements OutboxEventRepository`
     - `R2dbcProcessedEventAdapter implements ProcessedEventRepository`
 
-  - [ ] 4.5 Generate Kafka producer adapter with Scaffold:
+  - [x] 4.5 Generate Kafka producer adapter with Scaffold:
     ```bash
     ./gradlew generateDrivenAdapter --type=kafka
     ```
 
-  - [ ] 4.6 Implement `KafkaOutboxRelay`:
+  - [x] 4.6 Implement `KafkaOutboxRelay`:
     - Copy pattern from ms-inventory's `KafkaOutboxRelay`
     - `@Scheduled(fixedDelayString = "${scheduler.outbox-relay.interval}")`
     - Query PENDING events → publish to Kafka with partition key → mark PUBLISHED
@@ -268,34 +268,34 @@ ms-provider/
 
 ---
 
-- [ ] 5. Implement entry points (`infrastructure/entry-points`)
-  - [ ] 5.1 Generate WebFlux entry point with Scaffold:
+- [x] 5. Implement entry points (`infrastructure/entry-points`)
+  - [x] 5.1 Generate WebFlux entry point with Scaffold:
     ```bash
     ./gradlew generateEntryPoint --type=webflux
     ```
 
-  - [ ] 5.2 Implement `SupplierController` + `SupplierHandler`:
+  - [x] 5.2 Implement `SupplierController` + `SupplierHandler`:
     - Router bean with paths under `/api/v1/suppliers`
     - All endpoints require `X-User-Role: ADMIN` header check
     - Delegate to corresponding UseCases
     - Response DTOs: SupplierResponse, SupplierDetailResponse (with products), PageResponse<SupplierResponse>
 
-  - [ ] 5.3 Implement `PurchaseOrderController` + `PurchaseOrderHandler`:
+  - [x] 5.3 Implement `PurchaseOrderController` + `PurchaseOrderHandler`:
     - Router bean with paths under `/api/v1/purchase-orders`
     - All endpoints require `X-User-Role: ADMIN` header check
     - Delegate to corresponding UseCases
     - Response DTOs: PurchaseOrderResponse, PurchaseOrderDetailResponse (with items), PageResponse<PurchaseOrderResponse>
 
-  - [ ] 5.4 Implement `GlobalExceptionHandler`:
+  - [x] 5.4 Implement `GlobalExceptionHandler`:
     - Copy from ms-inventory and adapt
     - Handle: SupplierNotFoundException (404), PurchaseOrderNotFoundException (404), DuplicateEmailException (409), InvalidStateTransitionException (422), SupplierNotFoundForSkuException (422)
 
-  - [ ] 5.5 Generate Kafka consumer entry point with Scaffold:
+  - [x] 5.5 Generate Kafka consumer entry point with Scaffold:
     ```bash
     ./gradlew generateEntryPoint --type=kafka
     ```
 
-  - [ ] 5.6 Implement Kafka consumer (copy pattern from ms-inventory):
+  - [x] 5.6 Implement Kafka consumer (copy pattern from ms-inventory):
     - `KafkaConsumerConfig.java` — bean `KafkaReceiver<String, String>` for topic `inventory-events`
     - `KafkaConsumerLifecycle.java` — `@EventListener(ApplicationReadyEvent.class)` starts consumption
     - `KafkaEventConsumer.java` — deserializes envelope, filters by eventType == "StockDepleted", delegates to GeneratePurchaseOrderUseCase
@@ -303,13 +303,13 @@ ms-provider/
 
 ---
 
-- [ ] 6. Application configuration and wiring
-  - [ ] 6.1 Update `MainApplication.java`:
+- [x] 6. Application configuration and wiring
+  - [x] 6.1 Update `MainApplication.java`:
     - `@SpringBootApplication`
     - `@EnableScheduling` (for Outbox Relay)
     - `ConnectionFactoryInitializer` bean for schema.sql
 
-  - [ ] 6.2 Add PostgreSQL container to root `compose.yaml`:
+  - [x] 6.2 Add PostgreSQL container to root `compose.yaml`:
     ```yaml
     postgres-provider:
       image: postgres:17
@@ -323,7 +323,7 @@ ms-provider/
         - provider_data:/var/lib/postgresql/data
     ```
 
-  - [ ] 6.3 Add ms-provider service to root `compose.yaml`:
+  - [x] 6.3 Add ms-provider service to root `compose.yaml`:
     ```yaml
     ms-provider:
       build: ./ms-provider
@@ -336,7 +336,7 @@ ms-provider/
         - arka-kafka
     ```
 
-  - [ ] 6.4 Create init script `postgresql-scripts/init-provider-db.sql`:
+  - [x] 6.4 Create init script `postgresql-scripts/init-provider-db.sql`:
     - Same DDL as schema.sql for Docker initialization
 
 ---
@@ -375,19 +375,19 @@ ms-provider/
 
 ---
 
-- [ ] 8. Integration and build verification
-  - [ ] 8.1 Run `./gradlew validateStructure` — must pass
-  - [ ] 8.2 Run `./gradlew build` — must compile and pass all tests
+- [x] 8. Integration and build verification
+  - [x] 8.1 Run `./gradlew validateStructure` — must pass
+  - [x] 8.2 Run `./gradlew build` — must compile and pass all tests
   - [ ] 8.3 Verify schema.sql creates all tables on startup with embedded PostgreSQL (or Testcontainers)
   - [ ] 8.4 Verify Kafka consumer connects and filters correctly in integration test
 
 ---
 
-- [ ] 9. Documentation
-  - [ ] 9.1 Create/update `ms-provider/README.md` following monorepo convention (see ms-reporter/README.md as template)
+- [x] 9. Documentation
+  - [x] 9.1 Create/update `ms-provider/README.md` following monorepo convention (see ms-reporter/README.md as template)
   - [ ] 9.2 Update `docs/04-api-endpoints.md` with ms-provider endpoints
   - [ ] 9.3 Update `docs/10-urls-puertos-globales.md` with ms-provider port 8089 and Swagger UI
-  - [ ] 9.4 Verify `docs/03-kafka-eventos.md` already has `provider-events` topic documented
+  - [x] 9.4 Verify `docs/03-kafka-eventos.md` already has `provider-events` topic documented
 
 ---
 
