@@ -53,7 +53,7 @@ Arka enfrenta desafíos críticos de operación:
 
 ### Comunicación entre Servicios
 
-- **gRPC (síncrono):** `ms-order → ms-inventory` (reserva de stock inmediata), `ms-cart → ms-catalog` (precio actualizado en checkout)
+- **gRPC (síncrono):** `ms-order → ms-inventory` (reserva de stock), `ms-order → ms-catalog` (precio autoritativo), `ms-cart → ms-catalog` (precio en checkout)
 - **Kafka (asíncrono):** Sagas Secuenciales, eventos de dominio, Event Sourcing para ms-reporter
 
 ### Kafka Topics (1 tópico por servicio)
@@ -67,6 +67,7 @@ Arka enfrenta desafíos críticos de operación:
 | `payment-events`   | ms-payment   | PaymentProcessed · PaymentFailed                                                  |
 | `shipping-events`  | ms-shipping  | ShippingDispatched                                                                |
 | `provider-events`  | ms-provider  | PurchaseOrderCreated                                                              |
+| `reporter-events`  | ms-reporter  | StockAlertGenerated                                                               |
 
 Partition key = aggregate ID. Consumidores discriminan por campo `eventType` del envelope estándar.
 
@@ -76,7 +77,7 @@ Partition key = aggregate ID. Consumidores discriminan por campo `eventType` del
 | ------------------------- | ---------------------------------------------------------------------------------- |
 | **Saga Secuencial**       | ms-order (orquestador) → ms-inventory → ms-payment                                 |
 | **CQRS / Event Sourcing** | ms-reporter consume todos los eventos de Kafka                                     |
-| **Outbox Pattern**        | ms-order, ms-inventory (transacción BD + evento atómico)                           |
+| **Outbox Pattern**        | ms-order, ms-inventory, ms-catalog, ms-payment, ms-shipping, ms-provider           |
 | **Cache-Aside**           | ms-catalog con Redis para lecturas de alta frecuencia                              |
 | **Anti-Corruption Layer** | ms-payment (pasarelas de pago), ms-shipping (logística), ms-provider (proveedores) |
 | **Circuit Breaker**       | Llamadas a servicios externos (ms-payment, ms-shipping)                            |
