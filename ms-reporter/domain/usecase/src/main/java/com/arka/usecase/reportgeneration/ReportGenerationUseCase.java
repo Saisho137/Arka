@@ -22,7 +22,7 @@ public class ReportGenerationUseCase {
     private final ReportMetadataRepository reportMetadataRepository;
     private final SalesSummaryRepository salesSummaryRepository;
     private final FileStorageGateway fileStorageGateway;
-    private final ReportFileGenerator reportFileGenerator;
+    private final List<ReportFileGenerator> reportFileGenerators;
 
     public UUID generateWeeklyReport(String reportType, LocalDate startDate, LocalDate endDate, String requestedBy) {
         if (startDate.isAfter(endDate)) {
@@ -48,7 +48,12 @@ public class ReportGenerationUseCase {
             List<SalesSummary> data = salesSummaryRepository.findByWeekRange(
                     metadata.startDate(), metadata.endDate());
 
-            ReportFileResult result = reportFileGenerator.generate(metadata.reportType(), data, metadata);
+            ReportFileResult result = reportFileGenerators.stream()
+                    .map(g -> g.generate(metadata.reportType(), data, metadata))
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No ReportFileGenerator available for type: " + metadata.reportType()));
             String s3Key = "reports/" + metadata.reportType() + "/" + reportId + result.extension();
 
             fileStorageGateway.upload(s3Key, result.filePath(), result.contentType());
