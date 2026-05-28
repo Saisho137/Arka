@@ -1,57 +1,45 @@
-# Plan de Implementación: ms-payment (Mock)
+# Plan de Implementación: ms-payment (Producción — Outbox + ACL)
 
 ## Visión General
 
-Implementación **mínima y mock** del microservicio `ms-payment`. El objetivo no es integrar pasarelas reales (Stripe, Wompi, MercadoPago) sino cubrir exactamente el rol que este servicio cumple en la arquitectura y los flujos Kafka documentados:
+Implementación **completa y production-ready** del microservicio `ms-payment`. Incluye persistencia, idempotencia, Outbox Pattern, Anti-Corruption Layer (ACL) con Strategy pattern para pasarelas de pago, y endpoints REST de consulta.
+
+### Arquitectura
 
 1. **Consumir** eventos `OrderCreated` del tópico `order-events` (producidos por ms-order).
-2. **Simular** el procesamiento del pago con `Random`: **80 % → PaymentProcessed**, **20 % → PaymentFailed**.
-3. **Publicar** el evento resultante (`PaymentProcessed` o `PaymentFailed`) al tópico `payment-events` con `orderId` como partition key.
+2. **Procesar** el pago vía ACL (`PaymentGateway` port) — actualmente un mock (80/20), reemplazable por Stripe/Wompi/MercadoPago sin tocar dominio.
+3. **Persistir** el resultado en PostgreSQL (R2DBC) con tabla `payments`.
+4. **Publicar** el evento resultante (`PaymentProcessed` o `PaymentFailed`) via **Outbox Pattern** (tabla `outbox_events` → scheduler → Kafka `payment-events`).
+5. **Garantizar idempotencia** con tabla `processed_events`.
+6. **Exponer** endpoint REST de consulta: `GET /api/v1/payments/orders/{orderId}`.
 
-El servicio compila, pasa `./gradlew validateStructure` y opera de forma autónoma en Docker Compose sin dependencias externas.
-
-**SIN:** base de datos, outbox, idempotencia, circuit breaker, bulkhead, retry, secrets manager, REST endpoints, SDKs de pasarelas.
-
----
-
-## Regla de Implementación
-
-Todos los módulos (Model, UseCase, Driven Adapter, Entry Point) **DEBEN generarse con las tareas Gradle del plugin Bancolombia Scaffold**. La creación manual de estructura de módulos está **PROHIBIDA**.
-
-```bash
-# Siempre desde la raíz de ms-payment/
-./gradlew generateModel --name=<Name>
-./gradlew generateUseCase --name=<Name>
-./gradlew generateDrivenAdapter --type=<type> [--name=<name>]
-./gradlew generateEntryPoint --type=<type>
-./gradlew validateStructure
-```
-
-Ver `.agents/skills/scaffold-tasks/SKILL.md` para referencia completa.
-
-**REUTILIZACIÓN OBLIGATORIA:** El patrón Kafka Consumer (`KafkaReceiver` + `KafkaConsumerConfig` + `KafkaConsumerLifecycle`) y el Kafka Producer se **copian y adaptan** de `ms-inventory`. La razón: `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0 (Spring Boot 4.0.3); el único enfoque correcto es `KafkaReceiver` de reactor-kafka directamente (§B.12 del diseño).
+**CON:** PostgreSQL 17 (R2DBC), Outbox Pattern, idempotencia, ACL Strategy, Spring Security, Rate Limiting, REST endpoint.
 
 ---
 
-## Estructura Final Esperada
+## Estructura Implementada
 
 ```
 ms-payment/
 ├── domain/
-│   ├── model/           → :model   — PaymentEvent, PaymentGateway port (mock impl)
-│   └── usecase/         → :usecase — MockPaymentUseCase (lógica 80/20)
+│   ├── model/           → :model   — Payment, EventType, OutboxEvent, PaymentGatewayResult, ports
+│   └── usecase/         → :usecase — ProcessPaymentUseCase, OutboxRelayUseCase
 ├── infrastructure/
 │   ├── driven-adapters/
-│   │   └── kafka-producer/          — KafkaPaymentProducer (publica payment-events)
+│   │   ├── kafka-producer/      — KafkaPaymentProducer (Outbox Relay + publisher)
+│   │   │                          MockPaymentGateway (ACL impl)
+│   │   └── r2dbc-postgresql/    — R2DBC adapters (Payment, Outbox, ProcessedEvent, Transaction)
+│   │                              JacksonJsonSerializer
 │   └── entry-points/
-│       └── kafka-consumer/          — KafkaEventConsumer, Config, Lifecycle
+│       ├── kafka-consumer/      — KafkaEventConsumer, KafkaConfig, KafkaConsumerLifecycle
+│       └── reactive-web/        — PaymentController (REST), RateLimitFilter
 └── applications/
-    └── app-service/                 — Spring Boot main, application.yaml
+    └── app-service/             — SecurityConfig, UseCasesConfig, MainApplication
 ```
 
 ---
 
-## Contrato de Eventos (Referencia Crítica)
+## Contrato de Eventos (sin cambios respecto al mock original)
 
 ### Evento consumido — `order-events` (eventType: `OrderCreated`)
 
@@ -72,7 +60,7 @@ ms-payment/
 }
 ```
 
-### Evento publicado — `payment-events` (PaymentProcessed / PaymentFailed)
+### Evento publicado — `payment-events` (vía Outbox Pattern)
 
 ```json
 {
@@ -80,7 +68,7 @@ ms-payment/
   "eventType": "PaymentProcessed",
   "timestamp": "2026-04-21T10:00:01Z",
   "source": "ms-payment",
-  "correlationId": "orderId-como-correlacion",
+  "correlationId": "orderId",
   "payload": {
     "orderId": "uuid",
     "transactionId": "mock-txn-uuid",
@@ -89,289 +77,127 @@ ms-payment/
 }
 ```
 
-```json
-{
-  "eventId": "uuid-generado",
-  "eventType": "PaymentFailed",
-  "timestamp": "2026-04-21T10:00:01Z",
-  "source": "ms-payment",
-  "correlationId": "orderId-como-correlacion",
-  "payload": {
-    "orderId": "uuid",
-    "reason": "Mock payment rejected (simulated 20% failure rate)"
-  }
-}
-```
-
-> **Campos mínimos que ms-order necesita extraer** (ver `KafkaEventConsumer.java` de ms-order):
->
-> - `PaymentProcessed`: `payload.orderId`
-> - `PaymentFailed`: `payload.orderId`, `payload.reason`
-
 ---
 
 ## Tareas
 
-### Tarea 1 — Configurar dependencias y application.yaml
+### Tarea 1 — Configurar proyecto y módulos Gradle
 
-- [x] 1.1 Agregar dependencias en `build.gradle` (app-service) y `main.gradle`:
-  - `io.projectreactor.kafka:reactor-kafka:1.3.25` (en módulo kafka-producer y kafka-consumer cuando se creen)
-  - `spring-kafka` (del BOM de Spring Boot — sin versión)
-  - `jackson-databind` (del BOM)
-  - `net.jqwik:jqwik:1.9.2` (testImplementation en main.gradle)
-  - **NO** agregar: R2DBC, MongoDB, Redis, Resilience4j, AWS SDK, gRPC
-  - _Versiones de la tabla "Versionado Unificado" de `reusability.md`. Referencia: `ms-inventory/build.gradle` + `ms-inventory/main.gradle`._
-
-- [x] 1.2 Crear `application.yaml` (base), `application-local.yaml` y `application-docker.yaml`:
-  - **Base (`application.yaml`):**
-    ```yaml
-    spring:
-      profiles:
-        active: ${SPRING_PROFILES_ACTIVE:local}
-      application:
-        name: ms-payment
-    kafka:
-      consumer:
-        group-id: payment-service-group
-        topics:
-          order-events: order-events
-      producer:
-        topics:
-          payment-events: payment-events
-    ```
-  - **Local (`application-local.yaml`):**
-    ```yaml
-    spring:
-      kafka:
-        bootstrap-servers: localhost:9092
-    ```
-  - **Docker (`application-docker.yaml`):**
-    ```yaml
-    spring:
-      kafka:
-        bootstrap-servers: arka-kafka:9092
-    ```
-  - **Copiar estructura exacta** de `ms-inventory/applications/app-service/src/main/resources/` (§B.10, reusability.md #9).
-  - _Sin credenciales, sin datasource, sin puertos de BD._
+- [x] 1.1 Configurar `settings.gradle` con módulos: `:app-service`, `:model`, `:usecase`, `:kafka-producer`, `:r2dbc-postgresql`, `:kafka-consumer`, `:reactive-web`
+- [x] 1.2 Crear `application.yaml` con R2DBC datasource (`r2dbc:postgresql://localhost:5434/db_payment`), Kafka config, pool settings
+- [x] 1.3 Crear perfiles `application-local.yaml` y `application-docker.yaml`
+- [x] 1.4 Configurar `app-service/build.gradle` con dependencias: spring-boot-starter-security, webflux, actuator, data-r2dbc, r2dbc-postgresql
 
 ---
 
-### Tarea 2 — Implementar modelo de dominio (`domain/model`)
+### Tarea 2 — Implementar modelo de dominio
 
-- [x] 2.1 Generar módulo con Scaffold y crear los records de dominio mínimos:
-
-  ```bash
-  cd ms-payment && ./gradlew generateModel --name=Payment
-  ```
-
-  Crear manualmente en `com.arka.model.payment`:
-  - **`PaymentStatus`** — enum con valores `COMPLETED`, `FAILED`
-  - **`PaymentProcessedPayload`** — record con `UUID orderId`, `String transactionId`, `PaymentStatus status`
-    - `@Builder(toBuilder = true)`, Lombok
-  - **`PaymentFailedPayload`** — record con `UUID orderId`, `String reason`
-    - `@Builder(toBuilder = true)`, Lombok
-
-- [x] 2.2 Crear `DomainEventEnvelope` en `com.arka.model.payment.event`:
-  - **Copiar** de `ms-order/domain/model/src/main/java/com/arka/model/outboxevent/DomainEventEnvelope.java`
-  - Cambiar la constante `MS_SOURCE = "ms-payment"` (único cambio)
-  - Campos: `eventId`, `eventType`, `timestamp`, `source`, `correlationId`, `payload` (Object)
-  - Compact constructor con `Objects.requireNonNull` y defaults para `timestamp` y `source`
-
-- [x] 2.3 Crear el port (interfaz Gateway) `PaymentEventPublisher` en `com.arka.model.payment.gateways`:
-  - Un único método:
-    ```java
-    Mono<Void> publishPaymentEvent(String orderId, DomainEventEnvelope envelope);
-    ```
-  - Este port desacopla el usecase del Kafka concreto (Clean Architecture).
+- [x] 2.1 Crear `Payment` record: id, orderId, gateway, transactionId, amount, currency, status, failureReason, createdAt, updatedAt
+- [x] 2.2 Crear `PaymentStatus` enum: PENDING, COMPLETED, FAILED
+- [x] 2.3 Crear `PaymentGatewayResult` record: success, transactionId, failureReason
+- [x] 2.4 Crear `EventType` enum con `value()` explícito: PAYMENT_PROCESSED("PaymentProcessed"), PAYMENT_FAILED("PaymentFailed")
+- [x] 2.5 Crear `OutboxEvent` record: id, eventType, payload (JSON), partitionKey, published, createdAt
+- [x] 2.6 Crear `PaymentProcessedPayload` y `PaymentFailedPayload` records
+- [x] 2.7 Crear `DomainEventEnvelope` record (source="ms-payment")
 
 ---
 
-### Tarea 3 — Implementar caso de uso (`domain/usecase`)
+### Tarea 3 — Definir puertos (Gateway interfaces)
 
-- [x] 3.1 Generar UseCase con Scaffold:
-
-  ```bash
-  cd ms-payment && ./gradlew generateUseCase --name=ProcessPayment
-  ```
-
-- [x] 3.2 Implementar `ProcessPaymentUseCase` en `com.arka.usecase.processPayment`:
-  - Dependencia inyectada: `PaymentEventPublisher` (port del modelo)
-  - Método público principal:
-    ```java
-    public Mono<Void> process(UUID orderId, UUID correlationId)
-    ```
-  - **Lógica mock:**
-    1. Generar resultado aleatorio: `new Random().nextDouble() < 0.80` → `PaymentProcessed`, resto → `PaymentFailed`
-    2. Si `PaymentProcessed`:
-       - Construir `PaymentProcessedPayload` con `orderId`, `transactionId = "mock-txn-" + UUID.randomUUID()`, `status = COMPLETED`
-       - Construir `DomainEventEnvelope` con `eventType = "PaymentProcessed"`, `correlationId = orderId.toString()`
-    3. Si `PaymentFailed`:
-       - Construir `PaymentFailedPayload` con `orderId`, `reason = "Mock payment rejected (simulated 20% failure rate)"`
-       - Construir `DomainEventEnvelope` con `eventType = "PaymentFailed"`, `correlationId = orderId.toString()`
-    4. Llamar a `paymentEventPublisher.publishPaymentEvent(orderId.toString(), envelope)`
-  - Log INFO: `"Processing mock payment for orderId={} → {}"`, con el eventType resultante
-  - `@RequiredArgsConstructor` (Lombok)
+- [x] 3.1 `PaymentRepository`: save, findById, findByOrderId, updateStatus
+- [x] 3.2 `PaymentGateway` (ACL port): charge(orderId, amount, currency) → Mono<PaymentGatewayResult>, gatewayName()
+- [x] 3.3 `OutboxEventRepository`: save, findPendingEvents, markAsPublished
+- [x] 3.4 `ProcessedEventRepository`: exists(eventId), save(eventId)
+- [x] 3.5 `TransactionalGateway`: executeInTransaction(Mono<T>)
+- [x] 3.6 `JsonSerializer`: serialize(Object) → String
+- [x] 3.7 `PaymentEventPublisher`: publishPaymentEvent(orderId, envelope)
 
 ---
 
-### Tarea 4 — Implementar Kafka Producer (driven adapter)
+### Tarea 4 — Implementar casos de uso
 
-- [x] 4.1 Generar módulo con Scaffold:
-
-  ```bash
-  cd ms-payment && ./gradlew generateDrivenAdapter --type=generic --name=kafka-producer
-  ```
-
-  > El tipo `generic` crea un módulo vacío. El tipo `kafka` genera un producer de bajo nivel; para este mock usamos `generic` para tener control total con `KafkaSender` de reactor-kafka.
-
-- [x] 4.2 Implementar `KafkaPaymentProducer` en `com.arka.producer` (implementa `PaymentEventPublisher`):
-  - **Copiar y adaptar** de `ms-inventory/infrastructure/driven-adapters/kafka-producer/` (reusability.md #2)
-  - Dependencias del módulo: `io.projectreactor.kafka:reactor-kafka:1.3.25`, `com.fasterxml.jackson.core:jackson-databind`
-  - Bean `KafkaSender<String, String>` configurado con `SenderOptions.create(producerProperties)`
-  - Implementar `publishPaymentEvent(String orderId, DomainEventEnvelope envelope)`:
-    - Serializar `envelope` a JSON con `ObjectMapper`
-    - Usar `orderId` como partition key (`ProducerRecord<>(topic, orderId, json)`)
-    - Topic leído de `@Value("${kafka.producer.topics.payment-events}")`
-    - Retornar `Mono<Void>`
-  - Log INFO: `"Published {} event for orderId={}"` con eventType y orderId
-
-- [x] 4.3 Agregar al `settings.gradle` el nuevo módulo generado por Scaffold:
-  - Verificar que `kafka-producer` quedó incluido (Scaffold lo hace automáticamente, pero confirmar).
+- [x] 4.1 `ProcessPaymentUseCase.process(eventId, orderId, amount, currency)`:
+  - Idempotencia: check processedEventRepository.exists(eventId)
+  - Crear Payment PENDING → save → paymentGateway.charge() → handle result
+  - Success: update COMPLETED + OutboxEvent(PAYMENT_PROCESSED)
+  - Failure: update FAILED + OutboxEvent(PAYMENT_FAILED)
+  - Todo envuelto en transactionalGateway.executeInTransaction()
+- [x] 4.2 `OutboxRelayUseCase`: fetchPendingEvents(), markAsPublished(event)
+- [x] 4.3 `ProcessPaymentUseCase.getPaymentByOrderId(orderId)` — consulta
 
 ---
 
-### Tarea 5 — Implementar Kafka Consumer (entry point)
+### Tarea 5 — Implementar driven adapters R2DBC
 
-- [x] 5.1 Generar módulo con Scaffold:
-
-  ```bash
-  cd ms-payment && ./gradlew generateEntryPoint --type=kafka
-  ```
-
-- [x] 5.2 Implementar `KafkaConsumerConfig` en `com.arka.consumer`:
-  - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaConsumerConfig.java`
-  - Crear un único bean `@Bean @Qualifier("orderEventsReceiver") KafkaReceiver<String, String>`:
-    - Consumer group: `payment-service-group`
-    - Topic: `order-events`
-    - Propiedades tomadas del `application.yaml`
-  - Dependencia del módulo: `io.projectreactor.kafka:reactor-kafka:1.3.25`
-
-- [x] 5.3 Implementar `KafkaEventConsumer` en `com.arka.consumer`:
-  - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaEventConsumer.java`
-  - Dependencias: `ProcessPaymentUseCase`, `KafkaReceiver<String, String>` (qualifier `orderEventsReceiver`), `ObjectMapper`
-  - Método `startConsuming()`: suscribe al receiver con `receive().flatMap(...)`
-  - Método `handleOrderEvent(String rawValue)`:
-    1. Parsear JSON con `ObjectMapper` → `JsonNode envelope`
-    2. Leer `eventType`
-    3. `switch(eventType)`:
-       - `"OrderCreated"` → extraer `payload.orderId` y `eventId`, invocar `processPaymentUseCase.process(orderId, eventId-as-correlationId)`
-       - `default` → log WARN `"Unknown eventType '{}' on topic order-events — ignoring"` y `Mono.empty()`
-    4. `onErrorResume`: log error, acknowledge, `Mono.empty()` (nunca bloquear la cola)
-  - Acknowledge de offset siempre (even on error), para no frenar el consumer group
-  - Log DEBUG al inicio de cada `OrderCreated` recibido
-
-- [x] 5.4 Implementar `KafkaConsumerLifecycle` en `com.arka.consumer`:
-  - **Copiar y adaptar** de `ms-inventory/infrastructure/entry-points/kafka-consumer/src/main/java/com/arka/consumer/KafkaConsumerLifecycle.java`
-  - Escuchar `ApplicationReadyEvent` con `@EventListener`
-  - Llamar a `kafkaEventConsumer.startConsuming()`
-  - Log INFO: `"Starting Kafka consumer for order-events — ms-payment mock"`
+- [x] 5.1 `R2dbcPaymentAdapter` (implements PaymentRepository): CRUD con SpringDataPaymentRepository
+- [x] 5.2 `R2dbcOutboxAdapter` (implements OutboxEventRepository): queries con limit 50 pending
+- [x] 5.3 `R2dbcProcessedEventAdapter` (implements ProcessedEventRepository): exists + save
+- [x] 5.4 `R2dbcTransactionalAdapter` (implements TransactionalGateway): TransactionalOperator
+- [x] 5.5 `JacksonJsonSerializer` (implements JsonSerializer): Jackson ObjectMapper
+- [x] 5.6 DTOs: PaymentDTO, OutboxEventDTO, ProcessedEventDTO con @Table mappings
 
 ---
 
-### Tarea 6 — Configurar app-service y wiring
+### Tarea 6 — Implementar Kafka Producer (Outbox Relay)
 
-- [x] 6.1 Verificar que `MainApplication.java` existe y está correctamente anotado con `@SpringBootApplication`.
-  - Si no existe, crearlo en `com.arka` bajo `applications/app-service/src/main/java/com/arka/`.
-
-- [x] 6.2 Crear bean de configuración `AppConfig` (o en `MainApplication`) que registre el `KafkaPaymentProducer` como implementación del port `PaymentEventPublisher`:
-  - Esto se resuelve automáticamente si `KafkaPaymentProducer` está anotado con `@Component` e implementa `PaymentEventPublisher`. Confirmar que Spring DI conecta el port correctamente.
-  - Si app-service no tiene dependencia directa del módulo `kafka-producer`, agregar `implementation project(':kafka-producer')` en `applications/app-service/build.gradle`.
-
-- [x] 6.3 Verificar `settings.gradle` incluye todos los módulos generados:
-  ```groovy
-  include ':app-service'
-  include ':model'
-  include ':usecase'
-  include ':kafka-producer'   // driven adapter
-  include ':kafka-consumer'   // entry point
-  ```
-  Ajustar `projectDir` para cada módulo según la ubicación real generada por Scaffold.
+- [x] 6.1 `KafkaProducerConfig`: bean KafkaSender<String, String> (acks=all, retries=3)
+- [x] 6.2 `KafkaPaymentProducer`:
+  - `@Scheduled(fixedDelay=5000)` relay() → poll outbox → publish → mark published
+  - implements PaymentEventPublisher (direct publish, backward compat)
+- [x] 6.3 `MockPaymentGateway` (implements PaymentGateway): Strategy pattern, 80% success, gatewayName="MOCK"
 
 ---
 
-### Tarea 7 — Validación y compilación
+### Tarea 7 — Implementar Kafka Consumer (Entry Point)
 
-- [x] 7.1 Ejecutar validación de estructura:
-
-  ```bash
-  cd ms-payment && ./gradlew validateStructure
-  ```
-
-  Corregir cualquier violación de Clean Architecture reportada.
-
-- [x] 7.2 Compilar el proyecto completo:
-
-  ```bash
-  cd ms-payment && ./gradlew build -x test
-  ```
-
-  Resolver errores de compilación. No avanzar si hay errores.
-
-- [x] 7.3 Agregar ms-payment al `compose.yaml` raíz:
-  - Usar el mismo patrón que `ms-catalog`, `ms-inventory` u `ms-order`
-  - Puerto sugerido: `8084` (verificar `docs/10-urls-puertos-globales.md` para no colisionar)
-  - Variables de entorno: `SPRING_PROFILES_ACTIVE=docker`
-  - Dependencias Docker: `arka-kafka`
-  - **NO** agregar dependencia de `arka-postgres` (sin BD)
-
-- [x] 7.4 Construir imagen Docker:
-
-  ```bash
-  cd ms-payment && ./gradlew :app-service:bootBuildImage
-  ```
-
-  Verificar que la imagen construye sin errores.
-
-- [x] 7.5 Smoke test end-to-end:
-
-  ```bash
-  # Levantar el ecosistema mínimo
-  docker compose up -d arka-kafka ms-order ms-payment
-
-  # Crear una orden (ms-order produce OrderCreated → ms-payment consume → publica PaymentProcessed/Failed → ms-order transiciona estado)
-  curl -s -X POST http://localhost:8081/api/v1/orders \
-    -H "Content-Type: application/json" \
-    -H "X-User-Email: customer1@arka.com" \
-    -H "X-User-Role: CUSTOMER" \
-    -d '{
-      "customerId": "482eae01-3840-3d80-9a3b-17333e6b32d5",
-      "customerEmail": "customer1@arka.com",
-      "shippingAddress": "Calle 123 #45-67, Bogotá, Colombia",
-      "items": [{"productId": "f47ac10b-58cc-4372-a567-0e02b2c3d001", "sku": "KB-MECH-001", "quantity": 1, "unitPrice": 185000.00}]
-    }' | python3 -m json.tool
-
-  # Verificar en logs de ms-payment que procesó el evento
-  docker compose logs ms-payment | grep "Processing mock payment"
-
-  # Verificar en logs de ms-order que recibió PaymentProcessed o PaymentFailed
-  docker compose logs ms-order | grep "PaymentProcessed\|PaymentFailed"
-  ```
-
-  - **Éxito:** la orden en ms-order transiciona a `CONFIRMADO` (80% de los casos) o permanece/cancela (20%).
-  - No se requiere que el 80/20 sea exacto en una sola prueba; validar en ~10 órdenes.
+- [x] 7.1 `KafkaConfig`: bean KafkaReceiver (group: payment-service-group, topic: order-events, manual commit)
+- [x] 7.2 `KafkaEventConsumer`: consume OrderCreated → extract orderId, eventId, totalAmount → delegate to UseCase
+- [x] 7.3 `KafkaConsumerLifecycle`: start on ApplicationReadyEvent
 
 ---
 
-## Resumen de lo que NO se implementa
+### Tarea 8 — Implementar REST Entry Point
 
-| Componente                   | Razón de exclusión en el mock             |
-| ---------------------------- | ----------------------------------------- |
-| PostgreSQL / R2DBC           | No hay persistencia — todo en memoria     |
-| Outbox Pattern               | Publicación directa a Kafka (sin BD)      |
-| Tabla `processed_events`     | Sin idempotencia formal (mock sin riesgo) |
-| Circuit Breaker / Retry      | No hay pasarela externa que falle         |
-| Bulkhead                     | Sin concurrencia real a gestionar         |
-| AWS Secrets Manager          | Sin credenciales de pasarelas             |
-| REST endpoints (`/payments`) | Rol del ms es solo event-driven           |
-| SDKs Stripe / Wompi / MP     | Reemplazados por `Random.nextDouble()`    |
-| Strategy + Factory pattern   | Una sola implementación mock              |
+- [x] 8.1 `PaymentController`: GET /api/v1/payments/orders/{orderId} → 200 Payment | 404
+- [x] 8.2 `RateLimitFilter`: WebFilter token-bucket (100 req/s per IP)
+
+---
+
+### Tarea 9 — Seguridad y configuración app-service
+
+- [x] 9.1 `SecurityConfig`: X-User-Role header filter, role-based authorization, CSRF disabled
+- [x] 9.2 `UseCasesConfig`: ComponentScan for UseCase beans
+- [x] 9.3 `MainApplication`: @EnableScheduling para Outbox Relay scheduler
+
+---
+
+### Tarea 10 — Base de datos
+
+- [x] 10.1 Schema PostgreSQL (`postgresql-scripts/init_payment.sql`):
+  - Tabla `payments`: id, order_id, gateway, transaction_id, amount, currency, status, failure_reason, timestamps
+  - Tabla `outbox_events`: id, event_type, payload (JSON), partition_key, published, created_at
+  - Tabla `processed_events`: id (UUID PK), processed_at
+  - Índices: idx_payments_order_id, idx_payments_status, idx_outbox_pending (partial)
+
+---
+
+### Tarea 11 — Validación y compilación
+
+- [x] 11.1 `./gradlew validateStructure` → proyecto válido
+- [x] 11.2 `./gradlew compileJava` → BUILD SUCCESSFUL
+- [x] 11.3 Verificar retrocompatibilidad: ms-order consume PaymentProcessed/PaymentFailed sin cambios
+
+---
+
+## Diferencias vs Mock Original
+
+| Aspecto | Mock (tasks.md original) | Producción (implementado) |
+|---------|--------------------------|---------------------------|
+| Persistencia | Sin BD — todo en memoria | PostgreSQL 17 + R2DBC |
+| Outbox Pattern | Publicación directa a Kafka | Tabla outbox_events + scheduler relay |
+| Idempotencia | Sin — mock sin riesgo | Tabla processed_events + check |
+| ACL | Random directo en UseCase | PaymentGateway port + MockPaymentGateway Strategy |
+| REST | Sin endpoints | GET /api/v1/payments/orders/{orderId} |
+| Seguridad | Sin | Spring Security + RateLimitFilter |
+| Transaccionalidad | Sin | TransactionalOperator (BD + outbox atómico) |
+| Escalabilidad | Sin | Extensible via Strategy: Stripe/Wompi/MercadoPago |
