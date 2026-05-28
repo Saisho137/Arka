@@ -1,6 +1,8 @@
-# Perfil LOCAL — desarrollo desde IntelliJ sin Docker
 spring:
-  r2dbc:
-    url: r2dbc:postgresql://localhost:5437/db_provider
-    username: arka
-    password: arkaSecret2025
+  kafka:
+    bootstrap-servers: localhost:9092
+
+logging:
+  level:
+    com.arka: DEBUG
+    io.r2dbc: DEBUG
