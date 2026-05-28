@@ -14,7 +14,7 @@ title: Microservicios
 | ms-order         | Pedidos, Saga orchestrator               | PostgreSQL 17 (R2DBC)      | Reactivo   | 8081   | 1    |
 | ms-notifications | Alertas y correos (AWS SES)              | MongoDB                    | Reactivo   | 8085   | 1    |
 | ms-cart          | Carrito de compras, abandono             | MongoDB                    | Reactivo   | 8086   | 2    |
-| ms-payment       | Pagos mock (80% éxito / 20% fallo)       | Sin BD (event-driven puro) | Reactivo   | 8083   | 2    |
+| ms-payment       | Procesamiento de pagos (ACL pasarelas)   | PostgreSQL 17 (R2DBC)      | Reactivo   | 8083   | 2    |
 | ms-reporter      | Reportes, CQRS, Event Sourcing           | PostgreSQL 17 (JDBC) + S3  | Imperativo | 8087   | 3    |
 | ms-shipping      | Logística ACL (DHL/FedEx/Legacy)         | PostgreSQL 17 (R2DBC)      | Reactivo   | 8088   | 3    |
 | ms-provider      | Proveedores B2B ACL                      | PostgreSQL 17 (R2DBC)      | Reactivo   | 8089   | 4    |
@@ -89,13 +89,15 @@ title: Microservicios
 
 ### ms-payment (HU5 — Pagos)
 
-> **Implementación mock.** No integra pasarelas reales. Simula el procesamiento de pago con `Random` (80 % éxito, 20 % fallo) sin base de datos ni persistencia.
-
+- Procesamiento de pagos con **ACL** (Strategy + Factory) para pasarelas: Stripe, Wompi, MercadoPago
+- Persistencia en **PostgreSQL 17** (R2DBC) con tabla `payments`
+- **Transactional Outbox Pattern** — atomicidad entre escritura BD y publicación Kafka
 - Consume `OrderCreated` del tópico `order-events`
-- Genera `PaymentProcessed` (80 %) o `PaymentFailed` (20 %) con `Random.nextDouble()`
-- Publica el resultado a `payment-events` con `orderId` como partition key
-- **Sin:** R2DBC, Outbox, idempotencia, Circuit Breaker, Secrets Manager, REST endpoints, SDKs de pasarelas
-- Patron Kafka Consumer: `KafkaReceiver` (reactor-kafka directo — `ReactiveKafkaConsumerTemplate` eliminado en spring-kafka 4.0)
+- Procesa pago vía pasarela configurada y publica resultado a `payment-events`
+- **Idempotencia** vía tabla `processed_events` (eventId PK)
+- **Circuit Breaker** (Resilience4j) para llamadas a pasarelas externas
+- REST endpoint: `GET /api/v1/payments/orders/{orderId}` — consultar estado de pago
+- Credenciales de pasarelas almacenadas en **AWS Secrets Manager** (LocalStack)
 - Eventos Kafka: `PaymentProcessed`, `PaymentFailed`
 
 ---
