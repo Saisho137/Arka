@@ -20,7 +20,7 @@ Consume eventos `StockDepleted` del tópico `inventory-events` (producidos por m
 
 6. **KafkaReceiver (reactor-kafka)**: `ReactiveKafkaConsumerTemplate` fue eliminado en spring-kafka 4.0. Se usa `KafkaReceiver` de reactor-kafka directamente con `KafkaConsumerConfig` (bean por tópico) y `KafkaConsumerLifecycle` (ApplicationReadyEvent). Patrón copiado de ms-inventory.
 
-7. **EventType con value() explícito**: Siguiendo el patrón canónico de ms-order (y el estándar post-alineamiento del Bloque A de pending-improvements.md), el enum EventType usa campo `private final String value` con método `value()`:
+7. **EventType con value() explícito**: Siguiendo el patrón canónico de ms-order (estándar del monorepo), el enum EventType usa campo `private final String value` con método `value()`:
    ```java
    public enum EventType {
        PURCHASE_ORDER_CREATED("PurchaseOrderCreated"),
