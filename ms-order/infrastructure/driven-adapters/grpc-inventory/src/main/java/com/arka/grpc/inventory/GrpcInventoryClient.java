@@ -6,6 +6,9 @@ import com.arka.grpc.ReserveStockResponse;
 import com.arka.model.commons.exception.InventoryServiceUnavailableException;
 import com.arka.model.order.ReserveStockResult;
 import com.arka.model.order.gateways.InventoryClient;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -14,6 +17,7 @@ import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
@@ -21,14 +25,21 @@ import java.util.UUID;
 public class GrpcInventoryClient implements InventoryClient {
 
     private final InventoryServiceGrpc.InventoryServiceStub inventoryStub;
+    private final CircuitBreaker circuitBreaker;
 
     public GrpcInventoryClient(@GrpcClient("ms-inventory") InventoryServiceGrpc.InventoryServiceStub inventoryStub) {
         this.inventoryStub = inventoryStub;
+        this.circuitBreaker = CircuitBreaker.of("grpc-inventory", CircuitBreakerConfig.custom()
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(3)
+                .slidingWindowSize(10)
+                .build());
     }
 
     @Override
     public Mono<ReserveStockResult> reserveStock(String sku, UUID orderId, int quantity) {
-        return Mono.create(sink -> {
+        return Mono.<ReserveStockResult>create(sink -> {
             ReserveStockRequest request = ReserveStockRequest.newBuilder()
                     .setSku(sku)
                     .setOrderId(orderId.toString())
@@ -74,6 +85,9 @@ public class GrpcInventoryClient implements InventoryClient {
                     // handled in onNext
                 }
             });
-        });
+        }).transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+                .onErrorMap(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
+                        ex -> new InventoryServiceUnavailableException(
+                                "Inventory service circuit breaker is open — requests not permitted"));
     }
 }

@@ -6,6 +6,9 @@ import com.arka.grpc.GetProductInfoResponse;
 import com.arka.model.commons.exception.CatalogServiceUnavailableException;
 import com.arka.model.order.ProductInfo;
 import com.arka.model.order.gateways.CatalogClient;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
@@ -22,14 +26,21 @@ import java.util.UUID;
 public class GrpcCatalogClient implements CatalogClient {
 
     private final CatalogServiceGrpc.CatalogServiceStub catalogStub;
+    private final CircuitBreaker circuitBreaker;
 
     public GrpcCatalogClient(@GrpcClient("ms-catalog") CatalogServiceGrpc.CatalogServiceStub catalogStub) {
         this.catalogStub = catalogStub;
+        this.circuitBreaker = CircuitBreaker.of("grpc-catalog", CircuitBreakerConfig.custom()
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(3)
+                .slidingWindowSize(10)
+                .build());
     }
 
     @Override
     public Mono<ProductInfo> getProductInfo(String sku) {
-        return Mono.create(sink -> {
+        return Mono.<ProductInfo>create(sink -> {
             GetProductInfoRequest request = GetProductInfoRequest.newBuilder()
                     .setSku(sku)
                     .build();
@@ -78,6 +89,9 @@ public class GrpcCatalogClient implements CatalogClient {
                     // handled in onNext
                 }
             });
-        });
+        }).transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
+                .onErrorMap(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class,
+                        ex -> new CatalogServiceUnavailableException(
+                                "Catalog service circuit breaker is open — requests not permitted"));
     }
 }
