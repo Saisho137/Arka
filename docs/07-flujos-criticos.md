@@ -8,7 +8,7 @@ title: Flujos Críticos
 ## 1. Creación de Pedido — Happy Path (Implementación actual — Fase 2)
 
 > **Estado actual:** `createOrder()` persiste en `PENDIENTE_PAGO` y emite `OrderCreated`.
-> ms-payment (mock 80/20) consume ese evento y emite `PaymentProcessed`/`PaymentFailed`.
+> ms-payment consume ese evento, procesa el pago vía ACL (pasarela configurada) y emite `PaymentProcessed`/`PaymentFailed`.
 > ms-order consume `PaymentProcessed` → transiciona a `CONFIRMADO` y publica `OrderConfirmed`.
 > ms-order consume `ShippingDispatched` → transiciona a `EN_DESPACHO` y publica `OrderStatusChanged`.
 
@@ -41,8 +41,9 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                                       │
                                           Outbox Relay (5s) ──▶ Kafka: order-events (OrderCreated)
                                                                      │
-                                                 [ms-payment — pendiente impl.]
-                                                 Simular con Kafka UI → payment-events
+                                                 ms-payment (consume OrderCreated)
+                                                 Procesa pago vía pasarela (ACL)
+                                                 Publica PaymentProcessed/PaymentFailed
                                                      │
                                                ms-order consume PaymentProcessed
                                                PENDIENTE_PAGO → CONFIRMADO
@@ -51,7 +52,7 @@ Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order
                                                ms-notifications → Email vía AWS SES
 ```
 
-## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment — diseño completo)
+## 2. Creación de Pedido — Happy Path (Fase 2 con ms-payment — implementación completa)
 
 ```text
 ms-order ──gRPC──▶ ms-catalog (precio y nombre por SKU)
@@ -62,7 +63,8 @@ ms-order ──gRPC──▶ ms-inventory (stock reservado)
     Publica OrderCreated ──▶ Kafka
                                 │
                           ms-payment (consume)
-                          Cobra vía pasarela
+                          Cobra vía pasarela (ACL: Stripe/Wompi/MercadoPago)
+                          Persiste en PostgreSQL + Outbox
                           Publica PaymentProcessed ──▶ Kafka
                                                          │
                                                    ms-order (consume)
