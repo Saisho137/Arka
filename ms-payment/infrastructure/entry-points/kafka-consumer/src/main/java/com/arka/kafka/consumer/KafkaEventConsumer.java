@@ -41,8 +41,8 @@ public class KafkaEventConsumer {
                 .flatMap(msg -> handleOrderEvent(msg.value())
                         .doOnSuccess(v -> msg.receiverOffset().acknowledge())
                         .onErrorResume(ex -> {
-                            log.error("Unrecoverable error processing order event offset={}: {}",
-                                    msg.receiverOffset().offset(), ex.getMessage());
+                            log.error("Unrecoverable error processing order event offset={}",
+                                    msg.receiverOffset().offset(), ex);
                             msg.receiverOffset().acknowledge();
                             return Mono.empty();
                         }))
