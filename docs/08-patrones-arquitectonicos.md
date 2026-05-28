@@ -10,13 +10,13 @@ title: Patrones Arquitectónicos
 | Patrón                          | Servicios                            | Propósito                                                     |
 | ------------------------------- | ------------------------------------ | ------------------------------------------------------------- |
 | **Saga Secuencial**             | ms-order (orquestador)               | Flujo transaccional distribuido: Catálogo → Inventario → Pago |
-| **Transactional Outbox**        | ms-inventory, ms-order, ms-catalog   | Atomicidad entre escritura BD y publicación Kafka             |
+| **Transactional Outbox**        | ms-inventory, ms-order, ms-catalog, ms-payment, ms-shipping, ms-provider | Atomicidad entre escritura BD y publicación Kafka             |
 | **Idempotencia en Consumers**   | Todos los consumers                  | Prevenir procesamiento duplicado (at-least-once)              |
 | **Database per Service**        | Todos                                | Aislamiento de datos, escalado independiente                  |
 | **Cache-Aside**                 | ms-catalog (Redis)                   | Lecturas <1ms, 95% cache hit, invalidación por eventos        |
 | **CQRS + Event Sourcing**       | ms-reporter                          | Read model analítico separado del core transaccional          |
 | **Anti-Corruption Layer (ACL)** | ms-payment, ms-shipping, ms-provider | Aislar el dominio de APIs y SDKs externos                     |
-| **Circuit Breaker + Bulkhead**  | ms-payment, ms-shipping              | Resiliencia ante fallos de servicios externos (Resilience4j)  |
+| **Circuit Breaker + Bulkhead**  | ms-order, ms-payment, ms-shipping    | Resiliencia ante fallos de servicios externos (Resilience4j)  |
 | **Zero Trust**                  | API Gateway                          | JWT + Entra ID, Tenant Restrictions, `X-User-Email`           |
 
 ## Circuit Breaker (Resilience4j)
@@ -50,7 +50,7 @@ title: Patrones Arquitectónicos
 | 10  | Outbox con polling (no Debezium)             | Simplicidad, sin dependencias extra                                                              | Latencia adicional máxima de 5s por ciclo de polling    |
 | 11  | Kafka como único broker (no SQS/EventBridge) | Un solo broker simplifica la operación                                                           | Sin scheduling nativo; compensado con jobs periódicos   |
 | 12  | Saga simplificada en Fase 1 (gRPC + Kafka)   | gRPC sync para precio (ms-catalog) + stock (ms-inventory) + Kafka async para notificaciones      | Pago B2B offline; pasarelas diferidas a Fase 2          |
-| 13  | Un tópico Kafka por servicio (no por evento) | 7 tópicos vs 13+. Orden causal por partición. Nuevo evento = nuevo `eventType`                   | Consumidores deben filtrar por `eventType`              |
+| 13  | Un tópico Kafka por servicio (no por evento) | 8 tópicos vs 13+. Orden causal por partición. Nuevo evento = nuevo `eventType`                   | Consumidores deben filtrar por `eventType`              |
 
 ---
 
