@@ -1,12 +1,17 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation project(':kafka-consumer')
 	implementation project(':kafka-producer')
+	implementation project(':r2dbc-postgresql')
+	implementation project(':reactive-web')
     implementation project(':model')
     implementation project(':usecase')
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+    runtimeOnly 'org.postgresql:r2dbc-postgresql'
     runtimeOnly('org.springframework.boot:spring-boot-devtools')
     testImplementation 'com.tngtech.archunit:archunit:1.4.1'
     testImplementation 'tools.jackson.core:jackson-databind'

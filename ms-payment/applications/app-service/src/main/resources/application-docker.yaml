@@ -2,6 +2,10 @@
 spring:
   kafka:
     bootstrap-servers: kafka:29092
+  r2dbc:
+    url: r2dbc:postgresql://arka-db-payment:5432/db_payment
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
 
 management:
   endpoints:

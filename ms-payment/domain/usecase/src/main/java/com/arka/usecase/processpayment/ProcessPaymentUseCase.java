@@ -1,57 +1,111 @@
 package com.arka.usecase.processpayment;
 
-import com.arka.model.payment.PaymentFailedPayload;
+import com.arka.model.payment.Payment;
+import com.arka.model.payment.PaymentGatewayResult;
 import com.arka.model.payment.PaymentProcessedPayload;
+import com.arka.model.payment.PaymentFailedPayload;
 import com.arka.model.payment.PaymentStatus;
-import com.arka.model.payment.event.DomainEventEnvelope;
-import com.arka.model.payment.gateways.PaymentEventPublisher;
+import com.arka.model.payment.event.EventType;
+import com.arka.model.payment.event.OutboxEvent;
+import com.arka.model.payment.gateways.JsonSerializer;
+import com.arka.model.payment.gateways.OutboxEventRepository;
+import com.arka.model.payment.gateways.PaymentGateway;
+import com.arka.model.payment.gateways.PaymentRepository;
+import com.arka.model.payment.gateways.ProcessedEventRepository;
+import com.arka.model.payment.gateways.TransactionalGateway;
 import lombok.RequiredArgsConstructor;
 import reactor.core.publisher.Mono;
 
-import java.util.Random;
+import java.math.BigDecimal;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 @RequiredArgsConstructor
 public class ProcessPaymentUseCase {
 
-    private static final Logger log = Logger.getLogger(ProcessPaymentUseCase.class.getName());
-    private static final double SUCCESS_RATE = 0.80;
-    private final Random random = new Random();
+    private final PaymentGateway paymentGateway;
+    private final PaymentRepository paymentRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ProcessedEventRepository processedEventRepository;
+    private final JsonSerializer jsonSerializer;
+    private final TransactionalGateway transactionalGateway;
 
-    private final PaymentEventPublisher paymentEventPublisher;
+    public Mono<Void> process(UUID eventId, UUID orderId, BigDecimal amount, String currency) {
+        Mono<Void> pipeline = processedEventRepository.exists(eventId)
+                .flatMap(alreadyProcessed -> {
+                    if (Boolean.TRUE.equals(alreadyProcessed)) {
+                        return Mono.<Void>empty();
+                    }
 
-    public Mono<Void> process(UUID orderId, UUID correlationId) {
-        boolean success = random.nextDouble() < SUCCESS_RATE;
+                    Payment pendingPayment = Payment.builder()
+                            .id(UUID.randomUUID())
+                            .orderId(orderId)
+                            .gateway(paymentGateway.gatewayName())
+                            .amount(amount)
+                            .currency(currency != null ? currency : "COP")
+                            .status(PaymentStatus.PENDING)
+                            .build();
 
-        DomainEventEnvelope envelope;
-        if (success) {
-            PaymentProcessedPayload payload = PaymentProcessedPayload.builder()
-                    .orderId(orderId)
-                    .transactionId("mock-txn-" + UUID.randomUUID())
+                    return paymentRepository.save(pendingPayment)
+                            .flatMap(saved -> paymentGateway.charge(orderId, amount, saved.currency())
+                                    .flatMap(result -> handleGatewayResult(saved, result, eventId)));
+                });
+
+        return transactionalGateway.executeInTransaction(pipeline);
+    }
+
+    private Mono<Void> handleGatewayResult(Payment payment, PaymentGatewayResult result, UUID eventId) {
+        if (result.success()) {
+            Payment completed = payment.toBuilder()
+                    .transactionId(result.transactionId())
                     .status(PaymentStatus.COMPLETED)
                     .build();
-            envelope = DomainEventEnvelope.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .eventType("PaymentProcessed")
-                    .correlationId(orderId.toString())
-                    .payload(payload)
-                    .build();
-        } else {
-            PaymentFailedPayload payload = PaymentFailedPayload.builder()
-                    .orderId(orderId)
-                    .reason("Mock payment rejected (simulated 20% failure rate)")
-                    .build();
-            envelope = DomainEventEnvelope.builder()
-                    .eventId(UUID.randomUUID().toString())
-                    .eventType("PaymentFailed")
-                    .correlationId(orderId.toString())
-                    .payload(payload)
-                    .build();
-        }
 
-        log.info(String.format("Processing mock payment for orderId=%s \u2192 %s", orderId, envelope.eventType()));
-        return paymentEventPublisher.publishPaymentEvent(orderId.toString(), envelope);
+            PaymentProcessedPayload payload = PaymentProcessedPayload.builder()
+                    .orderId(payment.orderId())
+                    .transactionId(result.transactionId())
+                    .status(PaymentStatus.COMPLETED)
+                    .build();
+
+            OutboxEvent outboxEvent = buildOutboxEvent(
+                    EventType.PAYMENT_PROCESSED,
+                    payment.orderId().toString(),
+                    payload);
+
+            return paymentRepository.updateStatus(payment.id(), completed)
+                    .then(outboxEventRepository.save(outboxEvent))
+                    .then(processedEventRepository.save(eventId));
+        } else {
+            Payment failed = payment.toBuilder()
+                    .status(PaymentStatus.FAILED)
+                    .failureReason(result.failureReason())
+                    .build();
+
+            PaymentFailedPayload payload = PaymentFailedPayload.builder()
+                    .orderId(payment.orderId())
+                    .reason(result.failureReason())
+                    .build();
+
+            OutboxEvent outboxEvent = buildOutboxEvent(
+                    EventType.PAYMENT_FAILED,
+                    payment.orderId().toString(),
+                    payload);
+
+            return paymentRepository.updateStatus(payment.id(), failed)
+                    .then(outboxEventRepository.save(outboxEvent))
+                    .then(processedEventRepository.save(eventId));
+        }
+    }
+
+    private OutboxEvent buildOutboxEvent(EventType eventType, String partitionKey, Object payload) {
+        return OutboxEvent.builder()
+                .eventType(eventType)
+                .payload(jsonSerializer.serialize(payload))
+                .partitionKey(partitionKey)
+                .build();
+    }
+
+    public Mono<Payment> getPaymentByOrderId(UUID orderId) {
+        return paymentRepository.findByOrderId(orderId);
     }
 }
 

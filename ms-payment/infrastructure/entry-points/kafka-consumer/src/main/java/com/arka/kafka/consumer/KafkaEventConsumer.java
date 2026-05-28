@@ -9,6 +9,7 @@ import reactor.kafka.receiver.KafkaReceiver;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
@@ -16,6 +17,7 @@ import java.util.UUID;
  * Uses reactor-kafka KafkaReceiver directly — the correct approach for Spring Boot 4.0.3
  * since ReactiveKafkaConsumerTemplate was removed from spring-kafka 4.0 GA.
  * Routes by eventType and ignores unknown events.
+ * Idempotency is handled by ProcessPaymentUseCase (processed_events table).
  */
 @Slf4j
 @Component
@@ -50,7 +52,6 @@ public class KafkaEventConsumer {
                 );
     }
 
-    // Package-private for testing
     Mono<Void> handleOrderEvent(String rawValue) {
         return Mono.fromCallable(() -> objectMapper.readTree(rawValue))
                 .flatMap(envelope -> {
@@ -68,11 +69,17 @@ public class KafkaEventConsumer {
     private Mono<Void> processOrderCreated(JsonNode envelope) {
         JsonNode payload = envelope.path("payload");
         String orderIdStr = payload.path("orderId").asText();
-        String eventId = envelope.path("eventId").asText();
-        log.debug("Received OrderCreated event for orderId={}", orderIdStr);
+        String eventIdStr = envelope.path("eventId").asText();
+        BigDecimal totalAmount = payload.has("totalAmount")
+                ? new BigDecimal(payload.path("totalAmount").asText())
+                : BigDecimal.ZERO;
+
+        log.debug("Received OrderCreated event for orderId={}, eventId={}", orderIdStr, eventIdStr);
+
         UUID orderId = UUID.fromString(orderIdStr);
-        UUID correlationId = UUID.fromString(eventId);
-        return processPaymentUseCase.process(orderId, correlationId);
+        UUID eventId = UUID.fromString(eventIdStr);
+
+        return processPaymentUseCase.process(eventId, orderId, totalAmount, "COP");
     }
 }
 
