@@ -45,7 +45,6 @@ public class SecurityConfig {
             var authority = new SimpleGrantedAuthority("ROLE_" + role.toUpperCase().trim());
             var authentication = new UsernamePasswordAuthenticationToken(
                     "gateway-user", null, List.of(authority));
-            authentication.setAuthenticated(true);
             return chain.filter(exchange)
                     .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
         };
