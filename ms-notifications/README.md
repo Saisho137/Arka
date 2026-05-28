@@ -1,47 +1,94 @@
-# Proyecto Base Implementando Clean Architecture
+# ms-notifications
 
-## Antes de Iniciar
+Microservicio dueño del Bounded Context **Alertas y Notificaciones Transaccionales** dentro de la plataforma B2B Arka. Actúa como consumer "Catch-All" de múltiples tópicos Kafka, mapea eventos de dominio a plantillas de email y dispara correos vía AWS SES.
 
-Empezaremos por explicar los diferentes componentes del proyectos y partiremos de los componentes externos, continuando con los componentes core de negocio (dominio) y por último el inicio y configuración de la aplicación.
+---
 
-Lee el artículo [Clean Architecture — Aislando los detalles](https://medium.com/bancolombia-tech/clean-architecture-aislando-los-detalles-4f9530f35d7a)
+## Stack Tecnológico
 
-# Arquitectura
+| Componente    | Tecnología                                          |
+| ------------- | --------------------------------------------------- |
+| Lenguaje      | Java 21                                             |
+| Framework     | Spring Boot 4.0.3 — **Spring WebFlux** (reactivo)   |
+| Base de datos | MongoDB (Reactive Driver) — Replica Set `rs0`       |
+| Mensajería    | Apache Kafka 8 (KRaft) — reactor-kafka              |
+| Email         | AWS SES (LocalStack en desarrollo)                  |
+| Build         | Gradle 9.4 + Bancolombia Scaffold Plugin 4.2.0      |
+| Lombok        | 1.18.42                                             |
+| Calidad       | JaCoCo · PiTest · ArchUnit · BlockHound             |
 
-![Clean Architecture](https://miro.medium.com/max/1400/1*ZdlHz8B0-qu9Y-QO3AXR_w.png)
+> `reactive=true` en `gradle.properties` — todo el stack es no-bloqueante (Mono/Flux).
 
-## Domain
+---
 
-Es el módulo más interno de la arquitectura, pertenece a la capa del dominio y encapsula la lógica y reglas del negocio mediante modelos y entidades del dominio.
+## Responsabilidades del Servicio
 
-## Usecases
+- Correos transaccionales vía **AWS SES** ante cambios de estado en el ecosistema
+- Consumer "Catch-All": escucha múltiples tópicos Kafka y mapea eventos a plantillas
+- Reintentos con **backoff exponencial** para fallos de envío
+- **Idempotencia** por unique index en `eventId` (MongoDB) — previene duplicados
+- Historial de notificaciones enviadas persistido en MongoDB
 
-Este módulo gradle perteneciente a la capa del dominio, implementa los casos de uso del sistema, define lógica de aplicación y reacciona a las invocaciones desde el módulo de entry points, orquestando los flujos hacia el módulo de entities.
+---
 
-## Infrastructure
+## Estructura de Módulos
 
-### Helpers
+```text
+ms-notifications/
+├── applications/app-service/           # Main Spring Boot, configuración, DI
+│   └── src/main/resources/
+│       ├── application.yaml            # Config base
+│       ├── application-local.yaml      # Perfil local (IntelliJ)
+│       └── application-docker.yaml     # Perfil Docker Compose
+├── domain/
+│   ├── model/                          # Entidades, VOs, puertos (interfaces gateway)
+│   │   └── com/arka/model/notification/
+│   │       ├── NotificationHistory     # Registro de notificación enviada
+│   │       ├── NotificationStatus      # SENT, FAILED, PENDING
+│   │       ├── DomainEventEnvelope     # Sobre estándar de eventos
+│   │       └── gateways/              # Ports: EmailGateway, NotificationRepository
+│   └── usecase/                        # Lógica de negocio
+│       └── com/arka/usecase/notification/  # NotificationUseCase
+├── infrastructure/
+│   ├── driven-adapters/
+│   │   ├── mongo-repository/           # MongoNotificationAdapter (historial + idempotencia)
+│   │   └── ses-email/                  # SesEmailAdapter (AWS SES vía LocalStack)
+│   ├── entry-points/
+│   │   └── kafka-consumer/             # KafkaEventConsumer (multi-tópico)
+│   └── helpers/                        # Utilidades compartidas
+└── deployment/Dockerfile               # Multi-stage: gradle:9.4-jdk21 → amazoncorretto:21-alpine
+```
 
-En el apartado de helpers tendremos utilidades generales para los Driven Adapters y Entry Points.
+---
 
-Estas utilidades no están arraigadas a objetos concretos, se realiza el uso de generics para modelar comportamientos
-genéricos de los diferentes objetos de persistencia que puedan existir, este tipo de implementaciones se realizan
-basadas en el patrón de diseño [Unit of Work y Repository](https://medium.com/@krzychukosobudzki/repository-design-pattern-bc490b256006)
+## Endpoints REST
 
-Estas clases no puede existir solas y debe heredarse su compartimiento en los **Driven Adapters**
+**Este servicio no expone endpoints REST.** Es un consumer pasivo de Kafka que reacciona a eventos de dominio.
 
-### Driven Adapters
+**Health Check:** `GET http://localhost:8085/actuator/health`
 
-Los driven adapter representan implementaciones externas a nuestro sistema, como lo son conexiones a servicios rest,
-soap, bases de datos, lectura de archivos planos, y en concreto cualquier origen y fuente de datos con la que debamos
-interactuar.
+---
 
-### Entry Points
+## Eventos Kafka Consumidos
 
-Los entry points representan los puntos de entrada de la aplicación o el inicio de los flujos de negocio.
+| Tópico             | EventType              | Acción                                     |
+| ------------------ | ---------------------- | ------------------------------------------ |
+| `order-events`     | `OrderConfirmed`       | Email de confirmación de pedido al cliente  |
+| `order-events`     | `OrderStatusChanged`   | Email de cambio de estado al cliente        |
+| `order-events`     | `OrderCancelled`       | Email de cancelación al cliente             |
+| `inventory-events` | `StockDepleted`        | Alerta de stock bajo al admin              |
+| `cart-events`      | `CartAbandoned`        | Recordatorio de carrito abandonado          |
+| `shipping-events`  | `ShippingDispatched`   | Email de despacho con tracking al cliente   |
+| `provider-events`  | `PurchaseOrderCreated` | Email de orden de compra al proveedor       |
 
-## Application
+---
 
-Este módulo es el más externo de la arquitectura, es el encargado de ensamblar los distintos módulos, resolver las dependencias y crear los beans de los casos de use (UseCases) de forma automática, inyectando en éstos instancias concretas de las dependencias declaradas. Además inicia la aplicación (es el único módulo del proyecto donde encontraremos la función “public static void main(String[] args)”.
+## Ejecución Local
 
-**Los beans de los casos de uso se disponibilizan automaticamente gracias a un '@ComponentScan' ubicado en esta capa.**
+```bash
+# Desde Docker Compose (con dependencias)
+docker compose up --build -d ms-notifications
+
+# Verificar health
+curl http://localhost:8085/actuator/health
+```
