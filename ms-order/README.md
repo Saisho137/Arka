@@ -258,11 +258,11 @@ Si gRPC ms-catalog no responde → `CatalogServiceUnavailableException (503)`.
 
 **Tópicos consumidores:**
 
-| Tópico            | Evento procesado     | Acción                                                |
-| ----------------- | -------------------- | ----------------------------------------------------- |
-| `payment-events`  | `PaymentProcessed`   | Infraestructura lista (Fase 2: confirmar orden)       |
-| `payment-events`  | `PaymentFailed`      | Infraestructura lista (Fase 2: cancelar orden)        |
-| `shipping-events` | `ShippingDispatched` | Infraestructura lista (Fase 2: avanzar a EN_DESPACHO) |
+| Tópico            | Evento procesado     | Acción                                                   |
+| ----------------- | -------------------- | -------------------------------------------------------- |
+| `payment-events`  | `PaymentProcessed`   | PENDIENTE_PAGO → CONFIRMADO + publica OrderConfirmed     |
+| `payment-events`  | `PaymentFailed`      | PENDIENTE_PAGO → CANCELADO + libera stock (OrderCancelled) |
+| `shipping-events` | `ShippingDispatched` | CONFIRMADO → EN_DESPACHO + publica OrderStatusChanged    |
 
 Todos los consumidores son **idempotentes** via tabla `processed_events` (PK = `event_id`).
 
