@@ -29,7 +29,7 @@ title: Cómo Levantar el Sistema
 | `mongo-init-replica` | mongo:7-jammy               | —           | Inicializa replica set (one-shot)        |
 | `redis`              | redis:7-alpine              | 6379        | Caché ms-catalog                         |
 | `kafka`              | confluentinc/cp-kafka:8.0.4 | 9092        | Message broker (KRaft)                   |
-| `kafka-init`         | confluentinc/cp-kafka:8.0.4 | —           | Crea los 7 tópicos (one-shot)            |
+| `kafka-init`         | confluentinc/cp-kafka:8.0.4 | —           | Crea los 8 tópicos (one-shot)            |
 | `kafka-ui`           | provectuslabs/kafka-ui      | 8080        | UI para ver mensajes Kafka               |
 | `localstack`         | localstack/localstack       | 4566        | AWS simulado (Secrets, S3, SES)          |
 
@@ -42,7 +42,7 @@ title: Cómo Levantar el Sistema
 | `ms-order`         | 8081   | postgres-orders, localstack, kafka, ms-inventory      |
 | `ms-notifications` | 8085   | mongo-init-replica, localstack, kafka                 |
 | `ms-cart`          | 8086   | mongo-init-replica, localstack, kafka, ms-catalog     |
-| `ms-payment`       | 8083   | kafka                                                 |
+| `ms-payment`       | 8083   | postgres-payment, localstack, kafka                   |
 | `ms-reporter`      | 8087   | postgres-reporter, localstack, kafka                  |
 | `ms-shipping`      | 8088   | postgres-shipping, localstack, kafka                  |
 | `ms-provider`      | 8089   | postgres-provider, localstack, kafka                  |
@@ -121,10 +121,14 @@ Esto levanta automáticamente toda la infraestructura necesaria (PostgreSQL, Mon
 | -------------------- | --------------------------------------- |
 | Kafka UI             | <http://localhost:8080>                 |
 | LocalStack           | <http://localhost:4566>                 |
-| ms-catalog Swagger   | <http://localhost:8084/swagger-ui.html> |
+| ms-order Swagger     | <http://localhost:8081/swagger-ui.html> |
 | ms-inventory Swagger | <http://localhost:8082/swagger-ui.html> |
-| ms-catalog Health    | <http://localhost:8084/actuator/health> |
-| ms-inventory Health  | <http://localhost:8082/actuator/health> |
+| ms-payment Swagger   | <http://localhost:8083/swagger-ui.html> |
+| ms-catalog Swagger   | <http://localhost:8084/swagger-ui.html> |
+| ms-cart Swagger      | <http://localhost:8086/swagger-ui.html> |
+| ms-reporter Swagger  | <http://localhost:8087/swagger-ui.html> |
+| ms-shipping Swagger  | <http://localhost:8088/swagger-ui.html> |
+| ms-provider Swagger  | <http://localhost:8089/swagger-ui.html> |
 
 ---
 
