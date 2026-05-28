@@ -168,11 +168,55 @@ Base path: `/api/v1/shipments`
 
 ---
 
-## Servicios sin endpoints REST implementados
+## ms-payment — Puerto 8083
 
-- **ms-notifications** (8085) — Consumer pasivo de Kafka
-- **ms-payment** (8083) — Mock actual (reimplementación pendiente, Fase 2)
-- **ms-provider** (8089) — Fase 4
+Base path: `/api/v1/payments`
+
+### Pagos
+
+| Método | Endpoint                            | Descripción                     |
+| ------ | ----------------------------------- | ------------------------------- |
+| `GET`  | `/api/v1/payments/orders/{orderId}` | Consultar pago por ID de orden  |
+
+**Swagger UI:** `http://localhost:8083/swagger-ui.html`
+
+---
+
+## ms-provider — Puerto 8089
+
+Base path: `/api/v1`
+
+### Proveedores
+
+| Método   | Endpoint                                       | Descripción                             |
+| -------- | ---------------------------------------------- | --------------------------------------- |
+| `POST`   | `/api/v1/suppliers`                            | Crear proveedor                         |
+| `GET`    | `/api/v1/suppliers`                            | Listar proveedores (paginado)           |
+| `GET`    | `/api/v1/suppliers/{supplierId}`               | Obtener proveedor por ID                |
+| `PUT`    | `/api/v1/suppliers/{supplierId}`               | Actualizar proveedor                    |
+| `DELETE` | `/api/v1/suppliers/{supplierId}`               | Desactivar proveedor (soft delete)      |
+| `POST`   | `/api/v1/suppliers/{supplierId}/products`      | Asignar producto a proveedor            |
+| `DELETE` | `/api/v1/suppliers/{supplierId}/products/{sku}`| Remover producto de proveedor           |
+
+### Órdenes de Compra
+
+| Método | Endpoint                                  | Descripción                             |
+| ------ | ----------------------------------------- | --------------------------------------- |
+| `GET`  | `/api/v1/purchase-orders`                 | Listar órdenes de compra (paginado)     |
+| `GET`  | `/api/v1/purchase-orders/{id}`            | Detalle de orden de compra              |
+| `POST` | `/api/v1/purchase-orders`                 | Crear orden de compra manual            |
+| `PUT`  | `/api/v1/purchase-orders/{id}/send`       | Enviar PO al proveedor                  |
+| `PUT`  | `/api/v1/purchase-orders/{id}/confirm`    | Confirmar PO                            |
+| `PUT`  | `/api/v1/purchase-orders/{id}/receive`    | Registrar recepción de mercancía        |
+| `PUT`  | `/api/v1/purchase-orders/{id}/cancel`     | Cancelar PO                             |
+
+**Swagger UI:** `http://localhost:8089/swagger-ui.html`
+
+---
+
+## Servicios sin endpoints REST
+
+- **ms-notifications** (8085) — Consumer pasivo de Kafka, no expone REST
 
 ---
 
