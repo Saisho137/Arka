@@ -1,47 +1,115 @@
-# Proyecto Base Implementando Clean Architecture
+# ms-payment
 
-## Antes de Iniciar
+Microservicio dueño del Bounded Context **Procesamiento de Pagos** dentro de la plataforma B2B Arka. Implementa un **Anti-Corruption Layer (ACL)** con Strategy + Factory para integrar múltiples pasarelas de pago (Stripe, Wompi, MercadoPago), procesa cobros de forma idempotente y publica resultados a Kafka mediante el **Transactional Outbox Pattern**.
 
-Empezaremos por explicar los diferentes componentes del proyectos y partiremos de los componentes externos, continuando con los componentes core de negocio (dominio) y por último el inicio y configuración de la aplicación.
+---
 
-Lee el artículo [Clean Architecture — Aislando los detalles](https://medium.com/bancolombia-tech/clean-architecture-aislando-los-detalles-4f9530f35d7a)
+## Stack Tecnológico
 
-# Arquitectura
+| Componente    | Tecnología                                          |
+| ------------- | --------------------------------------------------- |
+| Lenguaje      | Java 21                                             |
+| Framework     | Spring Boot 4.0.3 — **Spring WebFlux** (reactivo)   |
+| Base de datos | PostgreSQL 17 — acceso reactivo con **R2DBC**       |
+| Mensajería    | Apache Kafka 8 (KRaft) — reactor-kafka              |
+| Resiliencia   | Resilience4j (Circuit Breaker)                      |
+| Secretos      | AWS Secrets Manager (LocalStack en desarrollo)      |
+| Build         | Gradle 9.4 + Bancolombia Scaffold Plugin 4.2.0      |
+| Lombok        | 1.18.42                                             |
+| API Docs      | Springdoc / OpenAPI (Swagger UI)                    |
+| Calidad       | JaCoCo · PiTest · ArchUnit · BlockHound             |
 
-![Clean Architecture](https://miro.medium.com/max/1400/1*ZdlHz8B0-qu9Y-QO3AXR_w.png)
+> `reactive=true` en `gradle.properties` — todo el stack es no-bloqueante (Mono/Flux).
 
-## Domain
+---
 
-Es el módulo más interno de la arquitectura, pertenece a la capa del dominio y encapsula la lógica y reglas del negocio mediante modelos y entidades del dominio.
+## Responsabilidades del Servicio
 
-## Usecases
+- Procesamiento de pagos con **ACL** (Strategy + Factory) para pasarelas: Stripe, Wompi, MercadoPago
+- Persistencia en **PostgreSQL 17** (R2DBC) — tabla `payments` con estado del pago
+- Publicación confiable de eventos de dominio a Kafka mediante **Transactional Outbox Pattern**
+- Consumo idempotente de eventos `OrderCreated` del tópico `order-events` (tabla `processed_events`)
+- **Circuit Breaker** (Resilience4j) para llamadas a pasarelas externas
+- Credenciales de pasarelas almacenadas en **AWS Secrets Manager**
+- REST endpoint para consulta de estado de pago por orden
 
-Este módulo gradle perteneciente a la capa del dominio, implementa los casos de uso del sistema, define lógica de aplicación y reacciona a las invocaciones desde el módulo de entry points, orquestando los flujos hacia el módulo de entities.
+---
 
-## Infrastructure
+## Estructura de Módulos
 
-### Helpers
+```text
+ms-payment/
+├── applications/app-service/           # Main Spring Boot, configuración, DI
+│   └── src/main/resources/
+│       ├── application.yaml            # Config base
+│       ├── application-local.yaml      # Perfil local (IntelliJ)
+│       └── application-docker.yaml     # Perfil Docker Compose
+├── domain/
+│   ├── model/                          # Entidades, VOs, puertos (interfaces gateway)
+│   │   └── com/arka/model/payment/
+│   │       ├── Payment                 # Entidad principal (orderId, amount, status, gateway)
+│   │       ├── PaymentStatus           # PENDING, PROCESSED, FAILED
+│   │       ├── PaymentGatewayResult    # Resultado de llamada a pasarela
+│   │       ├── PaymentProcessedPayload # Payload del evento PaymentProcessed
+│   │       ├── PaymentFailedPayload    # Payload del evento PaymentFailed
+│   │       ├── event/                  # EventType, OutboxEvent, DomainEventEnvelope
+│   │       └── gateways/              # Ports: PaymentRepository, PaymentGateway, OutboxEventRepository, etc.
+│   └── usecase/                        # Lógica de negocio
+│       └── com/arka/usecase/
+│           ├── processpayment/         # ProcessPaymentUseCase (procesa pago, persiste, publica evento)
+│           └── outboxrelay/            # OutboxRelayUseCase (relay eventos pendientes a Kafka)
+├── infrastructure/
+│   ├── driven-adapters/
+│   │   ├── r2dbc-postgresql/           # Adapters R2DBC: Payment, Outbox, ProcessedEvent repos
+│   │   └── kafka-producer/             # KafkaOutboxRelay (scheduler cada 5s)
+│   ├── entry-points/
+│   │   ├── reactive-web/              # PaymentController (GET /api/v1/payments/orders/{orderId})
+│   │   └── kafka-consumer/            # KafkaEventConsumer (order-events → OrderCreated)
+│   └── helpers/                        # Utilidades compartidas
+└── deployment/Dockerfile               # Multi-stage: gradle:9.4-jdk21 → amazoncorretto:21-alpine
+```
 
-En el apartado de helpers tendremos utilidades generales para los Driven Adapters y Entry Points.
+---
 
-Estas utilidades no están arraigadas a objetos concretos, se realiza el uso de generics para modelar comportamientos
-genéricos de los diferentes objetos de persistencia que puedan existir, este tipo de implementaciones se realizan
-basadas en el patrón de diseño [Unit of Work y Repository](https://medium.com/@krzychukosobudzki/repository-design-pattern-bc490b256006)
+## Endpoints REST
 
-Estas clases no puede existir solas y debe heredarse su compartimiento en los **Driven Adapters**
+Base path: `/api/v1/payments` — Puerto HTTP: `8083`
 
-### Driven Adapters
+| Método | Ruta                 | Descripción                    | Códigos HTTP |
+| ------ | -------------------- | ------------------------------ | ------------ |
+| `GET`  | `/orders/{orderId}`  | Consultar pago por ID de orden | 200, 404     |
 
-Los driven adapter representan implementaciones externas a nuestro sistema, como lo son conexiones a servicios rest,
-soap, bases de datos, lectura de archivos planos, y en concreto cualquier origen y fuente de datos con la que debamos
-interactuar.
+**Swagger UI:** `http://localhost:8083/swagger-ui.html`
+**OpenAPI:** `http://localhost:8083/api-docs`
 
-### Entry Points
+---
 
-Los entry points representan los puntos de entrada de la aplicación o el inicio de los flujos de negocio.
+## Eventos Kafka
 
-## Application
+**Tópico productor:** `payment-events` (partition key = `orderId`)
 
-Este módulo es el más externo de la arquitectura, es el encargado de ensamblar los distintos módulos, resolver las dependencias y crear los beans de los casos de use (UseCases) de forma automática, inyectando en éstos instancias concretas de las dependencias declaradas. Además inicia la aplicación (es el único módulo del proyecto donde encontraremos la función “public static void main(String[] args)”.
+| EventType          | Trigger                              |
+| ------------------ | ------------------------------------ |
+| `PaymentProcessed` | Pago procesado exitosamente          |
+| `PaymentFailed`    | Pago rechazado por pasarela          |
 
-**Los beans de los casos de uso se disponibilizan automaticamente gracias a un '@ComponentScan' ubicado en esta capa.**
+**Tópicos consumidores:**
+
+| Tópico         | EventType      | Acción                                         |
+| -------------- | -------------- | ---------------------------------------------- |
+| `order-events` | `OrderCreated` | Procesa pago vía pasarela configurada (ACL)    |
+
+---
+
+## Ejecución Local
+
+```bash
+# Desde Docker Compose (con dependencias)
+docker compose up --build -d ms-payment
+
+# Verificar health
+curl http://localhost:8083/actuator/health
+
+# Consultar pago de una orden
+curl http://localhost:8083/api/v1/payments/orders/{orderId}
+```
