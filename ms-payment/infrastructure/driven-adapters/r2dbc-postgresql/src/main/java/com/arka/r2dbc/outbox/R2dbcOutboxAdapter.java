@@ -4,6 +4,7 @@ import com.arka.model.payment.event.EventType;
 import com.arka.model.payment.event.OutboxEvent;
 import com.arka.model.payment.gateways.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,18 +17,19 @@ import java.util.UUID;
 public class R2dbcOutboxAdapter implements OutboxEventRepository {
 
     private final SpringDataOutboxRepository repository;
+    private final R2dbcEntityTemplate entityTemplate;
 
     @Override
     public Mono<OutboxEvent> save(OutboxEvent event) {
         OutboxEventDTO dto = new OutboxEventDTO(
-                UUID.randomUUID(),
+                null,
                 event.eventType().value(),
                 event.payload(),
                 event.partitionKey(),
                 false,
                 Instant.now()
         );
-        return repository.save(dto).map(this::toDomain);
+        return entityTemplate.insert(dto).map(this::toDomain);
     }
 
     @Override

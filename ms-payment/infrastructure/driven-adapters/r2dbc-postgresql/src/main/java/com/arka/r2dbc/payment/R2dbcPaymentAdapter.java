@@ -4,6 +4,7 @@ import com.arka.model.payment.Payment;
 import com.arka.model.payment.PaymentStatus;
 import com.arka.model.payment.gateways.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -15,11 +16,12 @@ import java.util.UUID;
 public class R2dbcPaymentAdapter implements PaymentRepository {
 
     private final SpringDataPaymentRepository repository;
+    private final R2dbcEntityTemplate entityTemplate;
 
     @Override
     public Mono<Payment> save(Payment payment) {
         PaymentDTO dto = new PaymentDTO(
-                payment.id(),
+                null,
                 payment.orderId(),
                 payment.gateway(),
                 payment.transactionId(),
@@ -30,7 +32,7 @@ public class R2dbcPaymentAdapter implements PaymentRepository {
                 Instant.now(),
                 Instant.now()
         );
-        return repository.save(dto).map(this::toDomain);
+        return entityTemplate.insert(dto).map(this::toDomain);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.arka.r2dbc.processedevent;
 
 import com.arka.model.payment.gateways.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 public class R2dbcProcessedEventAdapter implements ProcessedEventRepository {
 
     private final SpringDataProcessedEventRepository repository;
+    private final R2dbcEntityTemplate entityTemplate;
 
     @Override
     public Mono<Boolean> exists(UUID eventId) {
@@ -22,6 +24,6 @@ public class R2dbcProcessedEventAdapter implements ProcessedEventRepository {
     @Override
     public Mono<Void> save(UUID eventId) {
         ProcessedEventDTO dto = new ProcessedEventDTO(eventId, Instant.now());
-        return repository.save(dto).then();
+        return entityTemplate.insert(dto).then();
     }
 }
