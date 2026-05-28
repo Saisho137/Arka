@@ -6,16 +6,15 @@ spring:
     name: "ms-cart"
   profiles:
     active: "${SPRING_PROFILES_ACTIVE:local}"
-  data:
-    mongodb:
-      uri: "${MONGODB_URI:mongodb://localhost:27017/cart_db}"
+  mongodb:
+    uri: "mongodb://${MONGO_USER:arka}:${MONGO_PASSWORD:arkaSecret2025}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/db_cart?authSource=admin&replicaSet=rs0"
   kafka:
     bootstrap-servers: "${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
 
 cart:
   abandonment:
-    check-interval: 300000
-    threshold: 30m
+    check-interval: "${CART_ABANDONMENT_CHECK_INTERVAL:300000}"
+    threshold: "${CART_ABANDONMENT_THRESHOLD:30m}"
 
 management:
   endpoints:

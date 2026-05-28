@@ -1,8 +1,7 @@
 # Perfil DOCKER — cuando corre dentro de Docker Compose
 spring:
-  data:
-    mongodb:
-      uri: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@arka-mongodb:27017/db_cart?authSource=admin&replicaSet=rs0
+  mongodb:
+    uri: "mongodb://${MONGO_USER}:${MONGO_PASSWORD}@arka-mongodb:27017/db_cart?authSource=admin&replicaSet=rs0"
 
 grpc:
   client:
