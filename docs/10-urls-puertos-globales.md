@@ -25,8 +25,12 @@ Disponible en los microservicios que ya tienen entry-points REST implementados:
 
 | Servicio     | Swagger UI                              | OpenAPI JSON                     | OpenAPI YAML                          |
 | ------------ | --------------------------------------- | -------------------------------- | ------------------------------------- |
-| ms-catalog   | <http://localhost:8084/swagger-ui.html> | <http://localhost:8084/api-docs> | <http://localhost:8084/api-docs.yaml> |
+| ms-order     | <http://localhost:8081/swagger-ui.html> | <http://localhost:8081/api-docs> | <http://localhost:8081/api-docs.yaml> |
 | ms-inventory | <http://localhost:8082/swagger-ui.html> | <http://localhost:8082/api-docs> | <http://localhost:8082/api-docs.yaml> |
+| ms-catalog   | <http://localhost:8084/swagger-ui.html> | <http://localhost:8084/api-docs> | <http://localhost:8084/api-docs.yaml> |
+| ms-cart      | <http://localhost:8086/swagger-ui.html> | <http://localhost:8086/api-docs> | <http://localhost:8086/api-docs.yaml> |
+| ms-reporter  | <http://localhost:8087/swagger-ui.html> | <http://localhost:8087/api-docs> | <http://localhost:8087/api-docs.yaml> |
+| ms-shipping  | <http://localhost:8088/swagger-ui.html> | <http://localhost:8088/api-docs> | <http://localhost:8088/api-docs.yaml> |
 
 ---
 

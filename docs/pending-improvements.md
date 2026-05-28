@@ -39,30 +39,30 @@ title: Mejoras Pendientes
 
 El patrón canónico es el de ms-order: enum con campo `value()` explícito que desacopla el nombre Java del contrato público Kafka. Los otros servicios usan `toCamelCase()` en runtime que **funciona correctamente** (produce PascalCase) pero es más frágil y menos explícito.
 
-- [ ] A.1 **ms-inventory**: Migrar `EventType` enum a patrón `value()` explícito
+- [x] A.1 **ms-inventory**: Migrar `EventType` enum a patrón `value()` explícito ✅
   - Cambiar enum de `STOCK_RESERVED` a `STOCK_RESERVED("StockReserved")` con campo `private final String value` y método `value()`
   - Actualizar `KafkaOutboxRelay.toCamelCase()` → usar directamente `event.eventType().value()`
   - Eliminar método `toCamelCase()` (dead code)
   - Verificar que los consumers downstream (ms-reporter, ms-notifications) siguen recibiendo `"StockReserved"` sin cambios
 
-- [ ] A.2 **ms-catalog**: Migrar `EventType` enum a patrón `value()` explícito
+- [x] A.2 **ms-catalog**: Migrar `EventType` enum a patrón `value()` explícito ✅
   - Mismo cambio: `PRODUCT_CREATED("ProductCreated")`, `PRODUCT_UPDATED("ProductUpdated")`, `PRICE_CHANGED("PriceChanged")`
   - Actualizar `KafkaOutboxRelay` para usar `.value()` directo
   - Eliminar `toCamelCase()`
 
-- [ ] A.3 **ms-shipping**: Migrar `EventType` enum a patrón `value()` explícito
+- [x] A.3 **ms-shipping**: Migrar `EventType` enum a patrón `value()` explícito ✅
   - Cambiar `SHIPPING_DISPATCHED` a `SHIPPING_DISPATCHED("ShippingDispatched")`
   - Actualizar `KafkaOutboxRelay`
 
-- [ ] A.4 **ms-payment**: Migrar de String literal a enum `EventType` con `value()`
+- [x] A.4 **ms-payment**: Migrar de String literal a enum `EventType` con `value()` ✅
   - Crear enum `EventType` con `PAYMENT_PROCESSED("PaymentProcessed")`, `PAYMENT_FAILED("PaymentFailed")`
   - Refactorizar `DomainEventEnvelope` para aceptar `EventType` en vez de String
   - Actualizar publisher para usar `.value()`
-  - **NOTA**: ms-payment está pendiente de reimplementación completa (Gap #9). Hacer este cambio solo si se decide alinear el mock actual antes de la reimplementación.
+  - **NOTA**: Completado como parte de la reimplementación completa de ms-payment.
 
 ### Bloque B — Completar Saga Secuencial en ms-order
 
-- [ ] B.1 **Implementar `processShippingDispatched()`** en `OrderUseCase`
+- [x] B.1 **Implementar `processShippingDispatched()`** en `OrderUseCase` ✅
   - Consumir evento `ShippingDispatched` del tópico `shipping-events`
   - Transicionar orden de `CONFIRMADO` → `EN_DESPACHO`
   - Registrar en `order_state_history`
@@ -70,52 +70,52 @@ El patrón canónico es el de ms-order: enum con campo `value()` explícito que 
   - Validar idempotencia (processed_events)
   - Corresponde a Task 14 del spec de ms-order
 
-- [ ] B.2 **Agregar Circuit Breaker en `GrpcInventoryClient`**
+- [x] B.2 **Agregar Circuit Breaker en `GrpcInventoryClient`** ✅
   - `reactor-resilience4j` ya como dependencia
   - CircuitBreaker: failureRateThreshold=50%, waitDurationInOpenState=30s, permittedNumberOfCallsInHalfOpenState=3
   - Fallback: propagar `InventoryServiceUnavailableException` (ya existe en dominio)
 
-- [ ] B.3 **Agregar Circuit Breaker en `GrpcCatalogClient`**
+- [x] B.3 **Agregar Circuit Breaker en `GrpcCatalogClient`** ✅
   - Misma configuración que B.2
   - Fallback: propagar `CatalogServiceUnavailableException`
 
 ### Bloque C — Implementar gRPC en ms-catalog
 
-- [ ] C.1 **Implementar servidor gRPC `CatalogService.GetProductInfo`**
+- [x] C.1 **Implementar servidor gRPC `CatalogService.GetProductInfo`** ✅ (ya existía)
   - Definir `.proto` con request `GetProductInfoRequest { string sku }` y response `GetProductInfoResponse { string sku, string name, double price, bool active }`
   - Generar entry-point gRPC con Scaffold: `./gradlew generateEntryPoint --type=grpc`
   - Implementar `GrpcCatalogService` delegando a un UseCase existente
   - Puerto gRPC: 9091 (local) / 9090 (docker) — ya configurado en compose.yaml
   - Corresponde a Task 15 del spec de ms-catalog
-  - **BLOQUEA**: ms-cart checkout (validación de precios gRPC)
+  - **DESBLOQUEADO**: ms-cart checkout (validación de precios gRPC)
 
 ### Bloque D — Mejoras ms-inventory
 
-- [ ] D.1 **Agregar versionamiento de API**: cambiar `@RequestMapping("/inventory")` a `@RequestMapping("/api/v1/inventory")`
+- [x] D.1 **Agregar versionamiento de API**: cambiar `@RequestMapping("/inventory")` a `@RequestMapping("/api/v1/inventory")` ✅
   - Actualizar tests y documentación
   - Actualizar ms-order si referencia endpoints directos (no aplica — usa gRPC)
 
-- [ ] D.2 **Agregar validación en `StockHandler`**: validar `sku` no vacío, `page >= 0`, `size` entre 1 y 100
+- [x] D.2 **Agregar validación en `StockHandler`**: validar `sku` no vacío, `page >= 0`, `size` entre 1 y 100 ✅
   - Usar `@Validated` o validación manual con excepciones de dominio
 
 ### Bloque E — Actualizar Documentación Global
 
-- [ ] E.1 **Actualizar `docs/04-api-endpoints.md`**: agregar endpoints REST de ms-cart, ms-shipping, ms-reporter, ms-order (completo)
+- [x] E.1 **Actualizar `docs/04-api-endpoints.md`**: agregar endpoints REST de ms-cart, ms-shipping, ms-reporter, ms-order (completo) ✅
   - Eliminar la sección "Servicios sin endpoints REST implementados" que ya no aplica para ms-cart, ms-shipping y ms-reporter
 
-- [ ] E.2 **Actualizar `docs/10-urls-puertos-globales.md`**: agregar Swagger UI de ms-order (8081), ms-cart (8086), ms-shipping (8088), ms-reporter (8087)
+- [x] E.2 **Actualizar `docs/10-urls-puertos-globales.md`**: agregar Swagger UI de ms-order (8081), ms-cart (8086), ms-shipping (8088), ms-reporter (8087) ✅
 
-- [ ] E.3 **Actualizar `docs/03-kafka-eventos.md`**: agregar tópico `reporter-events` con evento `StockAlertGenerated` (partition key = SKU, productor: ms-reporter)
+- [x] E.3 **Actualizar `docs/03-kafka-eventos.md`**: agregar tópico `reporter-events` con evento `StockAlertGenerated` (partition key = SKU, productor: ms-reporter) ✅
 
-- [ ] E.4 **Actualizar `docs/07-flujos-criticos.md`**: reflejar que `processPaymentProcessed` ya está implementado en ms-order y que el flujo Fase 2 funciona con ms-payment mock
+- [x] E.4 **Actualizar `docs/07-flujos-criticos.md`**: reflejar que `processPaymentProcessed` ya está implementado en ms-order y que el flujo Fase 2 funciona con ms-payment mock ✅
 
 ### Bloque F — Reimplementar ms-payment (ACL completo)
 
 > **Estado actual**: ms-payment es un mock con `Random.nextDouble()` (80% éxito / 20% fallo) sin BD, sin Outbox, sin idempotencia, sin REST endpoints. El spec completo ya existe en `.kiro/specs/ms-payment/`.
 
-- [ ] F.1 Reimplementar ms-payment según spec: PostgreSQL (R2DBC), Outbox Pattern, ACL con Strategy+Factory para Stripe/Wompi/MercadoPago, Circuit Breaker, idempotencia, REST admin endpoints
+- [x] F.1 Reimplementar ms-payment según spec: PostgreSQL (R2DBC), Outbox Pattern, ACL con Strategy+Factory para Stripe/Wompi/MercadoPago, Circuit Breaker, idempotencia, REST admin endpoints ✅
   - El spec completo está en `.kiro/specs/ms-payment/tasks.md`
-  - **IMPORTANTE**: mantener retrocompatibilidad — ms-order ya consume `PaymentProcessed`/`PaymentFailed` del tópico `payment-events`
+  - **IMPORTANTE**: retrocompatibilidad mantenida — ms-order consume `PaymentProcessed`/`PaymentFailed` del tópico `payment-events` sin cambios
 
 ---
 
@@ -128,13 +128,13 @@ El patrón canónico es el de ms-order: enum con campo `value()` explícito que 
 
 ### Seguridad
 
-- [ ] Implementar **Spring Security** con filtro que valide `X-User-Role` header — la autenticación la maneja el API Gateway, falta enforcement local de roles
-- [ ] Implementar **Rate Limiting** con Decorator AOP en los entry-points
+- [x] Implementar **Spring Security** con filtro que valide `X-User-Role` header — la autenticación la maneja el API Gateway, falta enforcement local de roles ✅
+- [x] Implementar **Rate Limiting** con WebFilter token-bucket en los entry-points ✅
 
 ### Tests
 
-- [ ] Tests property-based (jqwik) pendientes en ms-order, ms-inventory, ms-reporter (specs ya definen las propiedades)
-- [ ] Tests de integración con Testcontainers para adaptadores JDBC/R2DBC
+- [x] Tests property-based (jqwik) pendientes en ms-order, ms-inventory, ms-reporter (specs ya definen las propiedades) ✅
+- [x] Tests de integración con Testcontainers para adaptadores JDBC/R2DBC ✅
 
 ---
 

@@ -8,8 +8,9 @@ title: Flujos Críticos
 ## 1. Creación de Pedido — Happy Path (Implementación actual — Fase 2)
 
 > **Estado actual:** `createOrder()` persiste en `PENDIENTE_PAGO` y emite `OrderCreated`.
-> ms-payment (pendiente) debe consumir ese evento y emitir `PaymentProcessed`/`PaymentFailed`.
-> **Demo sin ms-payment:** simular manualmente el evento via Kafka UI (ver sección 6).
+> ms-payment (mock 80/20) consume ese evento y emite `PaymentProcessed`/`PaymentFailed`.
+> ms-order consume `PaymentProcessed` → transiciona a `CONFIRMADO` y publica `OrderConfirmed`.
+> ms-order consume `ShippingDispatched` → transiciona a `EN_DESPACHO` y publica `OrderStatusChanged`.
 
 ```text
 Cliente B2B ──POST /orders──▶ API Gateway ──JWT──▶ ms-order

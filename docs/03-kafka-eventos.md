@@ -86,6 +86,12 @@ title: "Kafka: Eventos y Tópicos"
 | ---------------------- | ------------------------------------ | ----------------- |
 | `PurchaseOrderCreated` | Orden de compra generada a proveedor | `purchaseOrderId` |
 
+### `reporter-events` (Productor: ms-reporter)
+
+| Evento                | Descripción                                    | Partition Key |
+| --------------------- | ---------------------------------------------- | ------------- |
+| `StockAlertGenerated` | Alerta de stock bajo generada por analítica    | `sku`         |
+
 ---
 
 ## Consumer Groups

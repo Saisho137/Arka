@@ -42,15 +42,15 @@ Base path: `/api/v1`
 
 ## ms-inventory — Puerto 8082
 
-Base path: `/inventory`
+Base path: `/api/v1/inventory`
 
 ### Stock
 
-| Método | Endpoint                                  | Descripción                                  |
-| ------ | ----------------------------------------- | -------------------------------------------- |
-| `PUT`  | `/inventory/{sku}/stock`                  | Actualizar stock manualmente (admin)         |
-| `GET`  | `/inventory/{sku}`                        | Consultar disponibilidad de un SKU           |
-| `GET`  | `/inventory/{sku}/history?page=0&size=20` | Historial de movimientos (paginado, max 100) |
+| Método | Endpoint                                              | Descripción                                  |
+| ------ | ----------------------------------------------------- | -------------------------------------------- |
+| `PUT`  | `/api/v1/inventory/{sku}/stock`                       | Actualizar stock manualmente (admin)         |
+| `GET`  | `/api/v1/inventory/{sku}`                             | Consultar disponibilidad de un SKU           |
+| `GET`  | `/api/v1/inventory/{sku}/history?page=0&size=20`      | Historial de movimientos (paginado, max 100) |
 
 ### gRPC (puerto 9090)
 
@@ -92,15 +92,86 @@ Base path: `/api/v1`
 
 ---
 
+## ms-cart — Puerto 8086
+
+Base path: `/api/v1/carts`
+
+### Carritos
+
+| Método   | Endpoint                              | Descripción                                        |
+| -------- | ------------------------------------- | -------------------------------------------------- |
+| `POST`   | `/api/v1/carts`                       | Crear carrito                                      |
+| `GET`    | `/api/v1/carts`                       | Obtener carritos por cliente                       |
+| `GET`    | `/api/v1/carts/{cartId}`              | Obtener carrito por ID                             |
+| `POST`   | `/api/v1/carts/{cartId}/items`        | Agregar item al carrito                            |
+| `PUT`    | `/api/v1/carts/{cartId}/items/{sku}`  | Actualizar cantidad de item                        |
+| `DELETE` | `/api/v1/carts/{cartId}/items/{sku}`  | Eliminar item del carrito                          |
+| `DELETE` | `/api/v1/carts/{cartId}/items`        | Limpiar todos los items del carrito                |
+| `DELETE` | `/api/v1/carts/{cartId}`              | Eliminar carrito                                   |
+| `POST`   | `/api/v1/carts/{cartId}/checkout`     | Checkout (valida precios con catálogo vía gRPC)    |
+
+**Swagger UI:** `http://localhost:8086/swagger-ui.html`
+
+---
+
+## ms-shipping — Puerto 8088
+
+Base path: `/api/v1/shipments`
+
+### Envíos
+
+| Método | Endpoint                                  | Descripción                                 |
+| ------ | ----------------------------------------- | ------------------------------------------- |
+| `GET`  | `/api/v1/shipments/{orderId}`             | Obtener envío por orderId                   |
+| `GET`  | `/api/v1/shipments`                       | Listar envíos con filtros (solo ADMIN)      |
+| `PUT`  | `/api/v1/shipments/{orderId}/status`      | Actualizar estado del envío (solo ADMIN)    |
+| `POST` | `/api/v1/shipments/retry/{orderId}`       | Reintentar envío fallido (solo ADMIN)       |
+
+### Webhooks
+
+| Método | Endpoint                                  | Descripción                                 |
+| ------ | ----------------------------------------- | ------------------------------------------- |
+| `POST` | `/api/v1/webhooks/{carrier}/tracking`     | Recibir webhook de tracking de transportadora |
+
+**Swagger UI:** `http://localhost:8088/swagger-ui.html`
+
+---
+
+## ms-reporter — Puerto 8087
+
+### Reportes
+
+| Método | Endpoint                  | Descripción                          |
+| ------ | ------------------------- | ------------------------------------ |
+| `POST` | `/reports/sales/weekly`   | Generar reporte semanal de ventas    |
+| `GET`  | `/reports/{reportId}`     | Estado del reporte y URL de descarga |
+
+### Administración
+
+| Método | Endpoint                      | Descripción                       |
+| ------ | ----------------------------- | --------------------------------- |
+| `POST` | `/admin/rebuild-read-models`  | Reconstruir read model desde Event Store |
+
+### Trazabilidad de Eventos
+
+| Método | Endpoint                          | Descripción                        |
+| ------ | --------------------------------- | ---------------------------------- |
+| `GET`  | `/events/trace/{correlationId}`   | Rastrear eventos por correlationId |
+
+### Métricas de Negocio
+
+| Método | Endpoint        | Descripción                             |
+| ------ | --------------- | --------------------------------------- |
+| `GET`  | `/metrics/kpis` | KPIs de negocio para un rango de fechas |
+
+**Swagger UI:** `http://localhost:8087/swagger-ui.html`
+
+---
+
 ## Servicios sin endpoints REST implementados
 
-Los siguientes microservicios existen en el repositorio pero aún no tienen endpoints REST:
-
 - **ms-notifications** (8085) — Consumer pasivo de Kafka
-- **ms-cart** (8086) — Fase 2
-- **ms-payment** (8083) — Fase 2
-- **ms-reporter** (8087) — Fase 3
-- **ms-shipping** (8088) — Fase 3
+- **ms-payment** (8083) — Mock actual (reimplementación pendiente, Fase 2)
 - **ms-provider** (8089) — Fase 4
 
 ---
