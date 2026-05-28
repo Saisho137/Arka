@@ -8,7 +8,6 @@ dependencies {
 	implementation project(':carrier-factory')
 	implementation project(':s3-repository')
 	implementation project(':metrics')
-	implementation project(':async-event-bus')
 	implementation project(':r2dbc-postgresql')
     implementation project(':model')
     implementation project(':usecase')

@@ -21,8 +21,6 @@ project(':model').projectDir = file('./domain/model')
 project(':usecase').projectDir = file('./domain/usecase')
 include ':r2dbc-postgresql'
 project(':r2dbc-postgresql').projectDir = file('./infrastructure/driven-adapters/r2dbc-postgresql')
-include ':async-event-bus'
-project(':async-event-bus').projectDir = file('./infrastructure/driven-adapters/async-event-bus')
 include ':metrics'
 project(':metrics').projectDir = file('./infrastructure/helpers/metrics')
 include ':s3-repository'
