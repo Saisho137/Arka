@@ -316,6 +316,14 @@ Resources:
       BucketName: !Sub "arka-reports-${pEnvironment}"
 
   # ═══════════════════════════════════════════════════
+  # S3 — Bucket para etiquetas/labels de ms-shipping
+  # ═══════════════════════════════════════════════════
+  rShippingLabelsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "arka-shipping-labels"
+
+  # ═══════════════════════════════════════════════════
   # SES — Verificación de identidad para ms-notifications
   # ═══════════════════════════════════════════════════
   # Nota: En LocalStack, SES se configura via CLI en bootstrap.sh
