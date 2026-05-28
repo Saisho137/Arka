@@ -1,6 +1,7 @@
 apply plugin: 'org.springframework.boot'
 
 dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation project(':scheduler')
 	implementation project(':reactive-web')
 	implementation project(':kafka-producer')

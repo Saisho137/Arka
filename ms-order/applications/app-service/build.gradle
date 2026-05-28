@@ -15,6 +15,7 @@ dependencies {
     
     // Spring Boot starter (minimal)
     implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     
     // Springdoc OpenAPI (API documentation for the entire service)
     implementation 'org.springdoc:springdoc-openapi-starter-webflux-ui:3.0.2'
